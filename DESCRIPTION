@@ -1,0 +1,127 @@
+Package: patliR
+Type: Package
+Title: Reproducible Network Pharmacology Analysis for Natural Product Extracts
+Version: 0.1.0
+Authors@R: person(given = "Edgard Uriel", family = "López Chablé",
+    email = "uriel.chable18@gmail.com", role = c("aut", "cre"))
+Description: A field-to-report pipeline for network pharmacology analysis of
+    natural product extracts and compound mixtures. Provides functions to
+    import and validate compound identity from PubChem CIDs or SMILES,
+    integrate physicochemical (ADME) properties and structural toxicity
+    alerts, import or predict protein targets, build and analyze
+    compound-target-pathway networks (centrality, modular robustness,
+    network proximity to disease modules, synergy), audit database bias in
+    network pharmacology results, and generate transparent, fully-logged
+    reports. The pipeline is built around an immutable S4 project object:
+    every step is a pure transformation (input project -> output project),
+    and every intermediate result is written to a plain CSV file that acts
+    as the durable, portable source of truth, independent of any R-specific
+    binary format.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+Depends:
+    R (>= 4.3.0)
+Imports:
+    methods,
+    stats,
+    utils,
+    tools,
+    graphics,
+    grDevices,
+    cli,
+    rcdk,
+    rlang,
+    igraph (>= 2.0.0)
+Suggests:
+    testthat (>= 3.0.0),
+    parallel,
+    knitr,
+    rmarkdown,
+    webchem,
+    httr2,
+    ggplot2,
+    ggiraph,
+    clusterProfiler,
+    ReactomePA,
+    GOSemSim,
+    org.Hs.eg.db,
+    reactome.db,
+    dbscan,
+    STRINGdb,
+    ggalluvial,
+    ggVennDiagram,
+    patchwork,
+    pheatmap,
+    GOplot,
+    png,
+    umap,
+    pathview,
+    shiny,
+    DT,
+    fingerprint
+Config/testthat/edition: 3
+VignetteBuilder: knitr
+SystemRequirements: Java (>= 8) (required by rcdk / rJava for cheminformatics
+    routines; see INSTALL file)
+URL: https://github.com/hierax00/patliR
+BugReports: https://github.com/hierax00/patliR/issues
+biocViews: Software, NetworkBiology, SystemsBiology, GraphAndNetwork,
+    Pharmacogenomics, QualityControl
+Config/roxygen2/version: 8.0.0
+Collate: 
+    'AllClasses.R'
+    'AllGenerics.R'
+    'internal.R'
+    'adme_filter.R'
+    'adme_import.R'
+    'adme_local.R'
+    'refdb.R'
+    'bias_audit.R'
+    'compounds_classify.R'
+    'compounds_similarity.R'
+    'launch_app.R'
+    'methods-accessors.R'
+    'methods-show.R'
+    'network_build.R'
+    'network_module_robustness.R'
+    'network_proximity.R'
+    'network_bowtie.R'
+    'network_centrality.R'
+    'network_layers.R'
+    'network_degeneracy.R'
+    'network_enrich.R'
+    'network_filter_proteome.R'
+    'network_hub_penalty.R'
+    'network_motifs.R'
+    'network_pathview.R'
+    'network_synergy.R'
+    'patliR-package.R'
+    'patliR_project.R'
+    'patliR_export_llm.R'
+    'plot_adme_upset.R'
+    'plot_admet_radar.R'
+    'plot_boiled_egg.R'
+    'plot_network_layers.R'
+    'plot_bowtie.R'
+    'plot_centrality.R'
+    'plot_chemical_space.R'
+    'plot_gochord.R'
+    'plot_heatmap.R'
+    'plot_network_degeneracy.R'
+    'plot_proximity.R'
+    'plot_robustness.R'
+    'prep_structure2d.R'
+    'plot_structure2d.R'
+    'plot_synergy.R'
+    'plot_upset.R'
+    'targets_disease.R'
+    'plot_venn.R'
+    'prep_binarize.R'
+    'prep_compounds.R'
+    'targets_import.R'
+    'tox_import.R'
+    'tox_local.R'
+    'tox_report.R'
+    'tox_safetyome.R'

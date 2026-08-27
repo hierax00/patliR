@@ -1,0 +1,149 @@
+#' @include AllGenerics.R internal.R network_build.R plot_network_layers.R
+NULL
+
+## plot_heatmap() -- migrated 2026-08-16 to the real pheatmap()-based
+## rendering from the reference cookbook
+## (Farmacologia de Redes Juanjo/06_predocking_analysis/
+## 06_predocking_analysis.Rmd, "Heatmap Generation" step -- real code read
+## directly from github.com/hierax00/network-pharmacology-cookbook before
+## writing a line here, per the project's policy of never guessing an
+## external library's behavior). Replaces the geom_tile()-without-
+## dendrogram substitute this function shipped with before (see
+## patliR_manual.md section 6's old "Deliberadamente sin agregar" note for
+## pheatmap -- that call is now reversed).
+##
+## Contract change from the rest of plot_* (documented, not accidental):
+## pheatmap::pheatmap() is a grid/base-graphics function, not ggplot2 --
+## `engine = c("static", "ggiraph")` is dropped from this function's
+## signature because ggiraph only wraps ggplot2 geoms, there is nothing
+## for it to attach to here. `save = TRUE` also switches from PNG
+## (ggplot2::ggsave(), like the rest of the family) to PDF, matching the
+## cookbook exactly -- a clustered heatmap with printed numbers reads much
+## better as vector output. pheatmap() manages its own output device via
+## its `filename` argument (confirmed against pheatmap's own source,
+## `heatmap_motor()`, rather than assumed) -- no manual pdf()/dev.off()
+## needed here.
+
+#' Heatmap of compound-target association or compound-condition presence
+#' (real `pheatmap()`)
+#'
+#' @description
+#' `what = "compound_target"` (default): compound x target matrix, filled
+#' by `network_edges$weight` (the import probability), for one or more
+#' conditions pooled. `what = "compound_condition"`: compound x condition
+#' matrix straight from [binarizedMatrix()] (presence/absence, 0/1) --
+#' which compounds were actually detected in which extract. Both are
+#' rendered with `pheatmap::pheatmap()` -- hierarchical clustering on both
+#' axes (dropped automatically, with a warning, on whichever axis has
+#' fewer than 2 rows/columns -- `hclust()` cannot cluster a single item),
+#' cell values printed on top of the color scale.
+#'
+#' @inheritParams network_build
+#' @param what `"compound_target"` (default) or `"compound_condition"`.
+#' @param save Logical, default `TRUE`. If `TRUE`, writes a PDF via
+#'   `pheatmap::pheatmap(..., filename = ...)` and logs the path to
+#'   `patliRResults(proj, "heatmap_plot_log")`. If `FALSE`, draws to the
+#'   current graphics device instead (same as calling `pheatmap()`
+#'   directly without `filename`).
+#' @param out_dir Directory for the PDF, default `file.path(projectDir(proj), "plots")`.
+#' @param width,height `NULL` (default) to size the plot to the matrix
+#'   (`max(8, n_cols * 0.9 + 2)` / `max(6, n_rows * 0.5 + 2)`, the
+#'   cookbook's own sizing rule), or an explicit number of inches.
+#'
+#' @return The `pheatmap` object returned by `pheatmap::pheatmap()`
+#'   (`list(tree_row, tree_col, kmeans, gtable)`) -- re-drawable with
+#'   `grid::grid.draw(result$gtable)`. If `save = TRUE`, also carries the
+#'   updated `proj` as `attr(result, "proj")` (same pattern as every other
+#'   `plot_*` function).
+#'
+#' @examples
+#' \donttest{
+#' proj <- patliR_project(tempfile("patliR_demo_"))
+#' compound_list <- read.csv(
+#'   system.file("extdata", "input_compound_list.csv", package = "patliR")
+#' )
+#' proj <- prep_compounds(proj, compound_list, identifier = "pubchem")
+#' abundance <- read.csv(
+#'   system.file("extdata", "input_abundance_matrix.csv", package = "patliR"),
+#'   check.names = FALSE
+#' )
+#' proj <- prep_binarize(proj, abundance)
+#' proj <- targets_import_batch(
+#'   proj,
+#'   system.file("extdata", "import_targets", package = "patliR"),
+#'   platform = "superpred"
+#' )
+#' proj <- network_build(proj)
+#' plot_heatmap(proj, what = "compound_condition", save = FALSE)
+#' plot_heatmap(proj, condition = "FLO-ET", what = "compound_target", save = FALSE)
+#' }
+#'
+#' @export
+plot_heatmap <- function(proj, condition = NULL, what = c("compound_target", "compound_condition"),
+                          save = TRUE, out_dir = NULL, width = NULL, height = NULL) {
+  stopifnot(is(proj, "PatliRProject"))
+  what <- match.arg(what)
+  if (!requireNamespace("pheatmap", quietly = TRUE)) {
+    cli::cli_abort("The {.pkg pheatmap} package is required for {.fn plot_heatmap}.")
+  }
+
+  if (what == "compound_condition") {
+    bin <- binarizedMatrix(proj)
+    if (nrow(bin) == 0) {
+      cli::cli_abort(c("No binarized abundance matrix in {.arg proj}.", "i" = "Run {.fn prep_binarize} first."))
+    }
+    conds <- setdiff(names(bin), "compound_id")
+    mat <- as.matrix(bin[, conds, drop = FALSE])
+    rownames(mat) <- .network_layers_labels(proj, conds, data.frame(name = bin$compound_id, layer = "compound", stringsAsFactors = FALSE))
+    storage.mode(mat) <- "double"
+    scope_label <- "ALL"
+    title <- "Compound x Condition Presence"
+  } else {
+    conditions <- .network_resolve_conditions(proj, condition)
+    scope_label <- if (is.null(condition)) "ALL" else paste(conditions, collapse = "+")
+    edges_all <- patliRResults(proj, "network_edges")
+    long <- edges_all[edges_all$condition %in% conditions, c("compound_id", "uniprot_id", "weight")]
+    long <- stats::aggregate(weight ~ compound_id + uniprot_id, long, max) # pooled scope: keep the strongest hit per pair
+    if (nrow(long) == 0) {
+      cli::cli_abort("Nothing to plot for {.arg what} = {.val {what}} in this scope.")
+    }
+    long$compound_label <- .network_layers_labels(proj, conditions, data.frame(name = long$compound_id, layer = "compound", stringsAsFactors = FALSE))
+    long$target_label <- .network_layers_labels(proj, conditions, data.frame(name = long$uniprot_id, layer = "target", stringsAsFactors = FALSE))
+    mat <- as.matrix(stats::xtabs(weight ~ compound_label + target_label, data = long))
+    title <- paste0("Compound-Target Binding Probability -- ", scope_label)
+  }
+
+  if (nrow(mat) == 0 || ncol(mat) == 0) {
+    cli::cli_abort("Nothing to plot for {.arg what} = {.val {what}} in this scope.")
+  }
+
+  if (is.null(width)) width <- max(8, ncol(mat) * 0.9 + 2)
+  if (is.null(height)) height <- max(6, nrow(mat) * 0.5 + 2)
+
+  filename <- NA
+  path <- NULL
+  if (save) {
+    if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
+    if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+    path <- file.path(out_dir, paste0("heatmap_", what, "_", scope_label, ".pdf"))
+    filename <- path
+  }
+
+  result <- pheatmap::pheatmap(
+    mat,
+    color = grDevices::colorRampPalette(c("white", "#f39c12", "#c0392b"))(50),
+    display_numbers = TRUE, number_format = "%.2f", fontsize_number = 9,
+    cluster_rows = nrow(mat) > 1, cluster_cols = ncol(mat) > 1,
+    main = title, angle_col = 45, fontsize_row = 10, fontsize_col = 10,
+    filename = filename, width = width, height = height
+  )
+
+  if (save) {
+    log_row <- data.frame(condition = scope_label, what = what, path = path, stringsAsFactors = FALSE)
+    log_df <- .network_upsert(proj, "heatmap_plot_log", log_row, c("condition", "what"))
+    patliRResults(proj, "heatmap_plot_log") <- log_df
+    .write_results_csv(proj, "heatmap_plot_log", log_df)
+    attr(result, "proj") <- proj
+  }
+  result
+}

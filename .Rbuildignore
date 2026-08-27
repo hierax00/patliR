@@ -1,0 +1,8 @@
+^patliR\.Rproj$
+^\.Rproj\.user$
+^\.github$
+^\.git$
+^README\.Rmd$
+^LICENSE\.md$
+^\.patliR_cache$
+^test_results.*$

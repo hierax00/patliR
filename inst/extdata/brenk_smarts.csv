@@ -1,0 +1,106 @@
+smarts,name
+"C(=O)O[C,H1].C(=O)O[C,H1].C(=O)O[C,H1]",> 2 ester groups
+"n1c([F,Cl,Br,I])cccc1",2-halo pyridine
+"C(=O)[Cl,Br,I,F]",acid halide
+C=[C!r]O,acyclic C=C-O
+N#CC(=O),acyl cyanide
+C(=O)N[NH2],acyl hydrazine
+[CH1](=O),aldehyde
+[R0;D2][R0;D2][R0;D2][R0;D2],Aliphatic long chain
+"[CX4][Cl,Br,I]",alkyl halide
+c1nnnn1C=O,amidotetrazole
+c1cc([NH2])ccc1,aniline
+[CH2R2]1N[CH2R2][CH2R2][CH2R2][CH2R2][CH2R2]1,azepane
+N=[N+]=[N-],Azido group
+N#N,Azo group
+[CH2R2]1N[CH2R2][CH2R2][CH2R2][CH2R2][CH2R2][CH2R2]1,azocane
+"[cR2]1[cR2][cR2]([Nv3X3,Nv4X4])[cR2][cR2][cR2]1[cR2]2[cR2][cR2][cR2]([Nv3X3,Nv4X4])[cR2][cR2]2",benzidine
+"[C,c](=O)[CX4,CR0X3,O][C,c](=O)",beta-keto/anhydride
+C12C(NC(N1)=O)CSC2,biotin analogue
+"[C+,c+,C-,c-]",Carbocation/anion
+"c1c([OH])c([OH,NH2,NH])ccc1",catechol
+"[O+,o+,S+,s+]",charged oxygen or sulfur atoms
+"C1(=[O,N])C=CC(=[O,N])C=C1",chinone
+"C1(=[O,N])C(=[O,N])C=CC=C1",chinone
+C=[C!r]C#N,conjugated nitrile group
+"[OR2,NR2]@[CR2]@[CR2]@[OR2,NR2]@[CR2]@[CR2]@[OR2,NR2]",crown ether
+c1ccc2c(c1)ccc(=O)o2,cumarine
+N[CH2]C#N,cyanamide
+"[N,O,S]C#N",cyanate/aminonitrile/thiocyanate
+N#CC[OH],cyanohydrins
+[CR2]1[CR2][CR2][CR2][CR2][CR2][CR2]1,cycloheptane
+[CR2]1[CR2][CR2]cc[CR2][CR2]1,cycloheptane
+[CR2]1[CR2][CR2][CR2][CR2][CR2][CR2][CR2]1,cyclooctane
+[CR2]1[CR2][CR2]cc[CR2][CR2][CR2]1,cyclooctane
+"[cR2]1[cR2]c([N+0X3R0,nX3R0])c([N+0X3R0,nX3R0])[cR2][cR2]1",diaminobenzene
+"[cR2]1[cR2]c([N+0X3R0,nX3R0])[cR2]c([N+0X3R0,nX3R0])[cR2]1",diaminobenzene
+"[cR2]1[cR2]c([N+0X3R0,nX3R0])[cR2][cR2]c1([N+0X3R0,nX3R0])",diaminobenzene
+[N!R]=[N!R],diazo group
+"[C,c](=O)[C,c](=O)",diketo group
+SS,disulphide
+[CX2R0][NX3R0],enamine
+C(=O)Onnn,ester of HOBT
+C1(=O)OCC1,four member lactones
+"c1cc([Cl,Br,I,F])cc([Cl,Br,I,F])c1[Cl,Br,I,F]",halogenated ring
+"c1ccc([Cl,Br,I,F])c([Cl,Br,I,F])c1[Cl,Br,I,F]",halogenated ring
+"[Hg,Fe,As,Sb,Zn,Se,se,Te,B,Si]",heavy metal
+"[NX3R0,NX4R0,OR0,SX2R0][CX4][NX3R0,NX4R0,OR0,SX2R0]",het-C-het not in ring
+C1NC(=O)NC(=O)1,hydantoin
+N[NH2],hydrazine
+"[OH]c1ccc([OH,NH2,NH])cc1",hydroquinone
+C(=O)N[OH],hydroxamic acid
+C=[N!R],imine
+"N=[CR0][N,n,O,S]",imine
+I,iodine
+N=C=O,isocyanate
+"[$([CH2]),$([CH][CX4]),$(C([CX4])[CX4])]=[$([CH2]),$([CH][CX4]),$(C([CX4])[CX4])]",isolated alkene
+C=C=O,ketene
+S1C=CSC1=S,"methylidene-1,3-dithiole"
+"C=!@CC=[O,S]",Michael acceptor
+"[$([CH]),$(CC)]#CC(=O)[C,c]",Michael acceptor
+"[$([CH]),$(CC)]#CS(=O)(=O)[C,c]",Michael acceptor
+C=C(C=O)C=O,Michael acceptor
+"[$([CH]),$(CC)]#CC(=O)O[C,c]",Michael acceptor
+"[NX2,nX3][OX1]",N oxide
+s1c(S)nnc1NC=O,"N-acyl-2-amino-5-mercapto-1,3,4-thiadiazole"
+"NC[F,Cl,Br,I]",N-C-halo
+"[NX3,NX4][F,Cl,Br,I]",N-halo
+n[OH],N-hydroxyl pyridine
+[N+](=O)[O-],nitro group
+[#7]-N=O,N-nitroso
+"[C,c]=N[OH]",oxime
+"[C,c]=NOC=O",oxime
+"[OR0,NR0][OR0,NR0]",Oxygen-nitrogen single bond
+[CX4](F)(F)[CX4](F)F,perfluorinated chain
+OO,peroxide
+c1ccccc1OC(=O)[#6],phenol ester
+c1ccccc1OC(=O)O,phenyl carbonate
+P,phosphor
+"[cR,CR]~C(=O)NC(=O)~[cR,CR]",phthalimide
+a1aa2a3a(a1)A=AA=A3=AA=A2,Polycyclic aromatic hydrocarbon
+a21aa3a(aa1aaaa2)aaaa3,Polycyclic aromatic hydrocarbon
+a31a(a2a(aa1)aaaa2)aaaa3,Polycyclic aromatic hydrocarbon
+[CR0]=[CR0][CR0]=[CR0],polyene
+"[s,S,c,C,n,N,o,O]~[nX3+,NX3+](~[s,S,c,C,n,N])~[s,S,c,C,n,N]",quaternary nitrogen
+"[s,S,c,C,n,N,o,O]~[n+,N+](~[s,S,c,C,n,N,o,O])(~[s,S,c,C,n,N,o,O])~[s,S,c,C,n,N,o,O]",quaternary nitrogen
+[*]=[N+]=[*],quaternary nitrogen
+O1CCCCC1OC2CCC3CCCCC3C2,saponine derivative
+"[Si][F,Cl,Br,I]",silicon halogen
+c1ccccc1C=Cc2ccccc2,stilbene
+"[SX3](=O)[O-,OH]",sulfinic acid
+"[C,c]S(=O)(=O)O[C,c]",Sulfonic acid
+"S(=O)(=O)[O-,OH]",Sulfonic acid
+S(=O)(=O)C#N,sulfonyl cyanide
+[SX2]O,sulfur oxygen single bond
+OS(=O)(=O)[O-],sulphate
+[SX2H0][N],Sulphur-nitrogen single bond
+c12ccccc1(SC(S)=N2),Thiobenzothiazole
+c12ccccc1(SC(=S)N2),thiobenzothiazole
+"[C,c]=S",Thiocarbonyl group
+SC=O,thioester
+[S-],thiol
+[SH],thiol
+"*1[O,S,N]*1",Three-membered heterocycle
+OS(=O)(=O)C(F)(F)F,triflate
+"[SiR0,CR0](c1ccccc1)(c2ccccc2)(c3ccccc3)",triphenyl methylsilyl
+C#C,triple bond

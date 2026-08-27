@@ -1,0 +1,120 @@
+.network_test_setup <- function() {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+  proj <- prep_binarize(proj, .test_abundance_matrix())
+  proj <- targets_import_batch(
+    proj,
+    system.file("extdata", "import_targets", package = "patliR"),
+    platform = "superpred"
+  )
+  proj
+}
+
+test_that("network_build() requires binarizedMatrix() to be populated first", {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+  proj <- targets_import_batch(
+    proj,
+    system.file("extdata", "import_targets", package = "patliR"),
+    platform = "superpred"
+  )
+  expect_error(network_build(proj), "binarized")
+})
+
+test_that("network_build() requires targets_imported to exist first", {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+  proj <- prep_binarize(proj, .test_abundance_matrix())
+  expect_error(network_build(proj), "targets_imported")
+})
+
+test_that("network_build() rejects unimplemented target_source values with a clear error", {
+  proj <- .network_test_setup()
+  expect_error(network_build(proj, target_source = "consensus"), "not implemented yet")
+  expect_error(network_build(proj, target_source = "bipartite"), "not implemented yet")
+})
+
+test_that("network_build() errors on an unknown condition name", {
+  proj <- .network_test_setup()
+  expect_error(network_build(proj, condition = "NOT-A-REAL-CONDITION"), "Unknown condition")
+})
+
+test_that("network_build() builds one network_edges row set per condition, restricted to present compounds", {
+  proj <- .network_test_setup()
+  proj <- network_build(proj)
+
+  edges <- patliRResults(proj, "network_edges")
+  expect_true(all(c("condition", "compound_id", "uniprot_id", "weight", "disease_association_score") %in% names(edges)))
+
+  bin <- binarizedMatrix(proj)
+  all_conditions <- setdiff(names(bin), "compound_id")
+  expect_setequal(unique(edges$condition), all_conditions)
+
+  ## Apigenin (CID 5280443) is only present (1) in FLO-ET/FLO-AQ in the fixture matrix
+  apigenin_id <- compounds(proj)$id[compounds(proj)$pubchem_id == "5280443"]
+  cond_with_apigenin <- edges$condition[edges$compound_id == apigenin_id]
+  expect_true(all(cond_with_apigenin %in% c("FLO-ET", "FLO-AQ")))
+})
+
+test_that("network_build() can rebuild a single condition without touching the others", {
+  proj <- .network_test_setup()
+  proj <- network_build(proj)
+  before <- patliRResults(proj, "network_edges")
+
+  proj <- network_build(proj, condition = "FLO-ET")
+  after <- patliRResults(proj, "network_edges")
+
+  expect_setequal(unique(after$condition), unique(before$condition))
+
+  row_key <- function(df) {
+    df <- df[df$condition != "FLO-ET", , drop = FALSE]
+    sort(apply(df, 1, paste, collapse = "|"))
+  }
+  expect_identical(row_key(after), row_key(before))
+})
+
+test_that("network_build() min_score drops low-probability edges", {
+  proj <- .network_test_setup()
+  proj_all <- network_build(proj, min_score = NULL)
+  proj_strict <- network_build(proj, min_score = 0.99)
+
+  edges_all <- patliRResults(proj_all, "network_edges")
+  edges_strict <- patliRResults(proj_strict, "network_edges")
+  expect_true(nrow(edges_strict) <= nrow(edges_all))
+  expect_true(all(edges_strict$weight >= 0.99))
+})
+
+test_that("network_build() rejects a malformed min_score", {
+  proj <- .network_test_setup()
+  expect_error(network_build(proj, min_score = 1.5), "min_score")
+  expect_error(network_build(proj, min_score = -1), "min_score")
+})
+
+test_that(".network_graph() returns an igraph object with compound and target node types", {
+  proj <- .network_test_setup()
+  proj <- network_build(proj)
+
+  g <- patliR:::.network_graph(proj, "FLO-ET")
+  expect_true(igraph::is_igraph(g))
+  expect_true("type" %in% igraph::vertex_attr_names(g))
+})
+
+test_that(".network_graph() rebuilds from network_edges when the cache file is missing", {
+  proj <- .network_test_setup()
+  proj <- network_build(proj)
+
+  cache_path <- patliR:::.network_cache_path(proj, "FLO-ET")
+  expect_true(file.exists(cache_path))
+  file.remove(cache_path)
+  expect_false(file.exists(cache_path))
+
+  g <- patliR:::.network_graph(proj, "FLO-ET")
+  expect_true(igraph::is_igraph(g))
+  expect_true(file.exists(cache_path)) # repopulated
+})
+
+test_that(".network_graph() errors clearly for a condition that was never built", {
+  proj <- .network_test_setup()
+  proj <- network_build(proj, condition = "FLO-ET")
+  expect_error(patliR:::.network_graph(proj, "LEA-ET"), "network_build")
+})

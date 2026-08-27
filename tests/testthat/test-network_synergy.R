@@ -1,0 +1,59 @@
+test_that("network_synergy() requires network_proximity() to have run first", {
+  proj <- .network_stats_test_setup()
+  expect_error(network_synergy(proj, condition = "FLO-ET", disease = "EFO_0000000"), "network_proximity")
+})
+
+test_that("network_synergy() errors clearly when network_proximity() ran for a different condition/disease", {
+  proj <- .network_stats_test_setup()
+  ## Fabricate network_proximity results directly -- bypassing the real
+  ## STRINGdb-dependent computation -- so this test is self-contained and
+  ## offline, same pattern as test-network_proximity.R's fake targets_disease.
+  ct <- unique(patliRResults(proj, "network_edges")[, c("compound_id", "uniprot_id")])
+  compounds <- unique(ct$compound_id)
+  fake_prox <- data.frame(
+    condition = "FLO-ET", compound_id = compounds, disease_id = "SOME_DISEASE",
+    n_targets_mapped = 1L, n_disease_genes_mapped = 1L, d_observed = 2,
+    d_random_mean = 3, d_random_sd = 1, z_score = seq(-2, 2, length.out = length(compounds)),
+    n_random = 100L, seed_used = 1L, stringsAsFactors = FALSE
+  )
+  patliRResults(proj, "network_proximity") <- fake_prox
+
+  expect_error(
+    network_synergy(proj, condition = "FLO-ET", disease = "NOT-THE-SAME-DISEASE"),
+    "network_proximity"
+  )
+})
+
+test_that("network_synergy() with pairs = 'rank_top' and pairs = 'all' both run end-to-end", {
+  proj <- .network_stats_test_setup()
+  ## Filter to FLO-ET specifically -- network_edges spans every condition
+  ## network_build() built, and network_synergy() only pairs compounds
+  ## within the requested condition, so the expected pair count below must
+  ## be based on FLO-ET's own compound set, not every compound in proj.
+  edges_flo_et <- patliRResults(proj, "network_edges")
+  edges_flo_et <- edges_flo_et[edges_flo_et$condition == "FLO-ET", , drop = FALSE]
+  ct <- unique(edges_flo_et[, c("compound_id", "uniprot_id")])
+  compounds <- unique(ct$compound_id)
+  skip_if(length(compounds) < 2, "needs at least 2 compounds in the FLO-ET condition")
+
+  fake_prox <- data.frame(
+    condition = "FLO-ET", compound_id = compounds, disease_id = "SOME_DISEASE",
+    n_targets_mapped = 1L, n_disease_genes_mapped = 1L, d_observed = 2,
+    d_random_mean = 3, d_random_sd = 1, z_score = seq(-2, 2, length.out = length(compounds)),
+    n_random = 100L, seed_used = 1L, stringsAsFactors = FALSE
+  )
+  patliRResults(proj, "network_proximity") <- fake_prox
+
+  proj_top <- network_synergy(proj, condition = "FLO-ET", disease = "SOME_DISEASE", pairs = "rank_top", top_n = 2)
+  result_top <- patliRResults(proj_top, "network_synergy")
+  expect_true(all(c("condition", "disease_id", "compound_a", "compound_b", "target_jaccard",
+                     "complementarity", "z_score_a", "z_score_b", "joint_closeness",
+                     "synergy_score", "pairs_mode") %in% names(result_top)))
+  expect_true(all(result_top$pairs_mode == "rank_top"))
+  expect_true(all(result_top$compound_a != result_top$compound_b))
+
+  proj_all <- network_synergy(proj, condition = "FLO-ET", disease = "SOME_DISEASE", pairs = "all")
+  result_all <- patliRResults(proj_all, "network_synergy")
+  expect_equal(nrow(result_all), choose(length(compounds), 2))
+  expect_true(all(result_all$complementarity >= 0 & result_all$complementarity <= 1))
+})

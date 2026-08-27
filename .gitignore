@@ -1,0 +1,11 @@
+# R / RStudio
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rcheck/
+*.tar.gz
+
+# patliR runtime artifacts (regenerable from a fresh pipeline run)
+.patliR_cache/
+test_results*/

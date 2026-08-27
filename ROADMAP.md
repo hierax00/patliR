@@ -20,6 +20,17 @@ guessing.
   `targets_disease_filter()`'s Open Targets call: import a disease-gene
   list into the same `targets_disease` slot, with a `source` column.
 
+### Evaluated and not adopted
+
+- **ToolUniverse `swiss_target_tools` (`SwissTargetPrediction_predict`)** —
+  a SMILES-in / ranked-targets-out wrapper. Not adopted: SwissTargetPrediction
+  has no official API (it is a web job queue), the wrapper's own docs note
+  its job-URL extraction is non-deterministic, and it is a Python package
+  (would pull in `reticulate`). Same "never guess/scrape an external API"
+  policy that defers `coconut_fetch()`. `targets_import()` from a manual
+  export stays the reliable path; `targets_bipartite()` above is the
+  reproducible programmatic alternative.
+
 ## Reference / natural-product databases
 
 - **`coconut_fetch()`** — COCONUT 2.0 REST API, folded into

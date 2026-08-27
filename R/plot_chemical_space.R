@@ -298,7 +298,7 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
   )
   plotly::layout(
     p,
-    title = paste0("Chemical space (", toupper(method), ", 3D) — ", color_by),
+    title = paste0("Chemical space (", toupper(method), ", 3D) -- ", color_by),
     scene = list(
       xaxis = list(title = axis_labels[1]),
       yaxis = list(title = axis_labels[2]),
@@ -344,7 +344,7 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
   panels <- lapply(pairs, panel)
   patchwork::wrap_plots(panels, nrow = 1, guides = "collect") +
     patchwork::plot_annotation(
-      title = paste0("Chemical space (", toupper(method), ", 3 axes) — ", color_by),
+      title = paste0("Chemical space (", toupper(method), ", 3 axes) -- ", color_by),
       subtitle = "every compound against all three principal components; filled areas are per-family hulls"
     ) &
     ggplot2::theme(legend.position = "right")

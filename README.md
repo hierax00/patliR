@@ -2,112 +2,183 @@
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 ![R >= 4.3.0](https://img.shields.io/badge/R-%3E%3D%204.3.0-blue.svg)
-![Status: pre-1.0](https://img.shields.io/badge/status-pre--1.0%20%2F%20active%20development-orange.svg)
+![Status: pre-1.0](https://img.shields.io/badge/status-pre--1.0-orange.svg)
 
-Reproducible network pharmacology analysis for natural product extracts and
-compound mixtures, from a raw compound list or GC-MS abundance matrix all the
-way to a fully-logged candidate ranking report.
+**Reproducible network-pharmacology analysis for natural-product extracts.**
+From a plain compound list (or a GC-MS abundance matrix) all the way to a
+fully-logged compound–target–pathway network — every step a pure function,
+every intermediate a plain CSV.
 
 Developed at the Laboratorio de Investigación Química y Farmacológica de
 Productos Naturales, UAQ.
 
-## Contents
+---
 
-- [Status](#status)
-- [Design in one paragraph](#design-in-one-paragraph)
-- [Install](#install-development-version)
-- [Quick example](#quick-example)
-- [Documentation](#documentation)
-- [Bundled reference data](#bundled-reference-data)
-- [License](#license)
+## The pipeline
 
-## Status
+```mermaid
+flowchart TD
+    subgraph input [" "]
+        L["compound list<br/><i>name · PubChem CID · SMILES</i>"]
+        M["GC-MS abundance matrix<br/><i>replicates × conditions</i>"]
+    end
 
-Core pipeline implemented and tested, pre-1.0. Covers compound import and
-validation (`prep_*`), reference-database sync (`refdb_*`), natural-product
-family classification and molecular similarity, local + imported ADME
-(`adme_*`) and toxicity (`tox_*`) screening, partial target
-import/disease-association filtering (`targets_*`), the full
-network-pharmacology core (`network_*`, 12 functions: build, enrich,
-KEGG pathview, centrality/hub penalty, module robustness, layers/motifs,
-degeneracy, proximity, synergy, bow-tie), 16 `plot_*` visualization
-functions, a partial domain-bias audit (`bias_*`), an optional Shiny
-wizard (`launch_app()`), and a couple of standalone utilities
-(`network_filter_proteome()`, `patliR_export_llm()`).
+    L --> PC["<b>prep_compounds</b><br/>validate structures"]
+    M --> PB["<b>prep_binarize</b><br/>average replicates → presence/absence"]
+    L -.list-only.-> PAC["<b>prep_as_condition</b><br/>list = one extract"]
+    PC --> PAC
 
-Not yet implemented: `rank_*` (candidate prioritization), `dock_*`/
-`report_*` (docking prep and final report generation), `coconut_*`/
-`tcm_*` (COCONUT/TCM database import), `targets_bipartite()`/
-`targets_consensus()`, KEGG-directed network completion, and an AI
-narration module — see [`ROADMAP.md`](ROADMAP.md).
+    subgraph chem ["identity & chemistry"]
+        RDB["<b>refdb_build</b><br/>PubChem · ChEMBL"]
+        CL["<b>compounds_classify</b><br/>NPClassifier family"]
+        S2D["<b>prep_structure2d</b>"]
+        SIM["<b>compounds_similarity</b>"]
+    end
+    PC --> RDB & CL & S2D & SIM
 
-For what every function does — signature, output, design rationale — read
-its help page. For the cross-cutting design decisions, see
-[`DESIGN.md`](DESIGN.md).
+    subgraph pk ["physchem · ADME · toxicity"]
+        AL["<b>adme_local</b><br/>Ro5 · Veber · Ghose · Egan · Oprea · BOILED-Egg"]
+        AF["<b>adme_filter</b>"]
+        AI["<b>adme_import</b> ← SwissADME / ADMETlab"]
+        TL["<b>tox_local</b><br/>PAINS · Brenk"]
+        TS["<b>tox_safetyome</b><br/>500-gene safety panel"]
+        TR["<b>tox_report</b>"]
+    end
+    PC --> AL --> AF
+    AI --> AF
+    PC --> TL --> TR
+    TS --> TR
 
-## Design in one paragraph
+    TR --> CSV[["triage CSV<br/><i>pick the shortlist here</i>"]]
+    AF --> CSV
 
-Every pipeline step is a pure function: `proj <- some_step(proj, ...)`.
-`proj` is an S4 `PatliRProject` object, but the durable source of truth is
-always plain CSV files written to the project directory — the analysis can
-resume in a brand new R session, on a different machine, without any
-R-specific binary format, via `patliR_load()`. Every step also appends to a
-run log (`projectLog(proj)`), so every filtering decision, random seed, and
-data source is traceable after the fact.
+    CSV --> TI["<b>targets_import</b> ← SuperPred / SwissTarget"]
+    PB --> NB
+    PAC --> NB
+    TI --> NB["<b>network_build</b><br/>compound–target graph / condition"]
 
-## Install (development version)
+    subgraph net ["network pharmacology"]
+        NE["<b>network_enrich</b><br/>GO · Reactome · KEGG"]
+        NC["<b>network_centrality</b> · <b>hub_penalty</b>"]
+        NMR["<b>module_robustness</b><br/>R-index percolation"]
+        NM["<b>network_motifs</b> · <b>degeneracy</b>"]
+        NP["<b>network_proximity</b><br/>distance to disease module"]
+        NS["<b>network_synergy</b>"]
+        NBT["<b>network_bowtie</b>"]
+    end
+    NB --> NE --> NC --> NMR --> NM
+    NB --> NP --> NS
+    NB --> NBT
 
-```r
-# install.packages("devtools")
-devtools::install_local(".")
-# or, while developing:
-devtools::load_all(".")
+    NE & NC & NMR & NP --> PLOTS["<b>plot_*</b><br/>16 publication figures<br/>+ 3-axis chemical space"]
+    TR --> BIAS["<b>bias_audit</b><br/>database-bias flag"]
+    RDB --> BIAS
 ```
 
-Java (>= 8) is required for `rcdk`/`rJava` cheminformatics routines. Optional
-`Suggests` packages unlock specific functions (Bioconductor packages for
-`network_enrich()`/`tox_safetyome()`/`network_pathview()`, `ggalluvial`/
-`ggVennDiagram`/`patchwork`/`umap` for parts of the `plot_*` family) — see
-each function's own documentation (`?network_enrich`, `?network_pathview`,
-`?plot_chemical_space`, ...) for what it needs.
+Two entry points: a **curated compound list** (`prep_compounds`) or a **raw
+abundance matrix** (`prep_binarize`). Everything downstream is shared. The
+network layer keys off one graph per experimental *condition*; with a plain
+list, `prep_as_condition()` makes the whole list a single condition.
 
-## Quick example
+## Install
+
+```r
+# install.packages("remotes")
+remotes::install_github("hierax00/patliR")
+```
+
+Java (≥ 8) is required for the `rcdk`/`rJava` cheminformatics routines
+(structure validation, PAINS/Brenk matching, descriptors). Everything else
+is optional and pulled in only when you call a function that needs it —
+Bioconductor packages for `network_enrich()` / `tox_safetyome()` /
+`network_pathview()`, `STRINGdb` for `network_proximity()` / `network_bowtie()`,
+`plotly` for the 3-D chemical space, and so on. Each help page lists its own
+requirements.
+
+## Quick start — list to triage table
 
 ```r
 library(patliR)
 
-proj <- patliR_project("my_analysis")
-compound_list <- read.csv(system.file("extdata", "input_compound_list.csv", package = "patliR"))
-proj <- prep_compounds(proj, compound_list, identifier = "pubchem")
-proj <- adme_local(proj)
-proj <- tox_local(proj)
+proj <- patliR_project("chilcuague")
+compounds_in <- read.csv("compounds.csv")          # name, CAS, PubChemCID, SMILES
 
-compounds(proj)
-projectLog(proj)
+proj <- prep_compounds(proj, compounds_in, identifier = "smiles")
+proj <- refdb_build(proj, sources = c("pubchem", "chembl"))   # reference DB, on load
+proj <- compounds_classify(proj)                    # natural-product family
+proj <- adme_local(proj)                            # drug-likeness rules + BOILED-Egg
+proj <- adme_filter(proj, rules = c("ro5", "veber", "ghose", "egan", "oprea"))
+proj <- tox_local(proj, alert_sets = c("pains", "brenk"))
+
+report <- tox_report(proj)                          # → results/tox_report.csv
+report$summary                                      # one row per compound
 ```
 
-## Documentation
+## Quick start — shortlist to network
 
-- Each function has its own help page (`?prep_compounds`, `?network_build`, ...).
-- [`DESIGN.md`](DESIGN.md) — the cross-cutting design decisions.
-- [`ROADMAP.md`](ROADMAP.md) — what is designed but not yet built.
+```r
+keep <- c("C0001", "C0004", "C0009", "C0021")       # your picks from the triage
+
+proj <- prep_as_condition(proj, condition = "Chilcuague", compound_ids = keep)
+proj <- targets_import_batch(proj, "targets_superpred/", platform = "superpred")
+proj <- network_build(proj)
+proj <- network_enrich(proj, condition = "Chilcuague", db = "go")
+proj <- network_centrality(proj, condition = "Chilcuague")
+proj <- network_module_robustness(proj, condition = "Chilcuague", seed = 42)
+
+plot_network_layers(proj, condition = "Chilcuague")
+plot_chemical_space(proj, dims = 3, color_by = "family", engine = "plotly")
+```
+
+A worked end-to-end script against a real dataset lives in
+[`chilcuague-analysis/`](https://github.com/hierax00/chilcuague-analysis).
+
+## Function families
+
+| family | what it does |
+|---|---|
+| `prep_*` | import & validate compounds, binarize an abundance matrix, 2-D depiction, list-as-condition |
+| `refdb_*` | local reference DB of identity + bioactivity (PubChem, ChEMBL) |
+| `compounds_classify()` / `compounds_similarity()` | NPClassifier family; pairwise fingerprint similarity |
+| `adme_*` | local drug-/lead-likeness rules + BOILED-Egg; import from external platforms; rule filtering; SMILES export bridge |
+| `tox_*` | PAINS/Brenk structural alerts; target-level safety panel; import; per-compound report — **never a pass/fail verdict** |
+| `targets_*` | import predicted targets; disease-association filtering (Open Targets) |
+| `network_*` | build, enrich, centrality/hub-penalty, module robustness, motifs, degeneracy, proximity, synergy, bow-tie, KEGG pathview, proteome filter |
+| `plot_*` | 16 static/interactive figures for every result above |
+| `bias_*` | MAD-based "promiscuous compound/target" flag against the reference DB |
+| `patliR_export_llm()` | flat-text dump of a whole project for an LLM to read |
+
+Everything is documented on its own help page. For the cross-cutting design
+decisions see [`DESIGN.md`](DESIGN.md); for what is designed but not yet
+built see [`ROADMAP.md`](ROADMAP.md).
+
+## Design in one paragraph
+
+Every step is a pure transformation `proj <- step(proj, ...)`. `proj` is an
+immutable S4 object, but the durable source of truth is always a plain CSV
+in the project directory — `patliR_load()` rebuilds the whole project from
+those CSVs in a fresh R session, on another machine, with no R-specific
+binary format. Every step appends to a run log, so every filtering
+decision, random seed, and data source is traceable after the fact.
+External services (PubChem, ChEMBL, KEGG, STRING, …) all go through one
+retry/cache wrapper and never break the pipeline when they fail.
 
 ## Bundled reference data
 
-A few functions ship small, curated reference tables under
-`inst/extdata/` so they work offline, out of the box:
+Small curated tables ship under `inst/extdata/` so the local steps work
+offline:
 
-- **PAINS** (480 filters) — Baell & Holloway (2010), *J. Med. Chem.*
-  53(7), 2719-2740. Transcribed verbatim from RDKit's
-  `Data/Pains/wehi_pains.csv` (BSD-3-Clause).
-- **Brenk** (105 alerts) — Brenk et al. (2008), *ChemMedChem* 3, 435-444.
-  SMARTS text from PatWalters/rd_filters' `alert_collection.csv` (MIT),
-  cross-validated against RDKit's own compiled `FilterCatalogs.BRENK`.
-- **Safetyome core panel** (500 genes) — Liu et al. (2026),
-  *Toxicological Sciences* 209(3), kfag021. Transcribed from the paper's
-  Supplementary Table 4. Redistribution terms for this specific table
-  were not independently confirmed at the time of writing.
+- **PAINS** — 480 filters, Baell & Holloway (2010), *J. Med. Chem.* 53(7),
+  2719–2740; verbatim from RDKit's `wehi_pains.csv` (BSD-3-Clause).
+- **Brenk** — 105 alerts, Brenk et al. (2008), *ChemMedChem* 3, 435–444;
+  from PatWalters/rd_filters (MIT), cross-checked against RDKit's
+  `FilterCatalogs.BRENK`.
+- **Safetyome core panel** — 500 genes, Liu et al. (2026), *Toxicological
+  Sciences* 209(3), kfag021, Supplementary Table 4. Redistribution terms
+  for that table were not independently confirmed at the time of writing.
+- **BOILED-Egg** GIA/BBB ellipse boundaries — digitized from Daina & Zoete
+  (2016) via PyBOILEDegg (GPL-3).
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
+MIT — see [`LICENSE`](LICENSE).

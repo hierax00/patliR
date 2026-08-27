@@ -152,6 +152,84 @@ prep_binarize <- function(proj, data, id_col = "Name",
   proj
 }
 
+#' Treat a compound list as a single experimental condition (no abundance matrix)
+#'
+#' @description
+#' The `network_*` family keys everything off [binarizedMatrix()] -- one
+#' network per condition column. When you have a plain compound list rather
+#' than a GC-MS abundance matrix (Scenario B, [prep_compounds()]), there is
+#' no matrix and no conditions, so `network_build()` has nothing to fork on.
+#' `prep_as_condition()` fills that gap: it marks every compound (or a
+#' subset) as present in one named condition, so the rest of the pipeline
+#' -- `network_*`, `plot_*` -- runs on the list as if it were a single
+#' extract. This is the entry point for a list-only, exploratory flow.
+#'
+#' @inheritParams compounds
+#' @param condition Character scalar, the condition name to create (default
+#'   `"all"`).
+#' @param compound_ids Character vector of `compounds(proj)$id` to mark
+#'   present, or `NULL` (default) for every compound currently in
+#'   [compounds()].
+#'
+#' @return The updated `proj`, with [binarizedMatrix()] (and a matching
+#'   [matrixRaw()] of all `1`s) carrying a single `condition` column, and
+#'   `02_matrix_raw.csv` / `03_binarized.csv` written. Re-running with a
+#'   different `condition` adds a column rather than replacing the matrix.
+#'
+#' @examples
+#' proj <- patliR_project(tempfile("patliR_demo_"))
+#' compound_list <- read.csv(
+#'   system.file("extdata", "input_compound_list.csv", package = "patliR")
+#' )
+#' proj <- prep_compounds(proj, compound_list, identifier = "pubchem")
+#' proj <- prep_as_condition(proj, condition = "my_extract")
+#' binarizedMatrix(proj)
+#'
+#' @seealso [prep_binarize()] for a real replicate-abundance matrix.
+#' @export
+prep_as_condition <- function(proj, condition = "all", compound_ids = NULL) {
+  stopifnot(is(proj, "PatliRProject"), is.character(condition), length(condition) == 1, nzchar(condition))
+  cmp <- compounds(proj)
+  if (nrow(cmp) == 0) {
+    cli::cli_abort("No compounds in {.arg proj}; run {.fn prep_compounds} first.")
+  }
+  ids <- cmp$id
+  if (!is.null(compound_ids)) {
+    unknown <- setdiff(compound_ids, ids)
+    if (length(unknown) > 0) {
+      cli::cli_warn("{length(unknown)} {.arg compound_ids} not in {.fn compounds} and ignored: {.val {unknown}}.")
+    }
+    ids <- intersect(ids, compound_ids)
+  }
+  if (length(ids) == 0) cli::cli_abort("No compounds left to mark present.")
+
+  present <- as.integer(cmp$id %in% ids)
+
+  raw <- matrixRaw(proj)
+  bin <- binarizedMatrix(proj)
+  if (nrow(raw) == 0) raw <- data.frame(compound_id = cmp$id, stringsAsFactors = FALSE)
+  if (nrow(bin) == 0) bin <- data.frame(compound_id = cmp$id, stringsAsFactors = FALSE)
+  if (condition %in% names(bin)) {
+    cli::cli_warn("Condition {.val {condition}} already exists; overwriting it.")
+  }
+  raw[[condition]] <- present
+  bin[[condition]] <- present
+
+  ## set both slots together -- the S4 validity check requires matrix_raw
+  ## and binarized to carry the same condition columns at all times.
+  proj@matrix_raw <- raw
+  proj@binarized <- bin
+  methods::validObject(proj)
+  proj <- .log_append(
+    proj, step = "prep_as_condition", id = NA_character_,
+    message = paste0("condition '", condition, "': ", sum(present), " of ", nrow(cmp), " compounds marked present (list-as-condition, no abundance matrix)")
+  )
+  .write_step_csv(proj, "02_matrix_raw.csv", raw)
+  .write_step_csv(proj, "03_binarized.csv", bin)
+  .write_log_csv(proj)
+  proj
+}
+
 #' @keywords internal
 .parse_replicate_columns <- function(cols) {
   pattern <- "^R([0-9]+)-(.+)$"

@@ -8,11 +8,12 @@ plot_chemical_space(
   proj,
   condition = NULL,
   compound_ids = NULL,
+  dims = 2,
   method = c("pca", "umap"),
   color_by = "family",
   show_hulls = TRUE,
   seed = NULL,
-  engine = c("ggiraph", "static"),
+  engine = c("ggiraph", "static", "plotly"),
   save = TRUE,
   out_dir = NULL,
   width = 7,
@@ -29,6 +30,11 @@ plot_chemical_space(
 
 \item{compound_ids}{Character vector of \code{compounds(proj)$id}, or \code{NULL}
 (default). Combined with \code{condition} if both given (intersection).}
+
+\item{dims}{\code{2} (default) or \code{3}. \code{3} projects onto three components and
+renders either a rotatable 3D scatter with a translucent hull mesh
+("halo") per family (\code{engine = "plotly"}, needs the \code{plotly} package)
+or a 3-panel matrix of PC pairs with 2D hulls (\code{engine = "static"}).}
 
 \item{method}{\code{"pca"} (default) or \code{"umap"}.}
 
@@ -51,8 +57,10 @@ points. Only really legible for a categorical \code{color_by} (i.e.
 pre-call RNG state afterwards, same principle as \code{network_proximity()}
 / \code{network_module_robustness()}'s \code{seed} argument.}
 
-\item{engine}{\code{"ggiraph"} (default, if installed): interactive plot with
-a tooltip per point. \code{"static"}: plain \code{ggplot2}.}
+\item{engine}{\code{"ggiraph"} (default, if installed): interactive 2D plot
+with a tooltip per point. \code{"static"}: plain \code{ggplot2}. \code{"plotly"}:
+rotatable 3D (only meaningful with \code{dims = 3}; needs the \code{plotly}
+package).}
 
 \item{save}{Logical, default \code{TRUE}. If \code{TRUE}, also writes a PNG.}
 
@@ -110,6 +118,8 @@ compound_list <- read.csv(
 proj <- prep_compounds(proj, compound_list, identifier = "pubchem")
 proj <- adme_local(proj)
 plot_chemical_space(proj, color_by = "ro5_pass", engine = "static", save = FALSE)
+# three axes, one hull per family, rotatable:
+plot_chemical_space(proj, dims = 3, color_by = "family", engine = "plotly", save = FALSE)
 }
 
 }

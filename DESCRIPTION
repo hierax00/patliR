@@ -61,7 +61,9 @@ Suggests:
     shiny,
     DT,
     fingerprint,
-    ChemmineR
+    ChemmineR,
+    plotly,
+    htmlwidgets
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 SystemRequirements: Java (>= 8) (required by rcdk / rJava for cheminformatics

@@ -1,12 +1,13 @@
 #' @include AllGenerics.R internal.R adme_local.R
 NULL
 
-## Reduces adme_local()'s descriptors to 2D (PCA via base stats::prcomp();
-## UMAP optional via the `umap` package) and colors points by chemical
-## family or any drug-likeness/route flag. Convex-hull outlines per family
-## via grDevices::chull(). Overlaying target/protein shapes on the same
-## space is not attempted -- proteins have no logP/TPSA, so a joint
-## embedding is a separate design question (see ROADMAP.md).
+## Reduces adme_local()'s descriptors to 2D or 3D (PCA via base
+## stats::prcomp(); UMAP optional via the `umap` package) and colors points
+## by chemical family or any drug-likeness/route flag. Convex-hull "halos"
+## per family: chull() in 2D; a translucent 3D alpha-hull mesh (plotly) or
+## a 3-panel PC-pair matrix (static) in 3D. Overlaying target/protein
+## shapes on the same space is not attempted -- proteins have no logP/TPSA,
+## so a joint embedding is a separate design question (see ROADMAP.md).
 
 #' Chemical space plot: 2D projection of compounds, colored by family
 #'
@@ -44,6 +45,10 @@ NULL
 #'   [adme_local()] results regardless of condition.
 #' @param compound_ids Character vector of `compounds(proj)$id`, or `NULL`
 #'   (default). Combined with `condition` if both given (intersection).
+#' @param dims `2` (default) or `3`. `3` projects onto three components and
+#'   renders either a rotatable 3D scatter with a translucent hull mesh
+#'   ("halo") per family (`engine = "plotly"`, needs the `plotly` package)
+#'   or a 3-panel matrix of PC pairs with 2D hulls (`engine = "static"`).
 #' @param method `"pca"` (default) or `"umap"`.
 #' @param color_by `"family"` (default, needs [compounds_classify()] to
 #'   have run -- colors by NPClassifier pathway), or any of `"ro5_pass"`,
@@ -61,8 +66,10 @@ NULL
 #'   (UMAP's neighbor search has a stochastic component); restores the
 #'   pre-call RNG state afterwards, same principle as `network_proximity()`
 #'   / `network_module_robustness()`'s `seed` argument.
-#' @param engine `"ggiraph"` (default, if installed): interactive plot with
-#'   a tooltip per point. `"static"`: plain `ggplot2`.
+#' @param engine `"ggiraph"` (default, if installed): interactive 2D plot
+#'   with a tooltip per point. `"static"`: plain `ggplot2`. `"plotly"`:
+#'   rotatable 3D (only meaningful with `dims = 3`; needs the `plotly`
+#'   package).
 #' @param save Logical, default `TRUE`. If `TRUE`, also writes a PNG.
 #' @param out_dir Directory to write the PNG to (only used if
 #'   `save = TRUE`). Defaults to `file.path(projectDir(proj), "plots")`.
@@ -84,20 +91,25 @@ NULL
 #' proj <- prep_compounds(proj, compound_list, identifier = "pubchem")
 #' proj <- adme_local(proj)
 #' plot_chemical_space(proj, color_by = "ro5_pass", engine = "static", save = FALSE)
+#' # three axes, one hull per family, rotatable:
+#' plot_chemical_space(proj, dims = 3, color_by = "family", engine = "plotly", save = FALSE)
 #' }
 #'
 #' @export
 plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
+                                 dims = 2,
                                  method = c("pca", "umap"),
                                  color_by = "family",
                                  show_hulls = TRUE, seed = NULL,
-                                 engine = c("ggiraph", "static"),
+                                 engine = c("ggiraph", "static", "plotly"),
                                  save = TRUE, out_dir = NULL,
                                  width = 7, height = 6, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
   method <- match.arg(method)
   engine <- match.arg(engine)
   stopifnot(is.character(color_by), length(color_by) == 1)
+  stopifnot(dims %in% c(2, 3))
+  dims <- as.integer(dims)
 
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
     cli::cli_abort("The {.pkg ggplot2} package is required for {.fn plot_chemical_space}.")
@@ -108,6 +120,17 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
       "i" = "{.code install.packages(\"umap\")}, or use {.code method = \"pca\"} (base R, no extra install)."
     ))
   }
+  if (engine == "plotly" && dims != 3) {
+    cli::cli_warn("{.code engine = \"plotly\"} only does something for {.code dims = 3}; using {.val static}.")
+    engine <- "static"
+  }
+  if (engine == "plotly" && !requireNamespace("plotly", quietly = TRUE)) {
+    cli::cli_abort(c(
+      "{.code engine = \"plotly\"} needs the {.pkg plotly} package (CRAN).",
+      "i" = "{.code install.packages(\"plotly\")}, or use {.code engine = \"static\"} for a 3-panel PC matrix."
+    ))
+  }
+  if (dims == 3 && engine == "ggiraph") engine <- "static"
 
   adme <- patliRResults(proj, "adme_local")
   if (is.null(adme) || nrow(adme) == 0) {
@@ -147,9 +170,10 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
     cli::cli_abort("Fewer than 3 compounds have complete descriptors after excluding {.val NA}s; cannot compute {.arg method}.")
   }
 
-  coords <- .chemical_space_coords(mat, method, seed)
+  coords <- .chemical_space_coords(mat, method, seed, dims)
   adme$dim1 <- coords[, 1]
   adme$dim2 <- coords[, 2]
+  if (dims == 3) adme$dim3 <- coords[, 3]
 
   color_info <- .chemical_space_color_values(proj, adme, color_by)
   adme$color_value <- color_info$value
@@ -169,21 +193,50 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
 
   axis_labels <- if (method == "pca") {
     pca <- attr(coords, "pca")
-    ve <- summary(pca)$importance["Proportion of Variance", 1:2] * 100
-    c(sprintf("PC1 (%.1f%% var.)", ve[1]), sprintf("PC2 (%.1f%% var.)", ve[2]))
+    ve <- summary(pca)$importance["Proportion of Variance", seq_len(dims)] * 100
+    sprintf("PC%d (%.1f%% var.)", seq_len(dims), ve)
   } else {
-    c("UMAP1", "UMAP2")
+    paste0("UMAP", seq_len(dims))
   }
 
-  p <- .chemical_space_ggplot(adme, axis_labels, color_by, is_categorical, draw_hulls, engine, method)
+  result <- if (dims == 3 && engine == "plotly") {
+    .chemical_space_plotly3d(adme, axis_labels, color_by, is_categorical, draw_hulls, method)
+  } else if (dims == 3) {
+    .chemical_space_static3d(adme, axis_labels, color_by, is_categorical, draw_hulls, method)
+  } else {
+    p <- .chemical_space_ggplot(adme, axis_labels, color_by, is_categorical, draw_hulls, engine, method)
+    if (engine == "static") {
+      p
+    } else if (requireNamespace("ggiraph", quietly = TRUE)) {
+      ggiraph::girafe(ggobj = p, options = list(ggiraph::opts_tooltip(opacity = 0.9)))
+    } else {
+      cli::cli_warn("The {.pkg ggiraph} package is not installed; falling back to {.val static}.")
+      p
+    }
+  }
 
   if (save) {
     if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
     if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
-    p_static <- .chemical_space_ggplot(adme, axis_labels, color_by, is_categorical, draw_hulls, "static", method)
-    path <- file.path(out_dir, paste0("chemical_space_", method, "_", color_by, ".png"))
-    ggplot2::ggsave(path, p_static, width = width, height = height, dpi = dpi)
-    log_df <- adme[, c("compound_id", "dim1", "dim2", "color_value")]
+    tag <- paste0("chemical_space_", dims, "d_", method, "_", color_by)
+    if (dims == 3 && engine == "plotly") {
+      ## plotly widget cannot go through ggsave(); save an html file if we can.
+      if (requireNamespace("htmlwidgets", quietly = TRUE)) {
+        path <- file.path(out_dir, paste0(tag, ".html"))
+        ## selfcontained needs pandoc; fall back to a sidecar _files/ dir.
+        htmlwidgets::saveWidget(result, path, selfcontained = nzchar(Sys.which("pandoc")))
+      } else {
+        path <- NA_character_
+        cli::cli_warn("Install {.pkg htmlwidgets} to save the 3D widget to disk; returning it un-saved.")
+      }
+    } else {
+      p_static <- if (dims == 3) result else
+        .chemical_space_ggplot(adme, axis_labels, color_by, is_categorical, draw_hulls, "static", method)
+      path <- file.path(out_dir, paste0(tag, ".png"))
+      ggplot2::ggsave(path, p_static, width = width, height = if (dims == 3) max(height, 5) else height, dpi = dpi)
+    }
+    log_cols <- c("compound_id", "dim1", "dim2", if (dims == 3) "dim3", "color_value")
+    log_df <- adme[, log_cols]
     log_df$method <- method
     log_df$color_by <- color_by
     log_df$path <- path
@@ -192,23 +245,15 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
   }
   .write_log_csv(proj)
 
-  result <- if (engine == "static") {
-    p
-  } else if (requireNamespace("ggiraph", quietly = TRUE)) {
-    ggiraph::girafe(ggobj = p, options = list(ggiraph::opts_tooltip(opacity = 0.9)))
-  } else {
-    cli::cli_warn("The {.pkg ggiraph} package is not installed; falling back to {.val static}.")
-    p
-  }
   if (save) attr(result, "proj") <- proj
   result
 }
 
 #' @keywords internal
-.chemical_space_coords <- function(mat, method, seed) {
+.chemical_space_coords <- function(mat, method, seed, dims = 2) {
   if (method == "pca") {
     pca <- stats::prcomp(mat, center = TRUE, scale. = TRUE)
-    out <- pca$x[, 1:2, drop = FALSE]
+    out <- pca$x[, seq_len(min(dims, ncol(pca$x))), drop = FALSE]
     attr(out, "pca") <- pca
     return(out)
   }
@@ -222,8 +267,94 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
       if (had_seed) assign(".Random.seed", old_seed, envir = .GlobalEnv) else if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv)
     }, add = TRUE)
   }
-  fit <- umap::umap(scaled)
-  fit$layout[, 1:2, drop = FALSE]
+  cfg <- umap::umap.defaults
+  cfg$n_components <- dims
+  fit <- umap::umap(scaled, config = cfg)
+  fit$layout[, seq_len(dims), drop = FALSE]
+}
+
+#' 3D chemical space as a rotatable plotly scatter with a translucent
+#' alpha-hull mesh ("halo") per family
+#' @keywords internal
+.chemical_space_plotly3d <- function(adme, axis_labels, color_by, is_categorical, draw_hulls, method) {
+  pal <- .chemical_space_palette(sort(unique(adme$color_value)))
+  p <- plotly::plot_ly()
+  if (draw_hulls) {
+    for (grp in names(pal)) {
+      d <- adme[adme$color_value == grp, , drop = FALSE]
+      if (nrow(d) < 4) next  # a 3D hull needs >= 4 non-coplanar points
+      p <- plotly::add_trace(
+        p, type = "mesh3d", x = d$dim1, y = d$dim2, z = d$dim3,
+        alphahull = 8, opacity = 0.15, facecolor = rep(pal[[grp]], 1),
+        color = I(pal[[grp]]), hoverinfo = "skip", showlegend = FALSE, name = grp
+      )
+    }
+  }
+  p <- plotly::add_markers(
+    p, data = adme, x = ~dim1, y = ~dim2, z = ~dim3,
+    color = ~color_value, colors = unlist(pal),
+    text = ~compound_label, hoverinfo = "text",
+    marker = list(size = 4, opacity = 0.9)
+  )
+  plotly::layout(
+    p,
+    title = paste0("Chemical space (", toupper(method), ", 3D) — ", color_by),
+    scene = list(
+      xaxis = list(title = axis_labels[1]),
+      yaxis = list(title = axis_labels[2]),
+      zaxis = list(title = axis_labels[3])
+    )
+  )
+}
+
+#' 3D chemical space, static: a 3-panel matrix of PC pairs, each with 2D
+#' family hulls -- every compound shown against all three axes at once
+#' @keywords internal
+.chemical_space_static3d <- function(adme, axis_labels, color_by, is_categorical, draw_hulls, method) {
+  if (!requireNamespace("patchwork", quietly = TRUE)) {
+    cli::cli_abort(c(
+      "Static 3D (the 3-panel PC matrix) needs the {.pkg patchwork} package.",
+      "i" = "{.code install.packages(\"patchwork\")}, or use {.code engine = \"plotly\"}."
+    ))
+  }
+  pairs <- list(c(1, 2), c(1, 3), c(2, 3))
+  panel <- function(ij) {
+    d <- adme
+    d$px <- d[[paste0("dim", ij[1])]]
+    d$py <- d[[paste0("dim", ij[2])]]
+    g <- ggplot2::ggplot(d, ggplot2::aes(x = .data$px, y = .data$py))
+    if (draw_hulls) {
+      hull <- do.call(rbind, lapply(split(d, d$color_value), function(x) {
+        if (nrow(x) < 3) return(NULL)
+        x[grDevices::chull(x$px, x$py), , drop = FALSE]
+      }))
+      if (!is.null(hull) && nrow(hull) > 0) {
+        g <- g + ggplot2::geom_polygon(
+          data = hull,
+          ggplot2::aes(fill = .data$color_value, group = .data$color_value),
+          alpha = 0.22, colour = NA
+        )
+      }
+    }
+    g +
+      ggplot2::geom_point(ggplot2::aes(colour = .data$color_value), size = 2.4, alpha = 0.8) +
+      ggplot2::labs(x = axis_labels[ij[1]], y = axis_labels[ij[2]], colour = color_by, fill = color_by) +
+      ggplot2::theme_minimal(base_size = 9)
+  }
+  panels <- lapply(pairs, panel)
+  patchwork::wrap_plots(panels, nrow = 1, guides = "collect") +
+    patchwork::plot_annotation(
+      title = paste0("Chemical space (", toupper(method), ", 3 axes) — ", color_by),
+      subtitle = "every compound against all three principal components; filled areas are per-family hulls"
+    ) &
+    ggplot2::theme(legend.position = "right")
+}
+
+#' @keywords internal
+.chemical_space_palette <- function(groups) {
+  base <- c("#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B2",
+            "#937860", "#DA8BC3", "#8C8C8C", "#CCB974", "#64B5CD")
+  stats::setNames(rep(base, length.out = length(groups)), groups)
 }
 
 #' @keywords internal

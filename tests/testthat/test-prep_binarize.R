@@ -48,3 +48,27 @@ test_that("an already-binary column is passed through without Q1 thresholding", 
   log <- projectLog(proj)
   expect_true(any(grepl("already_binary=TRUE", log$message)))
 })
+
+test_that("prep_as_condition() turns a plain compound list into one network-ready condition", {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+  n <- nrow(compounds(proj))
+
+  proj <- prep_as_condition(proj, condition = "my_extract")
+  bin <- binarizedMatrix(proj)
+  expect_true("my_extract" %in% names(bin))
+  expect_equal(sum(bin$my_extract), n)
+  expect_equal(nrow(bin), n)
+
+  ## a second call adds a column, does not wipe the first
+  sub <- compounds(proj)$id[1:2]
+  proj <- prep_as_condition(proj, condition = "subset", compound_ids = sub)
+  bin <- binarizedMatrix(proj)
+  expect_true(all(c("my_extract", "subset") %in% names(bin)))
+  expect_equal(sum(bin$subset), 2)
+})
+
+test_that("prep_as_condition() errors before prep_compounds()", {
+  proj <- .test_project()
+  expect_error(prep_as_condition(proj), "run .*prep_compounds")
+})

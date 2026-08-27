@@ -235,7 +235,11 @@ network_module_robustness <- function(proj, condition = NULL,
     ))
   }
 
-  dist_matrix <- igraph::distances(g)
+  ## weights = NA: the edge `weight` attribute is the import probability,
+  ## not a distance -- letting igraph use it as one would make confident
+  ## predictions look "far" (and errors outright on any NA probability).
+  ## Same rule as every other distance/centrality call in network_*.
+  dist_matrix <- igraph::distances(g, weights = NA)
   hdb <- dbscan::hdbscan(stats::as.dist(dist_matrix), minPts = min_module_size)
 
   cluster_ids <- sort(unique(hdb$cluster[hdb$cluster != 0]))

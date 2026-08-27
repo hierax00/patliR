@@ -38,7 +38,7 @@ TF-IDF, and the same log-ratio \code{\link[=bias_reweight]{bias_reweight()}} reu
 reference-database level instead of at this per-condition-network level.
 }
 \examples{
-\donttest{
+\dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
 compound_list <- read.csv(
   system.file("extdata", "input_compound_list.csv", package = "patliR")

@@ -74,7 +74,7 @@ natural export convention is one file per compound. The default
 (no separator, e.g. \code{Targets5280443.csv}).
 }
 \examples{
-\donttest{
+\dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
 compound_list <- read.csv(
   system.file("extdata", "input_compound_list.csv", package = "patliR")

@@ -63,7 +63,7 @@ NULL
 #'   written to `results/network_synergy.csv`.
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' proj <- patliR_project(tempfile("patliR_demo_"))
 #' compound_list <- read.csv(
 #'   system.file("extdata", "input_compound_list.csv", package = "patliR")

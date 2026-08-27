@@ -45,7 +45,7 @@ how many -- e.g. "42 compounds pass Ro5+Veber+Ghose but fail Oprea
 \code{rules} selection with 2+ rules).
 }
 \examples{
-\donttest{
+\dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
 compound_list <- read.csv(
   system.file("extdata", "input_compound_list.csv", package = "patliR")

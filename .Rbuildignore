@@ -8,3 +8,5 @@
 ^test_results.*$
 ^check_out\.txt$
 ^.*\.Rcheck$
+^DESIGN\.md$
+^ROADMAP\.md$

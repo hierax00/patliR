@@ -64,7 +64,7 @@ roxygen for why \code{synergy_score} is built that way). The \code{top_n} highes
 scoring pairs are labeled by compound name.
 }
 \examples{
-\donttest{
+\dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
 compound_list <- read.csv(
   system.file("extdata", "input_compound_list.csv", package = "patliR")

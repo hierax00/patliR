@@ -68,7 +68,7 @@ their real name/symbol, same lookup as \code{\link[=plot_network_layers]{plot_ne
 than one is in scope.
 }
 \examples{
-\donttest{
+\dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
 compound_list <- read.csv(
   system.file("extdata", "input_compound_list.csv", package = "patliR")

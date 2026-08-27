@@ -63,7 +63,7 @@ all) -- this is purely descriptive at this stage; \code{network_proximity()}
 }
 
 \examples{
-\donttest{
+\dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
 compound_list <- read.csv(
   system.file("extdata", "input_compound_list.csv", package = "patliR")

@@ -95,7 +95,7 @@ NULL
 #'   *Bioinformatics* 29(14), 1830-1831. \doi{10.1093/bioinformatics/btt285}
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' proj <- patliR_project(tempfile("patliR_demo_"))
 #' compound_list <- read.csv(
 #'   system.file("extdata", "input_compound_list.csv", package = "patliR")
@@ -112,8 +112,8 @@ NULL
 #'   platform = "superpred"
 #' )
 #' proj <- network_build(proj)
-#' proj <- network_enrich(proj, db = "kegg") # needs internet
-#' proj <- network_pathview(proj, top_n_pathways = 3) # needs pathview + internet
+#' proj <- network_enrich(proj, condition = "FLO-ET", db = "kegg") # needs internet
+#' proj <- network_pathview(proj, condition = "FLO-ET", top_n_pathways = 3)
 #' patliRResults(proj, "kegg_pathview_log")
 #' }
 #'

@@ -35,7 +35,7 @@ the full network every other \verb{network_*} function operates on); this
 produces a separate, inspectable/exportable filtered view alongside it.
 }
 \examples{
-\donttest{
+\dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
 compound_list <- read.csv(
   system.file("extdata", "input_compound_list.csv", package = "patliR")

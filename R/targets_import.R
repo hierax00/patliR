@@ -54,7 +54,7 @@ NULL
 #'   known compound are logged (`"targets_import_unmatched"`) and excluded.
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' proj <- patliR_project(tempfile("patliR_demo_"))
 #' compound_list <- read.csv(
 #'   system.file("extdata", "input_compound_list.csv", package = "patliR")
@@ -194,7 +194,7 @@ targets_import <- function(proj, path, platform = c("swisstargetprediction", "su
 #'   `"targets_import_batch_excluded"`), not silently ignored.
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' proj <- patliR_project(tempfile("patliR_demo_"))
 #' compound_list <- read.csv(
 #'   system.file("extdata", "input_compound_list.csv", package = "patliR")

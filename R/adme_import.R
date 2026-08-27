@@ -41,8 +41,8 @@ NULL
 #'     [prep_compounds()] does, and matched against
 #'     `compounds(proj)$canonical_smiles` -- no shared numeric id with
 #'     SwissADME). Note: the bundled `import_tox_admetlab.csv` example is
-#'     toxicity data (see `tox_import()`, not yet implemented), not ADME --
-#'     there is no ready-to-run ADMETlab *ADME* example yet.
+#'     toxicity data (see [tox_import()]), not ADME -- there is no
+#'     ready-to-run ADMETlab *ADME* example yet.
 #' }
 #'
 #' @return The updated `proj`, with an `adme_imported` entry in
@@ -142,34 +142,9 @@ adme_import <- function(proj, path, platform = c("swissadme", "admetlab", "other
 #' @export
 adme_export_smiles <- function(proj, compound_ids = NULL, out_file = NULL) {
   stopifnot(is(proj, "PatliRProject"))
-
   cmp <- compounds(proj)
   if (!is.null(compound_ids)) cmp <- cmp[cmp$id %in% compound_ids, , drop = FALSE]
-  if (nrow(cmp) == 0) {
-    cli::cli_abort("No matching compounds in {.arg proj}; run {.fn prep_compounds} first.")
-  }
-
-  smiles <- ifelse(!is.na(cmp$canonical_smiles) & nzchar(cmp$canonical_smiles), cmp$canonical_smiles, cmp$smiles)
-  missing <- is.na(smiles) | !nzchar(smiles)
-  if (any(missing)) {
-    cli::cli_warn("{sum(missing)} compound(s) have no SMILES at all and are excluded from the export ({.val {cmp$id[missing]}}).")
-  }
-
-  mapping <- data.frame(
-    row_order = seq_len(sum(!missing)),
-    compound_id = cmp$id[!missing],
-    name = cmp$name[!missing],
-    smiles = smiles[!missing],
-    stringsAsFactors = FALSE
-  )
-  smiles_text <- paste(mapping$smiles, collapse = "\n")
-
-  if (!is.null(out_file)) {
-    writeLines(mapping$smiles, paste0(out_file, ".txt"))
-    utils::write.csv(mapping, paste0(out_file, "_map.csv"), row.names = FALSE)
-  }
-
-  invisible(list(smiles_text = smiles_text, mapping = mapping))
+  .export_smiles_list(cmp, out_file)
 }
 
 #' @keywords internal

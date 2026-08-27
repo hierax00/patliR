@@ -102,6 +102,41 @@ test_that("tox_import() requires an explicit column_map for platform = 'swissadm
   )
 })
 
+test_that("tox_export_smiles() mirrors adme_export_smiles(): SMILES list + row_order bridge", {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+  cmp <- compounds(proj)
+
+  export <- tox_export_smiles(proj)
+  expect_equal(export$smiles_text, paste(cmp$canonical_smiles, collapse = "\n"))
+  expect_true(all(c("row_order", "compound_id", "name", "smiles") %in% names(export$mapping)))
+  expect_equal(export$mapping$row_order, seq_len(nrow(cmp)))
+  expect_equal(export$mapping$compound_id, cmp$id)
+})
+
+test_that("tox_import(mapping_file=) matches by row position, not by SMILES", {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+
+  map_base <- file.path(projectDir(proj), "tox_bridge")
+  tox_export_smiles(proj, out_file = map_base)
+  map_path <- paste0(map_base, "_map.csv")
+  expect_true(file.exists(map_path))
+
+  ## The bundled ADMETlab example is keyed by its own `smiles` column; feed
+  ## it back through the bridge instead. Row order in the example file is
+  ## the same order prep_compounds() ingested, so row i -> row_order i.
+  proj <- tox_import(
+    proj,
+    system.file("extdata", "import_tox_admetlab.csv", package = "patliR"),
+    platform = "admetlab",
+    mapping_file = map_path
+  )
+  imported <- patliRResults(proj, "tox_imported")
+  expect_true(all(!is.na(imported$compound_id)))
+  expect_true(all(imported$compound_id %in% compounds(proj)$id))
+})
+
 test_that("tox_report() always returns the fixed disclaimer note, regardless of results", {
   proj <- .test_project()
   proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")

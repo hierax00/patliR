@@ -13,6 +13,14 @@ NULL
 #' and this function reconciles it against [compounds()].
 #'
 #' @inheritParams adme_import
+#' @param mapping_file Path to the `<out_file>_map.csv` written by
+#'   [tox_export_smiles()], or `NULL` (default). When given, rows are
+#'   matched to `compound_id` **by position** against that file (the
+#'   platform returns its output in input order), not by SMILES -- this is
+#'   the reliable way to reconcile an ADMETlab/pkCSM export, since a
+#'   third-party toolkit's canonical SMILES is not guaranteed to match
+#'   patliR's (see `DESIGN.md`). Takes precedence over the `platform`
+#'   matching rule.
 #'
 #' @details
 #' Built-in presets (confirmed against the column headers the bundled
@@ -20,8 +28,8 @@ NULL
 #' \itemize{
 #'   \item `platform = "admetlab"`: `smiles` (canonicalized the same way
 #'     [prep_compounds()] does, matched against
-#'     `compounds(proj)$canonical_smiles`), `Ames`, `DILI`, `hERG` (all
-#'     mapped to lowercase property names).
+#'     `compounds(proj)$canonical_smiles` unless `mapping_file` is given),
+#'     `Ames`, `DILI`, `hERG` (all mapped to lowercase property names).
 #'   \item `platform = "swissadme"`: no built-in preset -- the bundled
 #'     `import_adme_swissadme.csv` example only carries ADME properties, not
 #'     toxicity ones; pass your own `column_map` if your SwissADME export
@@ -49,15 +57,18 @@ NULL
 #'
 #' @export
 tox_import <- function(proj, path, platform = c("admetlab", "swissadme", "other"),
-                        column_map = NULL) {
+                        column_map = NULL, mapping_file = NULL) {
   stopifnot(is(proj, "PatliRProject"), file.exists(path))
   platform <- match.arg(platform)
 
   raw <- .read_csv_safe(path)
   cmp <- compounds(proj)
 
-  match_result <- .tox_import_match_compounds(raw, cmp, platform)
-  matched_id <- match_result$compound_id
+  matched_id <- if (!is.null(mapping_file)) {
+    .match_by_export_mapping(nrow(raw), mapping_file)
+  } else {
+    .tox_import_match_compounds(raw, cmp, platform)$compound_id
+  }
   unmatched <- is.na(matched_id)
 
   if (any(unmatched)) {
@@ -111,4 +122,50 @@ tox_import <- function(proj, path, platform = c("admetlab", "swissadme", "other"
   out <- raw[, available, drop = FALSE]
   names(out) <- map[available]
   out
+}
+
+#' Export compounds as a plain SMILES list, ready to paste into a toxicity
+#' platform
+#'
+#' @description
+#' The toxicity-side counterpart of [adme_export_smiles()]. Platforms like
+#' ADMETlab or pkCSM take their input as a pasted list of SMILES, one per
+#' line, and return their output in that same order with no compound id of
+#' their own. This writes that list plus a companion mapping file so the
+#' export can be reconciled back to `compound_id` by row position --
+#' pass the mapping file to [tox_import()]`(mapping_file = ...)`, which is
+#' more reliable than matching on SMILES (a third-party toolkit's canonical
+#' SMILES need not match patliR's; see `DESIGN.md`).
+#'
+#' Round trip: `tox_export_smiles()` -> paste into the platform -> download
+#' its export -> `tox_import(..., mapping_file = "<out_file>_map.csv")`.
+#'
+#' @inheritParams compounds
+#' @param compound_ids Character vector of `compounds(proj)$id`, or `NULL`
+#'   (default) for every compound currently in [compounds()].
+#' @param out_file Character scalar, base path to write to (e.g.
+#'   `"chilcuague_tox_smiles"`), or `NULL` (default) to only return the
+#'   result. When given, writes `<out_file>.txt` (the plain SMILES list)
+#'   and `<out_file>_map.csv` (columns `row_order`, `compound_id`, `name`,
+#'   `smiles`).
+#'
+#' @return Invisibly, `list(smiles_text, mapping)` -- see
+#'   [adme_export_smiles()], which shares its implementation.
+#'
+#' @examples
+#' proj <- patliR_project(tempfile("patliR_demo_"))
+#' compound_list <- read.csv(
+#'   system.file("extdata", "input_compound_list.csv", package = "patliR")
+#' )
+#' proj <- prep_compounds(proj, compound_list, identifier = "pubchem")
+#' export <- tox_export_smiles(proj)
+#' cat(export$smiles_text)
+#' export$mapping
+#'
+#' @export
+tox_export_smiles <- function(proj, compound_ids = NULL, out_file = NULL) {
+  stopifnot(is(proj, "PatliRProject"))
+  cmp <- compounds(proj)
+  if (!is.null(compound_ids)) cmp <- cmp[cmp$id %in% compound_ids, , drop = FALSE]
+  .export_smiles_list(cmp, out_file)
 }

@@ -15,7 +15,10 @@ Initial public release. Core pipeline implemented and tested, pre-1.0.
   (`adme_export_smiles()`).
 - `tox_*` — structural toxicity alerts (PAINS, 480 filters; Brenk, 105
   alerts), target-level systemic-risk screening against the Safetyome
-  core panel, import from external toxicity platforms, and reporting.
+  core panel, import from external toxicity platforms
+  (`tox_export_smiles()` + `tox_import(mapping_file=)` for a row-order
+  round trip), and reporting (`tox_report()` writes
+  `results/tox_report.csv`).
 - `targets_*` (partial) — target import from prediction platforms,
   disease-target association filtering.
 - `network_*` — the systems-biology core: build, enrich (GO/Reactome/

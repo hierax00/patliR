@@ -60,8 +60,8 @@ actually use):
 \code{\link[=prep_compounds]{prep_compounds()}} does, and matched against
 \code{compounds(proj)$canonical_smiles} -- no shared numeric id with
 SwissADME). Note: the bundled \code{import_tox_admetlab.csv} example is
-toxicity data (see \code{tox_import()}, not yet implemented), not ADME --
-there is no ready-to-run ADMETlab \emph{ADME} example yet.
+toxicity data (see \code{\link[=tox_import]{tox_import()}}), not ADME -- there is no
+ready-to-run ADMETlab \emph{ADME} example yet.
 }
 }
 \examples{

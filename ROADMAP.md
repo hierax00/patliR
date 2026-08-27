@@ -67,6 +67,9 @@ guessing.
   `.network_graph()`.
 - **`compounds_similarity()`** — integrate with `plot_chemical_space()` /
   `network_synergy()` (currently standalone).
+- **`adme_import()`** — give it the same `mapping_file` row-order bridge
+  `tox_import()` now has, so its export/import loop closes without relying
+  on cross-toolkit SMILES canonicalization either.
 
 ## Housekeeping
 

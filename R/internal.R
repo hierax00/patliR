@@ -316,6 +316,73 @@
   if (is_percent_scale) val / 100 else val
 }
 
+#' Export a compound set as a plain SMILES list plus a row-order bridge CSV
+#'
+#' Shared body of [adme_export_smiles()] and [tox_export_smiles()]: one
+#' canonical SMILES per line in a fixed order, plus a `data.frame` mapping
+#' each line back to `compound_id`/`name` (external platforms only ever
+#' order their output by input position, with no id of their own).
+#'
+#' @param cmp A `compounds(proj)` data frame, already subset to the
+#'   compounds to export.
+#' @param out_file Base path, or `NULL` to only return the result.
+#' @return `list(smiles_text, mapping)`; `mapping` has columns `row_order`,
+#'   `compound_id`, `name`, `smiles`.
+#' @keywords internal
+.export_smiles_list <- function(cmp, out_file = NULL) {
+  if (nrow(cmp) == 0) {
+    cli::cli_abort("No matching compounds in {.arg proj}; run {.fn prep_compounds} first.")
+  }
+  smiles <- ifelse(!is.na(cmp$canonical_smiles) & nzchar(cmp$canonical_smiles),
+                   cmp$canonical_smiles, cmp$smiles)
+  missing <- is.na(smiles) | !nzchar(smiles)
+  if (any(missing)) {
+    cli::cli_warn("{sum(missing)} compound(s) have no SMILES at all and are excluded from the export ({.val {cmp$id[missing]}}).")
+  }
+  mapping <- data.frame(
+    row_order = seq_len(sum(!missing)),
+    compound_id = cmp$id[!missing],
+    name = cmp$name[!missing],
+    smiles = smiles[!missing],
+    stringsAsFactors = FALSE
+  )
+  if (!is.null(out_file)) {
+    writeLines(mapping$smiles, paste0(out_file, ".txt"))
+    utils::write.csv(mapping, paste0(out_file, "_map.csv"), row.names = FALSE)
+  }
+  invisible(list(smiles_text = paste(mapping$smiles, collapse = "\n"), mapping = mapping))
+}
+
+#' Match imported-platform rows to compound ids via an export bridge CSV
+#'
+#' The reliable half of the [adme_export_smiles()]/[tox_export_smiles()]
+#' round trip: rows come back from the platform in the same order they were
+#' pasted in, so row `i` of the export is `mapping_file`'s `row_order == i`.
+#' No SMILES canonicalization involved.
+#'
+#' @param n_rows Number of data rows in the platform export.
+#' @param mapping_file Path to the `<out_file>_map.csv` written by the
+#'   matching `*_export_smiles()` call.
+#' @return Character vector of length `n_rows`; `NA` for any row past the
+#'   end of the mapping.
+#' @keywords internal
+.match_by_export_mapping <- function(n_rows, mapping_file) {
+  if (!file.exists(mapping_file)) {
+    cli::cli_abort("{.arg mapping_file} {.path {mapping_file}} does not exist.")
+  }
+  map <- utils::read.csv(mapping_file, stringsAsFactors = FALSE)
+  if (!all(c("row_order", "compound_id") %in% names(map))) {
+    cli::cli_abort("{.arg mapping_file} must have {.val row_order} and {.val compound_id} columns (written by {.fn adme_export_smiles}/{.fn tox_export_smiles}).")
+  }
+  if (n_rows != nrow(map)) {
+    cli::cli_warn(paste(
+      "The export has {n_rows} row(s) but {.arg mapping_file} has {nrow(map)};",
+      "matching by position -- any extra rows on either side stay unmatched."
+    ))
+  }
+  map$compound_id[match(seq_len(n_rows), map$row_order)]
+}
+
 #' Next block of sequential internal compound ids, continuing from existing
 #' @param existing_ids Character vector of already-used ids, e.g. `"C0007"`.
 #' @param n How many new ids to generate.

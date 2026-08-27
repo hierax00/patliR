@@ -8,7 +8,8 @@ tox_import(
   proj,
   path,
   platform = c("admetlab", "swissadme", "other"),
-  column_map = NULL
+  column_map = NULL,
+  mapping_file = NULL
 )
 }
 \arguments{
@@ -26,6 +27,15 @@ names to patliR's property names, e.g.
 \code{platform = "other"}; ignored (a preset is used instead) for
 \code{"swissadme"}/\code{"admetlab"} unless you explicitly pass one, in which
 case yours takes precedence.}
+
+\item{mapping_file}{Path to the \verb{<out_file>_map.csv} written by
+\code{\link[=tox_export_smiles]{tox_export_smiles()}}, or \code{NULL} (default). When given, rows are
+matched to \code{compound_id} \strong{by position} against that file (the
+platform returns its output in input order), not by SMILES -- this is
+the reliable way to reconcile an ADMETlab/pkCSM export, since a
+third-party toolkit's canonical SMILES is not guaranteed to match
+patliR's (see \code{DESIGN.md}). Takes precedence over the \code{platform}
+matching rule.}
 }
 \value{
 The updated \code{proj}, with a \code{tox_imported} entry in
@@ -49,8 +59,8 @@ example file actually uses):
 \itemize{
 \item \code{platform = "admetlab"}: \code{smiles} (canonicalized the same way
 \code{\link[=prep_compounds]{prep_compounds()}} does, matched against
-\code{compounds(proj)$canonical_smiles}), \code{Ames}, \code{DILI}, \code{hERG} (all
-mapped to lowercase property names).
+\code{compounds(proj)$canonical_smiles} unless \code{mapping_file} is given),
+\code{Ames}, \code{DILI}, \code{hERG} (all mapped to lowercase property names).
 \item \code{platform = "swissadme"}: no built-in preset -- the bundled
 \code{import_adme_swissadme.csv} example only carries ADME properties, not
 toxicity ones; pass your own \code{column_map} if your SwissADME export

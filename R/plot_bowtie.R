@@ -1,17 +1,9 @@
 #' @include AllGenerics.R internal.R network_bowtie.R plot_network_layers.R
 NULL
 
-## plot_bowtie() -- the one plot_* in this batch (2026-07-23) that needs a
-## genuinely new Suggests dependency: ggalluvial. A real alluvial/Sankey
-## needs curved flow ribbons between stacked strata, which is not
-## reasonably hand-rollable with plain ggplot2 geoms the way the radar
-## (plot_admet_radar(), manual trig) or the hairball (plot_network_layers(),
-## manual igraph layout + geom_segment) were -- unlike circlize/GOplot/
-## UpSetR (skipped in this same batch in favor of hand-rolled ggplot2
-## equivalents), ggalluvial IS itself a ggplot2 extension (geom_alluvium/
-## geom_stratum, no separate plotting system, no heavy transitive deps),
-## so it fits the package's existing "ggplot2-first" Suggests philosophy
-## rather than fighting it.
+## Uses ggalluvial (Suggests): curved flow ribbons between stacked strata
+## are not reasonably hand-rollable with plain ggplot2 geoms, and
+## ggalluvial is itself a ggplot2 extension (no separate plotting system).
 
 #' Alluvial plot: which compounds' targets fall into which bowtie component
 #'
@@ -27,6 +19,7 @@ NULL
 #' target table directly.
 #'
 #' @inheritParams network_build
+#' @inheritParams plot_save_params
 #' @param top_n_compounds Integer or `NULL` (default `NULL`, all). If set,
 #'   restricts to the `top_n_compounds` with the most targets in scope --
 #'   with many compounds the alluvial gets visually crowded.

@@ -17,8 +17,7 @@ Load the bundled PAINS SMARTS subset
 The upstream WEHI PAINS list encodes each filter's original identity as a
 \code{regId} string like \code{"amino_acridine_A(1)"} -- base name plus a frequency
 count in parens. Our loader splits that into separate \code{name}/\code{frequency}
-columns (see the transcription script at the end of \code{TESTING_GUIDE.Rmd}),
-which drops the guarantee of uniqueness: the real bundled data has the
+columns, which drops the guarantee of uniqueness: the real bundled data has the
 base name \code{"amino_acridine_A"} twice, for two different SMARTS
 (frequencies 1 and 46). \code{smarts} is always unique (it is the actual
 structural identity); \verb{(name, frequency)} together are also always

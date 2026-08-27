@@ -1,53 +1,17 @@
 #' @include AllGenerics.R internal.R network_layers.R
 NULL
 
-## plot_network_layers() -- first of the pending "interactive/static plot_*
-## for network_*" items (patliR_manual.md, section 6 wrap-up, 2026-07-23).
-## Confirmed with Uriel (chat, 2026-07-23) after comparing ggiraph (already
-## used by plot_boiled_egg()/plot_admet_radar(), zero new Suggests) against
-## visNetwork/networkD3 (real in-browser force layout, but a new
-## dependency and no direct ggsave()-equivalent for a publication PNG):
-## start with the tripartite/layered network (.network_layered_graph(),
-## network_layers.R) as a STATIC figure, ggplot2 only -- the reference
-## figures Uriel shared (all from published network-pharmacology papers)
-## are static, high-resolution, hairball-style plots with categorical node
-## colors and only hub nodes labeled, which is exactly what ggsave() from
-## plain ggplot2 already produces well. `visNetwork`-style live/interactive
-## exploration is parked as a separate future item, not built here.
+## Static ggplot2 figure (no ggraph): the layout is computed with
+## igraph::layout_with_*() and drawn as plain node/edge data.frames, same
+## "minimal Suggests" principle as the rest of plot_*.
 ##
-## No `ggraph` (not in Suggests, and would be the "normal" way to plot an
-## igraph object in ggplot2) -- the layout is computed directly with
-## `igraph::layout_with_*()` and turned into plain node/edge data.frames,
-## then drawn with `geom_segment()`/`geom_point()`/`geom_text()`. Same
-## "keep Suggests minimal" principle as plot_boiled_egg()'s no-ggrepel
-## note.
-##
-## Two real corrections after Uriel's first live renders (2026-07-23),
-## both confirmed in chat:
-## 1. "Dandelion" starburst, not hairball -- network_enrich() easily
-##    returns hundreds of significant GO/Reactome terms, each a degree-1
-##    leaf hanging off its target, drowning the actual compound-target
-##    structure. Fix: `layers` defaults to c("compound", "target") only;
-##    `"pathway"`/`"disease"` are opt-in, and `max_pathways` caps the
-##    former to the most significant terms when requested.
-## 2. Uriel shared Yildirim et al. 2007 ("Drug-target network", Nat
-##    Biotechnol 25, 1119-1126, doi:10.1038/nbt1338) as the real target
-##    look -- confirmed by reading it: that figure is the FULL FDA-approved
-##    drug-target network (890 drugs x 394 targets, every drug at once),
-##    NOT filtered by disease at all; disease-gene proximity is a *separate*
-##    analysis there (interactome shortest-path), matching what
-##    network_proximity() already does in this package, not something drawn
-##    as graph nodes. Confirms leaving "disease" out of the default layers
-##    is correct, not just a pathway-specific fix. It also means the
-##    clustering-by-category look only emerges at the *global* scale (many
-##    compounds sharing targets) -- a single small condition's bipartite
-##    graph structurally cannot look like that. Uriel confirmed (chat,
-##    2026-07-23) both a per-condition view (existing) and a global,
-##    all-conditions-pooled view should be supported; `condition = NULL`
-##    is now the global/pooled mode, matching the rest of the `network_*`
-##    family's own NULL-means-"every built condition" convention (see
-##    `.network_resolve_conditions()`) -- except here it pools them into
-##    one combined graph instead of looping per condition.
+## `layers` defaults to c("compound", "target") only -- network_enrich()
+## returns hundreds of GO/Reactome terms, each a degree-1 leaf that drowns
+## the compound-target structure, so "pathway"/"disease" are opt-in and
+## `max_pathways` caps them. The category-clustering look only emerges when
+## many compounds share targets, so `condition = NULL` pools every built
+## condition into one graph (a single small condition cannot look like
+## that).
 
 #' Static network plot of the compound-target(-pathway)(-disease) layered
 #' graph, for one condition or pooled across every built condition
@@ -59,10 +23,9 @@ NULL
 #' targets, and (opt-in, see `layers`) whichever pathways/diseases those
 #' targets reach, colored by layer, node size scaled by degree, and only
 #' the highest-degree ("hub") nodes labeled -- the same visual language as
-#' Yildirim et al. 2007's drug-target network figure (\doi{10.1038/nbt1338},
-#' the reference Uriel shared, 2026-07-23): one big connected "hairball"
-#' plus many small disconnected components, categorical node colors with a
-#' fixed legend, hubs called out by name.
+#' Yildirim et al. 2007's drug-target network figure (\doi{10.1038/nbt1338}):
+#' one big connected "hairball" plus many small disconnected components,
+#' categorical node colors with a fixed legend, hubs called out by name.
 #'
 #' @section `condition = NULL` pools every built condition into one graph:
 #' Yildirim et al.'s clustering-by-category look is a property of the
@@ -78,12 +41,11 @@ NULL
 #'
 #' @section Layers are opt-in beyond compound/target, on purpose:
 #' Default `layers = c("compound", "target")`, **not** `"pathway"` or
-#' `"disease"`. Two independent reasons, both confirmed against real
-#' renders (2026-07-23): `network_enrich()` can return hundreds of
-#' significant GO/Reactome terms, each attaching to its target as a
-#' degree-1 leaf, which turns the plot into an unreadable dandelion (see
-#' `max_pathways` for how to include pathways without that happening); and
-#' Yildirim et al.'s own reference figure does not draw disease genes as
+#' `"disease"`. Two independent reasons: `network_enrich()` can return
+#' hundreds of significant GO/Reactome terms, each attaching to its target
+#' as a degree-1 leaf, which turns the plot into an unreadable dandelion
+#' (see `max_pathways` for how to include pathways without that happening);
+#' and Yildirim et al.'s own reference figure does not draw disease genes as
 #' graph nodes at all -- they measure drug-target-to-disease-gene distance
 #' in the interactome as a *separate* analysis (exactly what
 #' [network_proximity()] already does in this package), not as part of
@@ -361,7 +323,7 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
   ## capped (or excluded) this is a few hundred nodes at most, cheap to
   ## run longer, and a half-settled FR layout is exactly what produced
   ## the "everything crushed into the middle, degree-1 leaves splayed out
-  ## in a starburst" look on Uriel's first render (2026-07-23) instead of
+  ## in a starburst" look instead of
   ## the loosely clustered look of the reference figure.
   coords <- switch(layout,
     fr = igraph::layout_with_fr(g, niter = 2000),

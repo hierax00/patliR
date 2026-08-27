@@ -20,15 +20,13 @@ the common \code{PREFIX_alnum} shape) is looked up directly via
 \code{disease(efoId: ...)} first, which both resolves and validates it in one
 call, rather than routed through \code{mapIds()}.
 }
-\section{A real, confirmed failure mode this guards against}{
+\section{A failure mode this guards against}{
 
-Debugging this against the live API (2026-07-23) surfaced a sharper
-problem than "IDs vs. free text": \code{disease(efoId = "EFO_0000537")}
-(hypertension's old EFO ID) returned \code{NULL} with \emph{no GraphQL error at
-all} -- not because the direct-lookup mechanism is wrong, but because
-\code{EFO_0000537} itself is \strong{obsolete} (retired in EFO 3.88.0, replaced by
-\code{MONDO_0005044} -- confirmed against EBI's Ontology Lookup Service; other
-catalogs like GWAS Catalog still link the old ID, Open Targets does not).
+\code{disease(efoId = "EFO_0000537")} (hypertension's old EFO ID) returns
+\code{NULL} with no GraphQL error at all -- not because direct lookup is
+wrong, but because \code{EFO_0000537} is \strong{obsolete} (retired in EFO 3.88.0,
+replaced by \code{MONDO_0005044}; some catalogs still link the old ID, Open
+Targets does not).
 An earlier version of this function swallowed that \code{NULL}/failure into a
 bare fallback and only ever surfaced \code{mapIds()}'s generic "no match"
 error, hiding the real cause -- fixed to report both failure reasons (see

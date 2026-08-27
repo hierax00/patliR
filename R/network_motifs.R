@@ -28,7 +28,7 @@ NULL
 #'
 #' @section Feedback loops are structurally impossible in this graph, by construction:
 #' Every edge in `.network_layered_graph()` points strictly "downstream"
-#' (compound -> target -> {pathway, disease}, plus same-direction derived
+#' (compound -> target -> pathway/disease, plus same-direction derived
 #' shortcuts) -- there is no edge type that ever points back toward a
 #' compound or from a pathway/disease back to a target. A directed 3-cycle
 #' therefore cannot exist in the current layered graph, so
@@ -46,8 +46,8 @@ NULL
 #'   layered graphs can have a handful of hub nodes (compounds with a large
 #'   derived `compound -> pathway` fan-out, see [network_enrich()]'s
 #'   `simplify_go` for reducing that fan-out at the source) whose
-#'   `choose(degree, 2)` pair count dominates total runtime (confirmed:
-#'   ~10 min on a real 2838-node/48575-edge Chilcuague network, 2026-08-25).
+#'   `choose(degree, 2)` pair count dominates total runtime (on the order
+#'   of ~10 min on a ~2800-node/~48000-edge network).
 #'   `n_cores > 1` splits the node loop across a `parallel::makePSOCKcluster()`
 #'   cluster (works identically on Windows/macOS/Linux, unlike
 #'   fork-based `mclapply()`) -- worth it mainly when a handful of nodes have
@@ -154,9 +154,8 @@ network_motifs <- function(proj, condition = NULL, n_cores = 1L, pathway_db = NU
 #' out-neighbors) -- for most nodes this is tiny, but a handful of hub
 #' nodes (e.g. a compound with a large derived `compound -> pathway`
 #' fan-out) can have `degree` in the thousands, and `choose(2500, 2)` ~=
-#' 3.1 million pairs dominates the whole search all by itself (confirmed
-#' against real Chilcuague data, 2026-08-25: ~10 min total, driven by
-#' exactly this -- see [network_enrich()]'s `simplify_go` for reducing
+#' 3.1 million pairs dominates the whole search all by itself (~10 min
+#' total in practice -- see [network_enrich()]'s `simplify_go` for reducing
 #' that fan-out at the source instead). The per-node computation
 #' (`ff_worker`, defined below) is embarrassingly parallel -- nodes never
 #' share mutable state -- so `n_cores > 1` splits the node loop across a

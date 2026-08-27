@@ -34,8 +34,8 @@ directly without \code{filename}).}
 \item{out_dir}{Directory for the PDF, default \code{file.path(projectDir(proj), "plots")}.}
 
 \item{width, height}{\code{NULL} (default) to size the plot to the matrix
-(\code{max(8, n_cols * 0.9 + 2)} / \code{max(6, n_rows * 0.5 + 2)}, the
-cookbook's own sizing rule), or an explicit number of inches.}
+(\code{max(8, n_cols * 0.9 + 2)} / \code{max(6, n_rows * 0.5 + 2)}), or an
+explicit number of inches.}
 }
 \value{
 The \code{pheatmap} object returned by \code{pheatmap::pheatmap()}

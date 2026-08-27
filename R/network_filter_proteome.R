@@ -1,17 +1,11 @@
 #' @include AllGenerics.R internal.R network_build.R
 NULL
 
-## network_filter_proteome() -- patliR_manual.md, "Planeado / no implementado".
-## Uriel: "sencillo,
-## solo es un filter" -- scoped deliberately narrow: a reporting/export
-## filter over network_edges, not a new graph substrate the rest of
-## network_* can plug into. Making the filtered result fully explorable by
-## every other network_* function (centrality, robustness, proximity, ...)
-## would mean threading a new scope through .network_resolve_conditions()/
-## .network_graph() alongside "condition" -- a much bigger, riskier change
-## than what was asked for here. This gives the filtered edge table for
-## direct inspection/export; wiring it into the rest of the network_*
-## family is a natural 1.1 follow-up if it turns out to be needed.
+## Deliberately narrow: a reporting/export filter over network_edges, not a
+## new graph substrate. Wiring the filtered result into the rest of
+## network_* (centrality, robustness, ...) would need a new scope axis
+## alongside "condition" in .network_resolve_conditions()/.network_graph().
+## See ROADMAP.md.
 
 #' Filter a project's compound-target network to a proteome of interest
 #'

@@ -1,14 +1,9 @@
 #' @include AllGenerics.R internal.R network_build.R targets_disease.R
 NULL
 
-## plot_venn() -- second new Suggests dependency in this batch (2026-07-23):
-## ggVennDiagram. A proper proportional/labeled Venn is genuinely fiddly
-## geometry (circle intersection areas) that is not worth hand-rolling
-## when a small, ggplot2-native, actively maintained package already does
-## it well -- same reasoning as ggalluvial in plot_bowtie.R. Already named
-## as the intended choice in patliR_manual.md's original plot_* catalog
-## (section 9, "ggVennDiagram (ya en deps del cookbook actual)"), so this
-## is not a new decision, just finally implementing it.
+## Uses ggVennDiagram (Suggests): proportional circle-intersection
+## geometry is not worth hand-rolling when a small ggplot2-native package
+## does it well. Same reasoning as ggalluvial in plot_bowtie.R.
 
 #' Venn diagram: compound targets vs. disease-associated targets
 #'
@@ -22,6 +17,7 @@ NULL
 #' version of the same question, [network_proximity()].
 #'
 #' @inheritParams network_build
+#' @inheritParams plot_save_params
 #' @param disease Character EFO ID from `targets_disease$disease_id`. If
 #'   `NULL` (default) and exactly one disease is present in
 #'   `patliRResults(proj, "targets_disease")`, that one is used; otherwise

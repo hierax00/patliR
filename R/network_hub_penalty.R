@@ -18,9 +18,8 @@ NULL
 #' N_compounds`) gets `score_adjusted = 0` -- maximally promiscuous, fully
 #' discounted. A target hit by only one compound out of many keeps close to
 #' its raw degree (`log(N_compounds / 1)` is large) -- same intuition as
-#' TF-IDF, and the same log-ratio [bias_reweight()] will reuse later at the
-#' reference-database level (`patliR_manual.md`, section 7) instead of at
-#' this per-condition-network level.
+#' TF-IDF, and the same log-ratio [bias_reweight()] reuses at the
+#' reference-database level instead of at this per-condition-network level.
 #'
 #' @inheritParams network_build
 #'

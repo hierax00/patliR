@@ -23,8 +23,14 @@ columns \code{compound_id}, \code{n_pains_alerts}, \code{pains_alert_names}
 \item \code{note}: the fixed disclaimer string, always identical
 regardless of the data (\code{"A toxicity/structural-alert flag can reflect real pharmacological activity, not just risk -- this is not a pass/fail verdict. Review each flagged compound individually."}).
 }
-Nothing is written to \code{proj} or to disk -- this is a read-only summary
-over existing \code{\link[=patliRResults]{patliRResults()}}.
+\code{proj} itself is not modified (this function returns a \code{list}, not a
+\code{proj}), but the \code{summary} table is written to \code{results/tox_report.csv}
+inside \code{\link[=projectDir]{projectDir()}} as a side effect -- the same plain-CSV
+source-of-truth every other family produces, so the per-compound
+toxicity/PAINS view survives the R session and is picked up by
+\code{\link[=patliR_load]{patliR_load()}} (as \code{patliRResults(proj, "tox_report")}) and by
+\code{\link[=patliR_export_llm]{patliR_export_llm()}}. Nothing is written when there are no
+\code{\link[=tox_local]{tox_local()}}/\code{\link[=tox_safetyome]{tox_safetyome()}}/\code{\link[=tox_import]{tox_import()}} results to summarize.
 }
 \description{
 Builds a per-compound summary combining \code{\link[=tox_local]{tox_local()}}'s structural alerts
@@ -47,6 +53,8 @@ proj <- tox_local(proj, alert_sets = c("pains", "brenk"))
 report <- tox_report(proj)
 report$summary
 report$note
+# also on disk, as the durable per-compound view:
+read.csv(file.path(projectDir(proj), "results", "tox_report.csv"))
 }
 
 }

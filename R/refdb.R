@@ -1,11 +1,8 @@
 #' @include AllGenerics.R internal.R
 NULL
 
-## Shared infrastructure for the reference database (refdb_*) mini-family.
-## reference_compounds.csv / reference_bioactivity.csv live in *long/
-## relational* format on purpose (see patliR_manual.md, section 1): plain
-## rows and columns, nothing R-specific, so any tool can read them and nothing
-## is lost if a future source needs different columns.
+## reference_compounds.csv / reference_bioactivity.csv are stored
+## long/relational (no list-columns) so they stay plain CSV. See DESIGN.md.
 
 #' Build the local reference database of compound identity and bioactivity
 #'
@@ -146,8 +143,9 @@ refdb_update <- function(proj, compound_ids,
 #'
 #' @description
 #' Regenerates the `.rds` cache of the reference database inside
-#' [cacheDir()] from `reference_compounds.csv` / `reference_bioactivity.csv`
-#' in [projectDir()]. This cache is purely a performance optimization for
+#' [cacheDir()] from `results/reference_compounds.csv` /
+#' `results/reference_bioactivity.csv` in [projectDir()]. This cache is
+#' purely a performance optimization for
 #' downstream functions that repeatedly join against the reference
 #' database (e.g. `bias_audit()`) -- it is always safe to delete, and this
 #' function always regenerates it from the CSVs, never the other way
@@ -159,11 +157,12 @@ refdb_update <- function(proj, compound_ids,
 #' @export
 refdb_rebuild_cache <- function(proj) {
   stopifnot(is(proj, "PatliRProject"))
-  ref_compounds_path <- file.path(projectDir(proj), "reference_compounds.csv")
-  ref_bioactivity_path <- file.path(projectDir(proj), "reference_bioactivity.csv")
+  results_dir <- file.path(projectDir(proj), "results")
+  ref_compounds_path <- file.path(results_dir, "reference_compounds.csv")
+  ref_bioactivity_path <- file.path(results_dir, "reference_bioactivity.csv")
 
   if (!file.exists(ref_compounds_path) && !file.exists(ref_bioactivity_path)) {
-    cli::cli_warn("No reference database CSVs found in {.path {projectDir(proj)}}; run {.fn refdb_build} first.")
+    cli::cli_warn("No reference database CSVs found in {.path {results_dir}}; run {.fn refdb_build} first.")
     return(invisible(NULL))
   }
 
@@ -217,25 +216,14 @@ refdb_rebuild_cache <- function(proj) {
   list(cid = as.character(props$CID), name = props$Title)
 }
 
-#' Percent-encode a SMILES string for use as a ChEMBL URL *path segment*
+#' Percent-encode a SMILES string for use as a ChEMBL URL path segment
 #'
 #' @description
-#' ChEMBL's structure-search endpoints (`/similarity/<smiles>/<threshold>`,
-#' `/substructure/<smiles>`) take the SMILES as a literal path segment, not
-#' a query parameter -- confirmed directly against the live API
-#' (2026-08-25): a fully percent-encoded SMILES (`utils::URLencode(smiles,
-#' reserved = TRUE)`, encoding `=`, `(`, `)`, ...) makes the endpoint return
-#' `HTTP 500` for *every* SMILES, including trivial ones (caffeine,
-#' aspirin) -- this, not any particular SMILES's content, was the actual
-#' cause of the `refdb_chembl_*` `HTTP 500` failures seen against real
-#' Chilcuague data. Leaving `=`/`(`/`)`/etc. as literal characters (i.e.
-#' *not* URL-reserved-encoding them) works. Only three characters
-#' genuinely need escaping because they change how the URL itself is
-#' parsed regardless: `#` (starts a URL fragment -- confirmed to silently
-#' truncate the request into an unrelated `HTTP 404`), `/` (a path
-#' separator), and `%` (starts a percent-escape, so any literal `%` in a
-#' SMILES ring-closure like `%10` must be escaped first or it corrupts
-#' every escape after it).
+#' ChEMBL's structure-search endpoints take the SMILES as a literal path
+#' segment. Only `#`, `/`, and `%` need escaping (they change how the URL
+#' itself is parsed); reserved-encoding `=`/`(`/`)` makes the endpoint
+#' return `HTTP 500`. `%` must be escaped first, or it corrupts the `%23`/
+#' `%2F` escapes this function then adds.
 #' @return Character scalar, safe to paste into a ChEMBL path-segment URL.
 #' @keywords internal
 .chembl_url_encode_smiles <- function(smiles) {
@@ -245,23 +233,16 @@ refdb_rebuild_cache <- function(proj) {
   utils::URLencode(smiles, reserved = FALSE) # handles spaces / non-ASCII, if any
 }
 
-#' Look up a compound on ChEMBL by SMILES, using ChEMBL's similarity search
-#' at 100% threshold
+#' Look up a compound on ChEMBL by SMILES, using ChEMBL's 100% similarity search
 #'
 #' @description
-#' `molecule_structures__canonical_smiles__flexmatch`, previously used here,
-#' turned out to unconditionally return `HTTP 500` on the live ChEMBL API
-#' regardless of the query SMILES (verified 2026-08-25 -- see
-#' `.chembl_url_encode_smiles()` above) -- likely a filter ChEMBL's current
-#' API version no longer supports server-side, not anything specific to
-#' `patliR`'s SMILES. The `/similarity/<smiles>/100.json` endpoint performs
-#' the same job (matching a query SMILES against ChEMBL's structures
-#' regardless of which toolkit canonicalized it -- the cross-toolkit
-#' problem `patliR` has without a true InChIKey, see `.check_structures()`,
-#' internal) and is confirmed working. A 100% Tanimoto similarity match can
-#' occasionally return more than one ChEMBL entry (e.g. a free base and its
-#' salt form share a fingerprint at this threshold) -- the first result is
-#' used, consistent with how a single flexmatch hit was previously picked.
+#' Uses `/similarity/<smiles>/100.json` (the
+#' `molecule_structures__canonical_smiles__flexmatch` filter returns
+#' `HTTP 500` on the current API). Similarity search matches the query
+#' regardless of which toolkit canonicalized it, which is the cross-toolkit
+#' problem patliR has without an InChIKey (see `.check_structures()`). A
+#' 100% match can return more than one entry (e.g. a free base and its
+#' salt); the first is used.
 #' @keywords internal
 .chembl_lookup <- function(smiles) {
   if (!requireNamespace("httr2", quietly = TRUE)) {

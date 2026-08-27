@@ -26,16 +26,11 @@ NULL
 #' `weight` into a proper distance (e.g. `1 - probability`) first, not pass
 #' the raw column through.
 #'
-#' @section `hub_score()` -> `hits_scores()` (2026-07-23):
-#' `igraph::hub_score()` is deprecated as of igraph 2.0.3 (confirmed against
-#' the live `r.igraph.org` reference docs before migrating, not assumed).
-#' `igraph::hits_scores(g, weights = NA)` is the replacement -- it returns a
-#' named list (`hub`, `authority`, `value`, `options`) instead of
-#' `hub_score()`'s `list(vector, value, options)`, so the code here reads
-#' `$hub` where it used to read `$vector`. The Kleinberg hub-score values
-#' themselves are unchanged (same underlying computation, just renamed/
-#' restructured), so this migration is not expected to change any prior
-#' `network_centrality()` output numerically.
+#' @section Hub score:
+#' `igraph::hub_score()` is deprecated as of igraph 2.0.3;
+#' `igraph::hits_scores(g, weights = NA)` is the replacement and the code
+#' reads its `$hub` element. Same underlying Kleinberg computation, so
+#' output is numerically unchanged.
 #'
 #' @inheritParams network_build
 #' @param measures Character vector, any of `"degree"`, `"betweenness"`,

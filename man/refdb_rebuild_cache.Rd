@@ -15,8 +15,9 @@ cache file).
 }
 \description{
 Regenerates the \code{.rds} cache of the reference database inside
-\code{\link[=cacheDir]{cacheDir()}} from \code{reference_compounds.csv} / \code{reference_bioactivity.csv}
-in \code{\link[=projectDir]{projectDir()}}. This cache is purely a performance optimization for
+\code{\link[=cacheDir]{cacheDir()}} from \code{results/reference_compounds.csv} /
+\code{results/reference_bioactivity.csv} in \code{\link[=projectDir]{projectDir()}}. This cache is
+purely a performance optimization for
 downstream functions that repeatedly join against the reference
 database (e.g. \code{bias_audit()}) -- it is always safe to delete, and this
 function always regenerates it from the CSVs, never the other way

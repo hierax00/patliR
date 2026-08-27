@@ -13,10 +13,8 @@ is a confidence, not a distance).
 }
 \description{
 \code{unique()} on both \code{source_ids} and \code{target_ids} before calling
-\code{igraph::distances()}: confirmed via a real error from Uriel's first
-STRINGdb run (2026-07-23) that igraph's underlying C routine
-(\code{vendor/cigraph/src/paths/unweighted.c}) rejects a \verb{to=} argument with
-duplicate vertices outright ("Target vertex list must not have any
+\code{igraph::distances()}: igraph's underlying C routine rejects a \verb{to=}
+argument with duplicate vertices ("Target vertex list must not have any
 duplicates"). Duplicates are expected here, not a caller bug:
 \code{.network_resample_degree_matched()} draws each node independently \emph{with
 replacement} from its degree bin, so two different input nodes

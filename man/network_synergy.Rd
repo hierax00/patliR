@@ -53,11 +53,9 @@ independently plausible against this disease, not just one of them.
 \code{synergy_score = complementarity * joint_closeness}: high only when a
 pair is both structurally complementary \emph{and} jointly close to the
 disease module (the pattern the network-medicine literature associates
-with real drug/compound synergy, as opposed to two compounds that are
-simply redundant, or two compounds that are complementary but biologically
-irrelevant to the disease of interest -- see \code{patliR_manual.md}, section
-6, "Innovaciones incorporadas", for the literature this design is based
-on).
+with real synergy, as opposed to two compounds that are simply
+redundant, or complementary but biologically irrelevant to the disease
+-- see \code{DESIGN.md}).
 }
 \section{Requires \code{\link[=network_proximity]{network_proximity()}} to have already run for \code{disease}}{
 
@@ -74,8 +72,8 @@ scores as zero.
 \code{z_score} (most negative = closest to the disease module = best) and
 only forms pairs among the top \code{top_n}, avoiding the combinatorial cost
 of scoring every possible pair -- this is an \strong{interim} stand-in for the
-not-yet-implemented \code{rank_candidates()} (see \code{patliR_manual.md}, section
-6). \code{"all"} scores every compound pair in the condition's network
+not-yet-implemented \code{rank_candidates()} (see \code{ROADMAP.md}). \code{"all"}
+scores every compound pair in the condition's network
 regardless of ranking; pairs involving a compound with no
 \code{\link[=network_proximity]{network_proximity()}} score (e.g. it had no targets mappable to STRING)
 get \code{NA} in the proximity-derived columns, not a fabricated score.

@@ -1,18 +1,11 @@
 #' @include AllGenerics.R internal.R
 NULL
 
-## compounds_classify() -- chemical-family classification via NPClassifier
-## (Kim et al. 2021, J Nat Prod 84, 2795-2807), a free REST API purpose-
-## built for natural products (GNPS/UCSD): given a SMILES it returns a
-## pathway (Alkaloids, Amino acids and Peptides, Carbohydrates, Fatty
-## acids, Polyketides, Shikimates and Phenylpropanoids, Terpenoids), a
-## superclass, and a class. Chosen over the more general ClassyFire
-## (broader chemical taxonomy, not natural-product-specific) because
-## patliR's whole domain is natural product extracts -- NPClassifier's
-## pathway categories are exactly "familias quimicas" the way a
-## phytochemist would name them, decided with Uriel in chat (2026-08-11).
-## Same .fetch_external()/httr2 pattern already established in refdb.R --
-## no new Suggests needed.
+## Chemical-family classification via NPClassifier (Kim et al. 2021, J Nat
+## Prod 84, 2795-2807), a free REST API built for natural products: given a
+## SMILES it returns a pathway, superclass, and class. Chosen over the more
+## general ClassyFire because patliR's domain is natural product extracts.
+## Same .fetch_external()/httr2 pattern as refdb.R.
 
 #' Classify compounds into natural-product chemical families (NPClassifier)
 #'
@@ -108,23 +101,14 @@ compounds_classify <- function(proj, compound_ids = NULL,
 
 #' Look up a compound's NPClassifier pathway/superclass/class by SMILES
 #'
-#' @section Why this throttles and retries (2026-08-11):
-#' On real data, `compounds_classify()` calls this once per compound in a
-#' tight `lapply()` (tens to low hundreds of back-to-back requests). Tested
-#' directly against the live endpoint: isolated requests -- including ones
-#' with stereochemistry (`@`, `@@`) and percent-escaped characters -- always
-#' return valid JSON, so this is not a SMILES-encoding bug. But real
-#' natural-product runs (74/74 compounds, EFLO-S dataset) got a `200 OK`
-#' whose body was HTML instead of the documented JSON, for essentially
-#' every compound. That pattern -- works in isolation, fails under volume --
-#' is the signature of a rate-limit or anti-bot response returned with a
-#' success status rather than `429`/`503` (so httr2's default transient-
-#' response detection, which only looks at status code, would never catch
-#' it). NPClassifier/GNPS2 publish no documented rate limit, so there is no
-#' official number to throttle to; one request per second is a conservative,
-#' polite default. `req_throttle()`'s token bucket is shared across calls to
-#' the same host within one R session, so this applies across the whole
-#' `compounds_classify()` loop, not just within one call.
+#' @section Why this throttles and retries:
+#' `compounds_classify()` calls this once per compound in a tight loop.
+#' Under that volume NPClassifier starts returning `200 OK` with an HTML
+#' body instead of JSON -- an undocumented rate limit returned with a
+#' success status, so httr2's status-code-based transient detection never
+#' catches it. There is no published rate limit; one request per second is
+#' a conservative default. `req_throttle()`'s token bucket is shared per
+#' host per session, so it applies across the whole loop.
 #' @return `list(pathway, superclass, class, isglycoside)`, the first
 #'   (highest-confidence) entry of each field NPClassifier returns.
 #' @keywords internal
@@ -163,9 +147,9 @@ compounds_classify <- function(proj, compound_ids = NULL,
     stop(
       "NPClassifier returned content-type '", httr2::resp_content_type(resp),
       "' instead of JSON, even after retrying with backoff. The endpoint ",
-      "itself is known to return valid JSON for isolated requests (verified ",
-      "2026-08-11), so this usually means it is rate-limiting or blocking ",
-      "rapid sequential requests, not that this SMILES is malformed. ",
+      "returns valid JSON for isolated requests, so this usually means it ",
+      "is rate-limiting or blocking rapid sequential requests, not that ",
+      "this SMILES is malformed. ",
       "Response body preview: ", body_preview
     )
   }

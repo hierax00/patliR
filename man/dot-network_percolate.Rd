@@ -17,11 +17,10 @@ removal steps \verb{Q = 1..N} -- \strong{not} including the trivial, pre-removal
 \code{s(0) = 1} state. \code{curve[1] == 1} (the untouched graph) is still kept in
 the returned \code{curve} for plotting (so \code{\link[=plot_robustness]{plot_robustness()}} can draw the
 curve starting from "nothing removed yet"), but must be dropped before
-averaging into \code{r_index} -- averaging it in was a real bug (found
-2026-08-25): it systematically inflates \code{r_index}, worst for exactly the
-small modules this package's networks typically have after HDBSCAN
-splits a component (e.g. a 1-node module used to report \code{r_index = 0.5}
-via \code{mean(c(1, 0))}, when Schneider's own definition for \code{N = 1} is
-\code{s(1) = 0}).
+averaging into \code{r_index} -- averaging it in systematically inflates
+\code{r_index}, worst for the small modules this package's networks typically
+have after HDBSCAN splits a component (a 1-node module would report
+\code{r_index = 0.5} via \code{mean(c(1, 0))}, when Schneider's definition for
+\code{N = 1} is \code{s(1) = 0}).
 }
 \keyword{internal}

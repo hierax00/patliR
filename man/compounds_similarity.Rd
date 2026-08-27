@@ -37,10 +37,8 @@ view.
 \description{
 Computes a molecular fingerprint (via \code{rcdk::get.fingerprint()}) for
 every compound and a pairwise similarity score (via
-\code{fingerprint::fp.sim.matrix()}) between every pair -- the kind of
-structural-similarity analysis behind Yıldırım et al. 2007's figures
-explaining drug pairs that share a target (see \code{patliR_manual.md},
-family \verb{network_*}). Purely structural (2D fingerprints); says nothing
+\code{fingerprint::fp.sim.matrix()}) between every pair. Purely structural
+(2D fingerprints); says nothing
 about shared targets or biological activity on its own -- pair this
 with \code{\link[=network_degeneracy]{network_degeneracy()}} (pathway overlap) or \code{network_edges}
 (shared targets) for that.

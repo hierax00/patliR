@@ -70,14 +70,12 @@ the two are not on the same scale).
 \section{What this does not do yet}{
 
 \code{categories}/categorical enrichment against a disease-term background is
-not implemented -- see the design note at the top of \code{R/bias_audit.R}
-and \code{patliR_manual.md}, section "Planeado / no implementado", for why.
-Passing a non-\code{NULL} \code{categories} raises an informative error rather
-than pretending to succeed.
+not implemented -- see \code{ROADMAP.md}. Passing a non-\code{NULL} \code{categories}
+raises an informative error rather than pretending to succeed.
 }
 
 \examples{
-\donttest{
+\dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
 compound_list <- read.csv(
   system.file("extdata", "input_compound_list.csv", package = "patliR")

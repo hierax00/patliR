@@ -21,8 +21,8 @@ restrict \code{pathway_jaccard}'s pathway sets to specific
 target set makes GO's pathway_jaccard uninformatively close to 1 for
 nearly every pair -- GO's hierarchical redundancy means most compounds
 end up sharing at least some very generic term, which flattens
-\code{degeneracy_score} toward "everything looks degenerate" (confirmed
-against real Chilcuague data, 2026-08-25). \code{network_enrich()}'s own
+\code{degeneracy_score} toward "everything looks degenerate".
+\code{network_enrich()}'s own
 \code{simplify_go} addresses the same root cause upstream (fewer, less
 redundant GO terms in the first place); this argument is the
 complementary downstream lever, for when you want KEGG's coarser

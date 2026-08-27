@@ -1,27 +1,17 @@
 #' @include AllGenerics.R internal.R network_build.R network_module_robustness.R
 NULL
 
-## network_proximity() -- network-based compound-disease proximity on the
-## STRING protein-protein interaction network. STRINGdb chosen as the
-## background interactome, confirmed with Uriel (chat, 2026-07-23): a
-## per-condition compound-target *bipartite* graph (network_build()) has no
-## real topological distance between two targets, so answering "how close
-## is this compound's target set to this disease's gene set on the human
-## interactome" needs a genuinely separate, external PPI network.
+## Network-based compound-disease proximity on the STRING PPI network. A
+## per-condition compound-target bipartite graph has no real topological
+## distance between two targets, so this needs a separate external PPI
+## network.
 ##
-## Method: Guney, E., Menche, J., Vidal, M., & Barabasi, A.L. (2016).
-## "Network-based in silico drug efficacy screening." Nature Communications,
-## 7, 10331. https://doi.org/10.1038/ncomms10331 -- the "closest" proximity
-## measure (their Eq. 2): d(S,T) = (1/|S|) * sum_{s in S} min_{t in T} d(s,t),
-## z-scored against a degree-preserving null model (both S and T resampled
-## from same-degree-bin nodes, n_random times), z = (d_obs - mean(d_rand)) /
-## sd(d_rand). More negative z = closer than random chance = topologically
-## plausible drug-disease relationship.
-##
-## STRINGdb API verified against the live Bioconductor docs (rdrr.io man
-## pages + source of rstring.R, 2026-07-23) before writing this, per this
-## project's "verify, don't assume" discipline -- see the roxygen sections
-## below for exactly what was checked and why.
+## Method: Guney et al. (2016), Nat Commun 7, 10331 -- the "closest"
+## proximity measure (their Eq. 2):
+##   d(S,T) = (1/|S|) * sum_{s in S} min_{t in T} d(s,t)
+## z-scored against a degree-preserving null model (S and T resampled from
+## same-degree-bin nodes, n_random times). More negative z = closer than
+## chance.
 
 #' Network-based compound-disease proximity on the STRING interactome
 #'
@@ -40,8 +30,8 @@ NULL
 #' `cacheDir(proj)` -- this needs internet access once; subsequent calls
 #' reuse the downloaded files (STRINGdb's own on-disk caching, not
 #' `patliR`-specific). This can be a genuinely large download (tens to a few
-#' hundred MB for human at the full interactome) -- see `TESTING_GUIDE.Rmd`,
-#' section 0.
+#' hundred MB for human at the full interactome). Install `STRINGdb` with
+#' `BiocManager::install("STRINGdb")`.
 #'
 #' @section How target/gene IDs are mapped to the STRING network:
 #' `STRINGdb$map()` joins the input UniProt IDs against STRING's own alias
@@ -132,7 +122,7 @@ network_proximity <- function(proj, condition = NULL, disease,
   if (!requireNamespace("STRINGdb", quietly = TRUE)) {
     cli::cli_abort(c(
       "{.fn network_proximity} needs {.pkg STRINGdb}, not installed.",
-      "i" = "See {.file TESTING_GUIDE.Rmd}, section 0, for the {.fn BiocManager::install} chunk."
+      "i" = "Install it with {.code BiocManager::install(\"STRINGdb\")}."
     ))
   }
 
@@ -302,10 +292,8 @@ network_proximity <- function(proj, condition = NULL, disease,
 #'
 #' @description
 #' `unique()` on both `source_ids` and `target_ids` before calling
-#' `igraph::distances()`: confirmed via a real error from Uriel's first
-#' STRINGdb run (2026-07-23) that igraph's underlying C routine
-#' (`vendor/cigraph/src/paths/unweighted.c`) rejects a `to=` argument with
-#' duplicate vertices outright ("Target vertex list must not have any
+#' `igraph::distances()`: igraph's underlying C routine rejects a `to=`
+#' argument with duplicate vertices ("Target vertex list must not have any
 #' duplicates"). Duplicates are expected here, not a caller bug:
 #' `.network_resample_degree_matched()` draws each node independently *with
 #' replacement* from its degree bin, so two different input nodes

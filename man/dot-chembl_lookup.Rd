@@ -2,24 +2,17 @@
 % Please edit documentation in R/refdb.R
 \name{.chembl_lookup}
 \alias{.chembl_lookup}
-\title{Look up a compound on ChEMBL by SMILES, using ChEMBL's similarity search
-at 100\% threshold}
+\title{Look up a compound on ChEMBL by SMILES, using ChEMBL's 100\% similarity search}
 \usage{
 .chembl_lookup(smiles)
 }
 \description{
-\code{molecule_structures__canonical_smiles__flexmatch}, previously used here,
-turned out to unconditionally return \verb{HTTP 500} on the live ChEMBL API
-regardless of the query SMILES (verified 2026-08-25 -- see
-\code{.chembl_url_encode_smiles()} above) -- likely a filter ChEMBL's current
-API version no longer supports server-side, not anything specific to
-\code{patliR}'s SMILES. The \verb{/similarity/<smiles>/100.json} endpoint performs
-the same job (matching a query SMILES against ChEMBL's structures
-regardless of which toolkit canonicalized it -- the cross-toolkit
-problem \code{patliR} has without a true InChIKey, see \code{.check_structures()},
-internal) and is confirmed working. A 100\% Tanimoto similarity match can
-occasionally return more than one ChEMBL entry (e.g. a free base and its
-salt form share a fingerprint at this threshold) -- the first result is
-used, consistent with how a single flexmatch hit was previously picked.
+Uses \verb{/similarity/<smiles>/100.json} (the
+\code{molecule_structures__canonical_smiles__flexmatch} filter returns
+\verb{HTTP 500} on the current API). Similarity search matches the query
+regardless of which toolkit canonicalized it, which is the cross-toolkit
+problem patliR has without an InChIKey (see \code{.check_structures()}). A
+100\% match can return more than one entry (e.g. a free base and its
+salt); the first is used.
 }
 \keyword{internal}

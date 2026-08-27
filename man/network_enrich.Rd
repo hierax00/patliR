@@ -36,11 +36,11 @@ or \code{"ALL"} -- passed straight to \code{\link[clusterProfiler:enrichGO]{clus
 \item{simplify_go}{Logical, default \code{TRUE}. Only used when \code{db = "go"}.
 GO terms are hierarchical and highly redundant -- a real target set
 routinely comes back with hundreds of "significant" GO terms, many of
-them near-duplicate parent/child terms covering almost the same genes
-(confirmed against real Chilcuague data, 2026-08-25: this redundancy is
-what made \code{\link[=network_motifs]{network_motifs()}}'s derived \code{compound -> pathway} layer
-explode to compound out-degrees in the thousands, since every
-near-duplicate GO term adds its own derived edge). When \code{TRUE}, runs
+them near-duplicate parent/child terms covering almost the same genes.
+This redundancy is what makes \code{\link[=network_motifs]{network_motifs()}}'s derived
+\code{compound -> pathway} layer explode to compound out-degrees in the
+thousands, since every near-duplicate GO term adds its own derived
+edge. When \code{TRUE}, runs
 \code{\link[clusterProfiler:simplify]{clusterProfiler::simplify()}} (semantic-similarity-based, via
 \pkg{GOSemSim}) on the \code{db = "go"} result before returning it -- this
 removes redundant terms by \emph{similarity}, not by tightening
@@ -72,11 +72,9 @@ excluded from that condition's gene set, never silently included as
 \description{
 For each condition already built by \code{\link[=network_build]{network_build()}}, maps its distinct
 UniProt target IDs to Entrez Gene IDs (\code{org.Hs.eg.db}) and runs an
-over-representation test against GO, Reactome, or KEGG gene sets. This is
-the "vía" (pathway) annotation layer referenced in \code{patliR_manual.md},
-section 6 -- it does not change the graph built by \code{\link[=network_build]{network_build()}}
-itself, it produces a separate enrichment results table keyed by
-condition.
+over-representation test against GO, Reactome, or KEGG gene sets. It does
+not change the graph built by \code{\link[=network_build]{network_build()}}; it produces a separate
+enrichment results table keyed by condition.
 }
 \section{Heavy, optional dependencies -- not installed by default}{
 
@@ -85,8 +83,8 @@ family since \code{\link[=network_build]{network_build()}}), the packages this f
 large Bioconductor annotation databases, kept in \code{Suggests} rather than
 \code{Imports} so that installing \code{patliR} itself stays light. You need:
 \code{org.Hs.eg.db} and \code{clusterProfiler} always (ID mapping, plus GO/KEGG
-enrichment); \code{ReactomePA} additionally for \code{db = "reactome"}. See
-\code{TESTING_GUIDE.Rmd}, section 0, for the install chunk. Calling this
+enrichment); \code{ReactomePA} additionally for \code{db = "reactome"}. Install
+with \code{BiocManager::install(c("clusterProfiler", "org.Hs.eg.db", "ReactomePA"))}. Calling this
 without the right package installed raises a clear error naming exactly
 which package is missing, rather than a cryptic "could not find
 function".
@@ -99,9 +97,8 @@ as local packages -- once installed, \code{db = "go"}/\code{db = "reactome"} nev
 touch the network. \code{db = "kegg"} is different:
 \code{clusterProfiler::enrichKEGG()} queries KEGG's REST API live on every
 call (there is no current local Bioconductor package for this -- the old
-\code{KEGG.db} is deprecated). The original design sketch in
-\code{patliR_manual.md} claimed the whole family needed "no new fetch"; that
-was true for GO/Reactome but not KEGG, and has been corrected there.
+\code{KEGG.db} is deprecated). GO and Reactome are fully local once their
+packages are installed.
 }
 
 \examples{

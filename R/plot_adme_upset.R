@@ -1,19 +1,12 @@
 #' @include AllGenerics.R internal.R adme_filter.R
 NULL
 
-## plot_adme_upset() -- same hand-rolled ggplot2 + patchwork UpSet layout
-## as plot_upset() (Lex et al. 2014), applied to a different domain: which
-## compounds pass which combination of adme_filter()'s rules, instead of
-## plot_upset()'s "which targets are shared across which conditions". Not
-## folded into plot_upset() itself -- that function's contract is
-## specifically "target sets x conditions" (see its own header comment);
-## this is "drug-likeness rules x compounds", a different pair of axes, so
-## a separate function keeps both contracts simple rather than overloading
-## one with a `domain` switch. UpSet chosen over a Venn (ggVennDiagram,
-## already used by plot_venn()) because up to 5 rules (ro5/veber/ghose/
-## egan/oprea) makes a proportional Venn unreadable well before that --
-## decided with Uriel in chat (2026-08-11), same "depende de que permita
-## visualizar claramente" reasoning already applied elsewhere in plot_*.
+## Same hand-rolled ggplot2 + patchwork UpSet layout as plot_upset(), but
+## over "which compounds pass which combination of adme_filter() rules"
+## instead of "which targets are shared across which conditions". Kept
+## separate from plot_upset() (different axes) rather than adding a
+## `domain` switch. UpSet not Venn: 5 rules make a proportional Venn
+## unreadable.
 
 #' UpSet-style plot: drug-likeness/lead-likeness rule overlaps across compounds
 #'
@@ -24,6 +17,7 @@ NULL
 #' `rules` selection with 2+ rules).
 #'
 #' @inheritParams network_build
+#' @inheritParams plot_save_params
 #' @param top_n Integer, default `15`. Only the `top_n` largest
 #'   intersections are shown.
 #'

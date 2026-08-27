@@ -17,12 +17,12 @@ group's centroid}
 )
 }
 \description{
-Visual language modeled on the classic "chemical space" figures Uriel
-referenced in chat (2026-08-11) -- e.g. the GDB/chemical-universe style
-plots that draw two arrows crossing at a shared origin instead of a
-boxed axis, and label each colored region directly on the plot instead
-of relying only on a legend. Reconstructed for patliR's own axes (PCA/
-UMAP of \emph{our} compounds' physicochemical descriptors), not copied --
+Visual language modeled on the classic "chemical space" figures (e.g.
+the GDB/chemical-universe style plots) that draw two arrows crossing at
+a shared origin instead of a boxed axis, and label each colored region
+directly on the plot instead of relying only on a legend. Reconstructed
+for patliR's own axes (PCA/UMAP of our compounds' physicochemical
+descriptors), not copied --
 see the header comment of this file for why a literal reproduction
 would not even make sense here (our "categories" are chemical families
 within one extract, not whole molecule classes like DNA/peptides/

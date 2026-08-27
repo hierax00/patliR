@@ -71,8 +71,8 @@ is kept in \code{Suggests}. The very first call downloads STRING's flat files
 \code{cacheDir(proj)} -- this needs internet access once; subsequent calls
 reuse the downloaded files (STRINGdb's own on-disk caching, not
 \code{patliR}-specific). This can be a genuinely large download (tens to a few
-hundred MB for human at the full interactome) -- see \code{TESTING_GUIDE.Rmd},
-section 0.
+hundred MB for human at the full interactome). Install \code{STRINGdb} with
+\code{BiocManager::install("STRINGdb")}.
 }
 
 \section{How target/gene IDs are mapped to the STRING network}{

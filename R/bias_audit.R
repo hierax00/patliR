@@ -1,37 +1,12 @@
 #' @include AllGenerics.R internal.R refdb.R
 NULL
 
-## bias_* -- database bias auditing (patliR_manual.md, section "Planeado / no
-## implementado" and section 7). Design decision made here, deviating from
-## the tentative signatures in that "Planeado / no implementado" section
-## (marked there as "diseno, no implementacion" -- every signature there is
-## provisional by definition):
-##
-## That original bias_audit() sketch has TWO responsibilities: (1) categorical
-## enrichment of the project's targets against a disease-category background
-## (categories = "mesh_disease"/"do", background = "string"/"drugbank"/
-## "reference_db"), and (2) a MAD-based "promiscuous compound/target" outlier
-## flag against the project's own reference database. (1) needs a real,
-## confirmed external source mapping targets to MeSH disease terms / Disease
-## Ontology categories across ALL diseases (not just the one disease
-## targets_disease_filter() already fetches per call) -- no such source has
-## been confirmed yet, and this package's established policy (see
-## network_pathview()/refdb_build()'s "coconut" handling, network_build()'s
-## "consensus"/"bipartite" handling) is to never guess an external API. So
-## this implementation ships (2) for real now -- fully self-contained, using
-## only reference_bioactivity data already fetched by refdb_build() -- and
-## makes (1) raise a clear "not implemented yet" error if requested, instead
-## of pretending to succeed. Ask Uriel to confirm a real category source
-## before coding that part.
-##
-## Also dropped: the `condition`/`background` parameters from the tentative
-## signatures. The homogeneity check and its reweighting are explicitly
-## whole-reference-database properties ("a nivel refdb global", per
-## network_hub_penalty()'s own roxygen, which already promised this reuse) --
-## unlike network_hub_penalty() itself, there is no per-condition scope here,
-## and `background` only has meaning for the not-yet-implemented categorical
-## enrichment. Carrying unused parameters through for a "tentative" signature
-## would be dead-code-shaped on arrival.
+## bias_audit() ships only the MAD-based "promiscuous compound/target"
+## outlier flag, computed over the project's own reference_bioactivity.
+## Categorical enrichment against a disease-category background is not
+## implemented -- it needs a confirmed target -> MeSH/Disease-Ontology
+## source, and this package never guesses an external API. Requesting it
+## raises a clear "not implemented yet" error. See ROADMAP.md.
 
 #' Audit database bias -- MAD-based "promiscuous" compound/target outlier
 #' flag
@@ -68,10 +43,8 @@ NULL
 #'
 #' @section What this does not do yet:
 #' `categories`/categorical enrichment against a disease-term background is
-#' not implemented -- see the design note at the top of `R/bias_audit.R`
-#' and `patliR_manual.md`, section "Planeado / no implementado", for why.
-#' Passing a non-`NULL` `categories` raises an informative error rather
-#' than pretending to succeed.
+#' not implemented -- see `ROADMAP.md`. Passing a non-`NULL` `categories`
+#' raises an informative error rather than pretending to succeed.
 #'
 #' @inheritParams compounds
 #' @param check_homogeneity Logical, default `TRUE`. Must be `TRUE` in this
@@ -92,7 +65,7 @@ NULL
 #'   to `results/bias_homogeneity.csv`.
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' proj <- patliR_project(tempfile("patliR_demo_"))
 #' compound_list <- read.csv(
 #'   system.file("extdata", "input_compound_list.csv", package = "patliR")
@@ -112,7 +85,7 @@ bias_audit <- function(proj, check_homogeneity = TRUE, mad_threshold = 2.5, cate
   if (!is.null(categories)) {
     cli::cli_abort(c(
       "Categorical enrichment ({.arg categories}) is not implemented yet in this version of patliR.",
-      "i" = "See {.file patliR_manual.md}, section \"Planeado / no implementado\" -- it needs a confirmed MeSH/DO category source before coding it for real.",
+      "i" = "See {.file ROADMAP.md} -- it needs a confirmed MeSH/DO category source before coding it for real.",
       "i" = "{.fn bias_audit} with the default {.code categories = NULL} runs the homogeneity/outlier check only."
     ))
   }
@@ -206,7 +179,7 @@ bias_audit <- function(proj, check_homogeneity = TRUE, mad_threshold = 2.5, cate
 #'   `results/bias_reweighted.csv`.
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' proj <- patliR_project(tempfile("patliR_demo_"))
 #' compound_list <- read.csv(
 #'   system.file("extdata", "input_compound_list.csv", package = "patliR")
@@ -288,7 +261,7 @@ bias_reweight <- function(proj) {
 #'   }
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' proj <- patliR_project(tempfile("patliR_demo_"))
 #' compound_list <- read.csv(
 #'   system.file("extdata", "input_compound_list.csv", package = "patliR")

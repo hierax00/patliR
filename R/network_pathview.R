@@ -1,44 +1,19 @@
 #' @include AllGenerics.R internal.R network_build.R network_enrich.R
 NULL
 
-## network_pathview() -- renders KEGG pathway diagrams (pathview) for a
-## condition's top enrichKEGG() hits, coloring each gene/target node by a
-## score derived from network_build()'s own compound-target edges. This is
-## the "mapas de KEGG" step Juanjo's own pre-patliR analysis already did by
-## hand for every condition (Farmacologia de Redes Juanjo/Redes/<condicion>/
-## <condicion>.Rmd, section 5 "MAPAS DE KEGG AUTOMATIZADOS (PATHVIEW)") --
-## read directly rather than guessed, since this project's policy is to
-## never fabricate an external package's API from memory. Juanjo's call:
+## Renders KEGG pathway diagrams (pathview::pathview()) for a condition's
+## top enrichKEGG() hits, coloring each gene node by a score from
+## network_build()'s compound-target edges (`gene_score = "max_weight"` by
+## default: the max import probability among compounds hitting that
+## target).
 ##
-##   gene_vector_kegg <- datos_final$Max_Prob
-##   names(gene_vector_kegg) <- datos_final$ENTREZID
-##   pathview(gene.data = gene_vector_kegg, pathway.id = kegg_id,
-##            species = "hsa", limit = list(gene = c(0, 1)),
-##            low = "white", mid = "yellow", high = "red")
-##
-## `Max_Prob` was the maximum SuperPred target-prediction probability
-## across every compound hitting that UniProt/Entrez target, for a
-## hand-built table equivalent to what network_build()'s `network_edges`
-## already stores as `weight` per (compound_id, uniprot_id, condition).
-## `gene_score` below reproduces that (`"max_weight"`, the default) plus
-## two natural alternatives from the same edge table, rather than adding
-## anything Juanjo's own analysis did not already establish as meaningful.
-##
-## pathview()'s real signature/behaviour was verified against the live
-## Bioconductor/CRAN-mirror reference docs (rdocumentation.org, rdrr.io
-## source of pathview.R/download.kegg.R) before writing this (2026-08-11),
-## not assumed from memory -- confirming: `limit = list(gene = c(0, 1))`
-## (a length-2 bound) is valid alongside the documented length-1 form;
-## `kegg.dir` is where *input* KGML/PNG pathway files are read from/cached
-## (pathview only re-downloads a pathway's .xml/.png if they are not
-## already present there -- exactly the caching role cacheDir(proj) plays
-## for `.fetch_external()` elsewhere in patliR); and pathview has **no**
-## argument for where it writes its *output* PNG -- `kegg.native = TRUE`
-## (the default) always writes `<pathway.id>.<out.suffix>.png` (out.suffix
-## defaults `"pathview"`) to the current working directory. This function
-## therefore temporarily `setwd()`s into `out_dir` for the duration of the
-## pathview() calls (restored via `on.exit()` even on error), the only way
-## to control where the rendered images land.
+## pathview() has NO argument for where it writes its output PNG --
+## `kegg.native = TRUE` (the default) always writes
+## `<pathway.id>.<out.suffix>.png` to the current working directory. So
+## this function temporarily setwd()s into `out_dir` for the pathview()
+## calls, restored via on.exit() even on error. `kegg.dir` is where its
+## *input* KGML/PNG files are cached (only re-downloaded when absent),
+## pointed at cacheDir(proj).
 
 #' Render KEGG pathway diagrams (`pathview`) for a condition's top enriched
 #' pathways, colored by target score
@@ -49,10 +24,7 @@ NULL
 #' `top_n_pathways` most significant pathways (or an explicit
 #' `pathway_id` vector), using [pathview::pathview()]. Each pathway's
 #' target/gene nodes are colored by `gene_score` -- a per-Entrez-ID summary
-#' of that condition's own [network_build()] compound-target edges, the
-#' same role Juanjo's hand-built `Max_Prob` played in his own pre-`patliR`
-#' analysis (see the file header comment for the real, verified prior
-#' code this reproduces).
+#' of that condition's own [network_build()] compound-target edges.
 #'
 #' @section Why this needs its own gene-to-Entrez mapping, not `geneID` off `network_enrichment`:
 #' [network_enrich()]'s output stores the Entrez IDs it fed into
@@ -73,8 +45,8 @@ NULL
 #'
 #' @section Heavy, optional dependencies:
 #' Needs `pathview` (Bioconductor, **not** installed by default -- add via
-#' `BiocManager::install("pathview")`, see `TESTING_GUIDE.Rmd`, section 0)
-#' plus `clusterProfiler`/`org.Hs.eg.db` (already needed by
+#' `BiocManager::install("pathview")`) plus `clusterProfiler`/`org.Hs.eg.db`
+#' (already needed by
 #' [network_enrich()]). `pathview` downloads each pathway's KGML/PNG from
 #' KEGG's REST API on first use (needs internet, like `db = "kegg"` in
 #' [network_enrich()] itself) and caches them under `kegg_dir` afterwards
@@ -89,8 +61,8 @@ NULL
 #'   [plot_gochord()] uses, for the same reason -- pathway diagrams are
 #'   inherently per-condition, pooling them is not meaningful).
 #' @param gene_score `"max_weight"` (default -- the highest import
-#'   probability among compounds hitting that target in `condition`,
-#'   reproducing Juanjo's own `Max_Prob`), `"mean_weight"`, or
+#'   probability among compounds hitting that target in `condition`),
+#'   `"mean_weight"`, or
 #'   `"n_compounds"` (count of distinct compounds hitting that target --
 #'   not on a 0-1 scale, `limit` is adjusted automatically, see below).
 #' @param pathway_id Character vector of KEGG pathway IDs (e.g.
@@ -98,13 +70,11 @@ NULL
 #'   (default) to use the `top_n_pathways` most significant KEGG results
 #'   for `condition` (lowest `p.adjust`). If given, every ID must already
 #'   appear in `condition`'s `db = "kegg"` [network_enrich()] results.
-#' @param top_n_pathways Integer, default `10` (same default Juanjo's own
-#'   analysis used). Ignored if `pathway_id` is given.
+#' @param top_n_pathways Integer, default `10`. Ignored if `pathway_id` is given.
 #' @param low,mid,high Colors passed straight to `pathview::pathview()`'s
 #'   `low`/`mid`/`high` (each internally wrapped as `list(gene = ...)`,
-#'   `cpd.data` is never used here). Default `"white"`/`"yellow"`/`"red"`
-#'   -- Juanjo's own choice, not `pathview`'s own default
-#'   (`"green"`/`"gray"`/`"red"`).
+#'   `cpd.data` is never used here). Default `"white"`/`"yellow"`/`"red"`,
+#'   not `pathview`'s own default (`"green"`/`"gray"`/`"red"`).
 #' @param out_dir Directory the rendered PNGs are written to. Defaults to
 #'   `file.path(projectDir(proj), "plots", "kegg_pathview")`.
 #' @param kegg_dir Directory `pathview` reads/caches each pathway's
@@ -118,8 +88,7 @@ NULL
 #'   (e.g. `pathview` cannot reach KEGG, or the pathway has no mappable
 #'   nodes) gets `ok = FALSE` and a `message`, is logged
 #'   (`"network_pathview_render_failed"`), and does **not** stop the other
-#'   pathways in the same call from rendering -- same `tryCatch`-per-item
-#'   resilience Juanjo's own loop already used.
+#'   pathways in the same call from rendering.
 #'
 #' @references Luo, W. & Brouwer, C. (2013), "Pathview: an R/Bioconductor
 #'   package for pathway-based data integration and visualization",
@@ -162,7 +131,7 @@ network_pathview <- function(proj, condition = NULL,
   if (!requireNamespace("pathview", quietly = TRUE)) {
     cli::cli_abort(c(
       "{.fn network_pathview} needs the {.pkg pathview} package (Bioconductor).",
-      "i" = "{.code BiocManager::install(\"pathview\")} -- see {.file TESTING_GUIDE.Rmd}, section 0."
+      "i" = "Install it with {.code BiocManager::install(\"pathview\")}."
     ))
   }
   .network_enrich_check_deps("kegg")

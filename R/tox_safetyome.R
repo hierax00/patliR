@@ -103,7 +103,7 @@ tox_safetyome <- function(proj, compound_ids = NULL) {
   if (length(missing) > 0) {
     cli::cli_abort(c(
       "{.pkg {missing}} required for {.fn tox_safetyome} (UniProt -> gene symbol mapping).",
-      "i" = "See {.file TESTING_GUIDE.Rmd}, section 0, for the {.fn BiocManager::install} chunk."
+      "i" = "Install with {.code BiocManager::install(c({paste(sprintf('\"%s\"', missing), collapse = ', ')}))}."
     ))
   }
 
@@ -160,7 +160,7 @@ tox_safetyome <- function(proj, compound_ids = NULL) {
   if (!nzchar(path) || !file.exists(path)) {
     cli::cli_abort(c(
       "{.val inst/extdata/safetyome_core_panel.csv} not found in this {.pkg patliR} install.",
-      "i" = "Re-install the package, or see {.file TESTING_GUIDE.Rmd} for provenance/regeneration."
+      "i" = "Re-install the package to restore it."
     ))
   }
   utils::read.csv(path, stringsAsFactors = FALSE)

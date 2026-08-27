@@ -1,13 +1,10 @@
 #' @include AllGenerics.R internal.R
 NULL
 
-## targets_disease_filter() -- target<->disease association via Open Targets.
-## The only source implemented is "open_targets" (GraphQL API v4, no API key,
-## no rate-limit tier for anonymous use as documented at
-## https://platform-docs.opentargets.org/data-access/graphql-api). See
-## patliR_manual.md, section 4, for why Open Targets and not GeneCards
-## (license/scraping terms), and for why this function is optional and never
-## blocks the rest of the pipeline if `disease` is not supplied.
+## target <-> disease association via the Open Targets GraphQL API v4 (no
+## API key). Open Targets rather than GeneCards for license/scraping
+## reasons. Optional -- never blocks the pipeline if `disease` is not
+## supplied.
 
 #' Filter/annotate predicted targets by their association to a disease
 #'
@@ -275,14 +272,12 @@ targets_disease_filter <- function(proj, disease, source = c("open_targets"),
 #' `disease(efoId: ...)` first, which both resolves and validates it in one
 #' call, rather than routed through `mapIds()`.
 #'
-#' @section A real, confirmed failure mode this guards against:
-#' Debugging this against the live API (2026-07-23) surfaced a sharper
-#' problem than "IDs vs. free text": `disease(efoId = "EFO_0000537")`
-#' (hypertension's old EFO ID) returned `NULL` with *no GraphQL error at
-#' all* -- not because the direct-lookup mechanism is wrong, but because
-#' `EFO_0000537` itself is **obsolete** (retired in EFO 3.88.0, replaced by
-#' `MONDO_0005044` -- confirmed against EBI's Ontology Lookup Service; other
-#' catalogs like GWAS Catalog still link the old ID, Open Targets does not).
+#' @section A failure mode this guards against:
+#' `disease(efoId = "EFO_0000537")` (hypertension's old EFO ID) returns
+#' `NULL` with no GraphQL error at all -- not because direct lookup is
+#' wrong, but because `EFO_0000537` is **obsolete** (retired in EFO 3.88.0,
+#' replaced by `MONDO_0005044`; some catalogs still link the old ID, Open
+#' Targets does not).
 #' An earlier version of this function swallowed that `NULL`/failure into a
 #' bare fallback and only ever surfaced `mapIds()`'s generic "no match"
 #' error, hiding the real cause -- fixed to report both failure reasons (see

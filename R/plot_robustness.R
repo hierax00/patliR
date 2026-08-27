@@ -15,6 +15,7 @@ NULL
 #' [network_module_robustness()]'s own roxygen).
 #'
 #' @inheritParams network_build
+#' @inheritParams plot_save_params
 #' @param module_id Character vector of module IDs to restrict to, or
 #'   `NULL` (default) for every module in scope.
 #' @param engine `"static"` (default) or `"ggiraph"`, save/out_dir/width/

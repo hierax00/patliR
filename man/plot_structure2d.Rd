@@ -23,6 +23,18 @@ plot_structure2d(
 \code{structure2d_log} entry.}
 
 \item{ncol}{Integer, default \code{4}. Number of grid columns.}
+
+\item{save}{Logical, default \code{TRUE}. Whether to also write the plot to
+disk (in addition to returning it).}
+
+\item{out_dir}{Directory to write the file(s) to when \code{save = TRUE}.
+\code{NULL} (default) means \code{file.path(projectDir(proj), "plots")}.}
+
+\item{width, height}{Numeric, plot size in inches, passed to
+\code{\link[ggplot2:ggsave]{ggplot2::ggsave()}} (or the function's native device).}
+
+\item{dpi}{Numeric resolution in dots per inch for raster output, passed
+to \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}.}
 }
 \value{
 A \code{patchwork} object (see \code{\link[=plot_upset]{plot_upset()}} for why \code{patchwork},

@@ -1,29 +1,19 @@
 #' @include AllGenerics.R internal.R
 NULL
 
-## compounds_similarity() -- patliR_manual.md, "Planeado / no implementado"
-## ("similitud química").
-## fingerprint::fp.sim.matrix()'s real signature/return shape (a plain N x N
-## symmetric matrix, diag = 1, no dimnames set) confirmed against its own
-## source (fingerprint_3.5.10, R/matrix.R) before writing this, not
-## assumed from documentation alone -- same discipline already applied to
-## pheatmap()/GOplot::GOChord() (see R/plot_heatmap.R, R/plot_gochord.R).
-## `fingerprint` is a hard dependency of `rcdk` (already an Imports of
-## patliR), so it is always installed alongside it -- listed here in
-## Suggests anyway (CRAN policy: a direct `pkg::fun()` call needs its
-## package declared, even if guaranteed present transitively) and guarded
-## with the same requireNamespace() pattern every other Suggests-gated
-## function in this package uses.
+## `fingerprint::fp.sim.matrix()` returns a plain N x N symmetric matrix
+## (diag = 1, no dimnames). `fingerprint` is a hard dependency of `rcdk`
+## (already an Imports) so it is always present, but it is still listed in
+## Suggests (a direct `pkg::fun()` call needs its package declared) and
+## requireNamespace()-guarded like every other Suggests-gated function here.
 
 #' Pairwise structural similarity between compounds
 #'
 #' @description
 #' Computes a molecular fingerprint (via `rcdk::get.fingerprint()`) for
 #' every compound and a pairwise similarity score (via
-#' `fingerprint::fp.sim.matrix()`) between every pair -- the kind of
-#' structural-similarity analysis behind Yıldırım et al. 2007's figures
-#' explaining drug pairs that share a target (see `patliR_manual.md`,
-#' family `network_*`). Purely structural (2D fingerprints); says nothing
+#' `fingerprint::fp.sim.matrix()`) between every pair. Purely structural
+#' (2D fingerprints); says nothing
 #' about shared targets or biological activity on its own -- pair this
 #' with [network_degeneracy()] (pathway overlap) or `network_edges`
 #' (shared targets) for that.

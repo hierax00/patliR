@@ -20,6 +20,7 @@ NULL
 #' [prep_structure2d()] first.
 #'
 #' @inheritParams compounds
+#' @inheritParams plot_save_params
 #' @param compound_ids Character vector of `compounds(proj)$id`, or `NULL`
 #'   (default) for every compound with a successful (`generated_ok`)
 #'   `structure2d_log` entry.

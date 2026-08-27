@@ -20,8 +20,8 @@ over nodes (see \code{.network_find_3node_motifs()}, internal) -- real
 layered graphs can have a handful of hub nodes (compounds with a large
 derived \code{compound -> pathway} fan-out, see \code{\link[=network_enrich]{network_enrich()}}'s
 \code{simplify_go} for reducing that fan-out at the source) whose
-\code{choose(degree, 2)} pair count dominates total runtime (confirmed:
-~10 min on a real 2838-node/48575-edge Chilcuague network, 2026-08-25).
+\code{choose(degree, 2)} pair count dominates total runtime (on the order
+of ~10 min on a ~2800-node/~48000-edge network).
 \code{n_cores > 1} splits the node loop across a \code{parallel::makePSOCKcluster()}
 cluster (works identically on Windows/macOS/Linux, unlike
 fork-based \code{mclapply()}) -- worth it mainly when a handful of nodes have
@@ -63,7 +63,7 @@ P both because target T (which X also hits) participates in P.
 \section{Feedback loops are structurally impossible in this graph, by construction}{
 
 Every edge in \code{.network_layered_graph()} points strictly "downstream"
-(compound -> target -> {pathway, disease}, plus same-direction derived
+(compound -> target -> pathway/disease, plus same-direction derived
 shortcuts) -- there is no edge type that ever points back toward a
 compound or from a pathway/disease back to a target. A directed 3-cycle
 therefore cannot exist in the current layered graph, so

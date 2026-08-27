@@ -16,6 +16,7 @@ NULL
 #' scoring pairs are labeled by compound name.
 #'
 #' @inheritParams network_build
+#' @inheritParams plot_save_params
 #' @param disease Character EFO ID, or `NULL` (default) for every disease
 #'   present (faceted).
 #' @param top_n Integer, default `10`. Number of highest-`synergy_score`

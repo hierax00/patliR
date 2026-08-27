@@ -1,23 +1,11 @@
 #' @include AllGenerics.R internal.R
 NULL
 
-## network_build() -- first function of the network_* family (patliR_manual.md,
-## section 6). Design decision made here that every later network_* function
-## should follow:
-##
-## The project's core architecture principle is "CSV is the durable source of
-## truth, any R-specific binary format is a disposable, regenerable cache"
-## (see patliR_manual.md, section 0, and refdb_rebuild_cache() for the
-## existing precedent). An igraph object does not fit in a data.frame/CSV, so
-## network_build() does NOT store igraph objects in patliRResults() -- it
-## writes a plain long-format edge list (`network_edges`, one row per
-## compound-target edge per condition) as the real output, and separately
-## caches one igraph object per condition under cacheDir(proj) purely for
-## performance. `.network_graph()` (internal, below) is how every other
-## network_* function will get an actual igraph object to compute on: it
-## reads the cache if present, and transparently rebuilds it from
-## `network_edges` (CSV or patliRResults()) if the cache is missing -- so
-## deleting `.patliR_cache/` is always safe, exactly like refdb's cache.
+## An igraph object does not fit in a CSV, so the real output is a plain
+## long-format edge list (`network_edges`); one igraph per condition is
+## cached under cacheDir(proj) for speed. `.network_graph()` (below) reads
+## that cache or rebuilds it from `network_edges`, so deleting the cache is
+## always safe. See DESIGN.md.
 
 #' Build a compound-target network for each condition (network pharmacology
 #' core)
@@ -29,22 +17,14 @@ NULL
 #' [patliRResults()]. Only compounds actually present (`1`) in a condition,
 #' and their targets, go into that condition's graph.
 #'
-#' This is the foundation the rest of the `network_*` family
-#' (`network_centrality()`, `network_hub_penalty()`,
-#' `network_module_robustness()`, etc. -- see `patliR_manual.md`, section 6)
-#' will build on; none of those are implemented yet.
+#' This is the foundation the rest of the `network_*` family builds on.
 #'
-#' @section Why `target_source = "imported"` is the default, not `"consensus"`:
-#' The design in `patliR_manual.md` lists `target_source = c("consensus",
-#' "bipartite", "imported")`, `"consensus"` first. `targets_consensus()` and
-#' `targets_bipartite()` are not implemented yet (see `patliR_manual.md`,
-#' section 4), so defaulting to either would fail on essentially every real
-#' call -- `"imported"` (from [targets_import()]/[targets_import_batch()])
-#' is the only source that actually exists right now, so it is the default
-#' here, and the other two raise a clear "not implemented yet" error if
-#' requested (same pattern as `"coconut"` in [refdb_build()]). Once
-#' `targets_consensus()`/`targets_bipartite()` ship, wire them in here rather
-#' than changing this default silently.
+#' @section Why `target_source = "imported"` is the default:
+#' `targets_consensus()` and `targets_bipartite()` are not implemented yet
+#' (see `ROADMAP.md`), so `"imported"` (from
+#' [targets_import()]/[targets_import_batch()]) is the only source that
+#' exists; the other two raise a clear "not implemented yet" error if
+#' requested.
 #'
 #' @section Edges are enriched with disease association when available:
 #' If [targets_disease_filter()] has already been run, each edge also gets a
@@ -102,7 +82,7 @@ network_build <- function(proj, condition = NULL,
   if (target_source != "imported") {
     cli::cli_abort(c(
       "{.val {target_source}} is not implemented yet in this version of patliR.",
-      "i" = "Only {.val imported} (from {.fn targets_import}/{.fn targets_import_batch}) is available until {.code targets_{target_source}()} ships -- see {.file patliR_manual.md}, section 4."
+      "i" = "Only {.val imported} (from {.fn targets_import}/{.fn targets_import_batch}) is available until {.code targets_{target_source}()} ships -- see {.file ROADMAP.md}."
     ))
   }
   if (!is.null(min_score) && (!is.numeric(min_score) || length(min_score) != 1 || min_score < 0 || min_score > 1)) {
@@ -153,16 +133,10 @@ network_build <- function(proj, condition = NULL,
     names(edges)[names(edges) == "probability"] <- "weight"
     rownames(edges) <- NULL
 
-    ## Defensive dedup: a "network edge" is conceptually one row per
-    ## (compound_id, uniprot_id) pair -- but targets_imported() has no such
-    ## uniqueness guarantee (e.g. the same platform export re-imported, or
-    ## two different source files both naming the same target for the same
-    ## compound). A duplicate here would silently create a multi-edge in
-    ## the graph, inflating a target's igraph::degree() beyond the number
-    ## of *distinct* compounds that actually hit it -- exactly the kind of
-    ## discrepancy network_hub_penalty()'s degree_raw <= n_compounds_total
-    ## invariant is supposed to make impossible. Keep the highest-weight
-    ## row per pair (the most confident prediction) and log the rest.
+    ## targets_imported has no (compound_id, uniprot_id) uniqueness
+    ## guarantee; a duplicate would become a multi-edge and inflate a
+    ## target's degree beyond the number of distinct compounds hitting it.
+    ## Keep the highest-weight row per pair, log the rest.
     dup_key <- paste(edges$compound_id, edges$uniprot_id)
     if (nrow(edges) > 0 && anyDuplicated(dup_key) > 0) {
       ord <- order(dup_key, -edges$weight)

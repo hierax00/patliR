@@ -1,38 +1,14 @@
 #' @include AllGenerics.R internal.R network_enrich.R
 NULL
 
-## plot_gochord() -- migrated 2026-08-16 to the real GOplot::GOChord()
-## ribbon geometry (real code confirmed against GOplot's own source,
-## github.com/cran/GOplot -- specifically `R/GOCluster.R`, not guessed
-## from its docs alone, since the reference cookbook's own usage of the
-## `logFC` column turned out not to transfer cleanly, see below). Replaces
-## the straight-line circular bipartite substitute this function shipped
-## with before.
-##
-## Deliberately NOT ported from the cookbook as-is: the cookbook's own
-## GOChord call appends a `logFC` column computed as
-## `seq(-1, 1, length.out = nrow(chord_matrix))` -- a purely order-based
-## placeholder with no connection to real gene-level effect size or
-## direction (network pharmacology target prediction has no expression
-## fold-change to plot; that `logFC` column exists in the cookbook's
-## example only because its upstream data happened to be a differential
-## expression study). Copying that placeholder into patliR would render a
-## colored inner ring that *looks* like real per-gene magnitude/direction
-## data but is not -- so this omits the `logFC` column entirely and calls
-## `GOplot::GOChord(chord_matrix, nlfc = 0, ...)` instead (confirmed
-## against GOChord()'s own source: a `data` matrix with no column named
-## "logFC" is handled correctly, but `nlfc` must be set to `0` explicitly
-## or GOChord() tries to read a `logFC` column that is not there and
-## errors -- its own default, `nlfc = 1`, assumes one is present).
-##
-## GOChord() is itself built on ggplot2 internally (confirmed against its
-## source -- it returns a real `ggplot` object, not a base/grid plot like
-## pheatmap()) -- so, unlike plot_heatmap()'s migration, this function
-## keeps the full existing `engine = c("static", "ggiraph")` contract:
-## `ggiraph::girafe(ggobj = p)` renders any ggplot object, even one built
-## entirely from non-"_interactive" geoms (no hover tooltips on individual
-## ribbons/genes -- GOChord()'s internals are not ours to rewrite for
-## that -- but the same static picture, wrapped as a girafe widget).
+## Uses GOplot::GOChord() for the ribbon geometry. Called with `nlfc = 0`
+## and no `logFC` column: target prediction has no expression fold-change,
+## and a synthetic one would render a colored ring that looks like real
+## per-gene magnitude but is not. GOChord()'s default `nlfc = 1` errors
+## when no `logFC` column is present, so `0` must be passed explicitly.
+## GOChord() returns a real ggplot object, so the `engine = c("static",
+## "ggiraph")` contract is kept (girafe wraps the static picture; no
+## per-ribbon tooltips).
 
 #' Circular gene-pathway ribbon chord diagram (real `GOplot::GOChord()`)
 #'
@@ -46,14 +22,12 @@ NULL
 #'
 #' @section No `logFC` ring:
 #' `GOChord()` optionally colors an inner ring by a `logFC` column. This
-#' package has no real per-gene fold-change/effect-size to put there
-#' (target prediction, not differential expression) -- see the design note
-#' at the top of `R/plot_gochord.R` for why the reference cookbook's own
-#' placeholder (`seq(-1, 1, ...)`, order-based, not real data) was
-#' deliberately not copied. This function always calls `GOChord(...,
-#' nlfc = 0)`: ribbons only, no inner ring, no `logFC` legend.
+#' package has no real per-gene fold-change to put there (target
+#' prediction, not differential expression), so this function always calls
+#' `GOChord(..., nlfc = 0)`: ribbons only, no inner ring, no `logFC` legend.
 #'
 #' @inheritParams network_build
+#' @inheritParams plot_save_params
 #' @param db Passed through to filter `network_enrichment$db` if more than
 #'   one enrichment database was run for `condition` (e.g. `"go"` vs.
 #'   `"reactome"`); `NULL` (default) uses whichever is present, and errors

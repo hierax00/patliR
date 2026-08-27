@@ -29,8 +29,8 @@ enrichment results; otherwise pass it explicitly (same rule
 inherently per-condition, pooling them is not meaningful).}
 
 \item{gene_score}{\code{"max_weight"} (default -- the highest import
-probability among compounds hitting that target in \code{condition},
-reproducing Juanjo's own \code{Max_Prob}), \code{"mean_weight"}, or
+probability among compounds hitting that target in \code{condition}),
+\code{"mean_weight"}, or
 \code{"n_compounds"} (count of distinct compounds hitting that target --
 not on a 0-1 scale, \code{limit} is adjusted automatically, see below).}
 
@@ -40,14 +40,12 @@ not on a 0-1 scale, \code{limit} is adjusted automatically, see below).}
 for \code{condition} (lowest \code{p.adjust}). If given, every ID must already
 appear in \code{condition}'s \code{db = "kegg"} \code{\link[=network_enrich]{network_enrich()}} results.}
 
-\item{top_n_pathways}{Integer, default \code{10} (same default Juanjo's own
-analysis used). Ignored if \code{pathway_id} is given.}
+\item{top_n_pathways}{Integer, default \code{10}. Ignored if \code{pathway_id} is given.}
 
 \item{low, mid, high}{Colors passed straight to \code{pathview::pathview()}'s
 \code{low}/\code{mid}/\code{high} (each internally wrapped as \code{list(gene = ...)},
-\code{cpd.data} is never used here). Default \code{"white"}/\code{"yellow"}/\code{"red"}
--- Juanjo's own choice, not \code{pathview}'s own default
-(\code{"green"}/\code{"gray"}/\code{"red"}).}
+\code{cpd.data} is never used here). Default \code{"white"}/\code{"yellow"}/\code{"red"},
+not \code{pathview}'s own default (\code{"green"}/\code{"gray"}/\code{"red"}).}
 
 \item{out_dir}{Directory the rendered PNGs are written to. Defaults to
 \code{file.path(projectDir(proj), "plots", "kegg_pathview")}.}
@@ -64,8 +62,7 @@ to \code{results/kegg_pathview_log.csv}. A pathway that fails to render
 (e.g. \code{pathview} cannot reach KEGG, or the pathway has no mappable
 nodes) gets \code{ok = FALSE} and a \code{message}, is logged
 (\code{"network_pathview_render_failed"}), and does \strong{not} stop the other
-pathways in the same call from rendering -- same \code{tryCatch}-per-item
-resilience Juanjo's own loop already used.
+pathways in the same call from rendering.
 }
 \description{
 For one \code{condition} already enriched against KEGG by \code{\link[=network_enrich]{network_enrich()}}
@@ -73,10 +70,7 @@ For one \code{condition} already enriched against KEGG by \code{\link[=network_e
 \code{top_n_pathways} most significant pathways (or an explicit
 \code{pathway_id} vector), using \code{\link[pathview:pathview]{pathview::pathview()}}. Each pathway's
 target/gene nodes are colored by \code{gene_score} -- a per-Entrez-ID summary
-of that condition's own \code{\link[=network_build]{network_build()}} compound-target edges, the
-same role Juanjo's hand-built \code{Max_Prob} played in his own pre-\code{patliR}
-analysis (see the file header comment for the real, verified prior
-code this reproduces).
+of that condition's own \code{\link[=network_build]{network_build()}} compound-target edges.
 }
 \section{Why this needs its own gene-to-Entrez mapping, not \code{geneID} off \code{network_enrichment}}{
 
@@ -102,8 +96,8 @@ written to disk and logged), not \verb{plot_*}'s (input \code{proj} -> returned
 \section{Heavy, optional dependencies}{
 
 Needs \code{pathview} (Bioconductor, \strong{not} installed by default -- add via
-\code{BiocManager::install("pathview")}, see \code{TESTING_GUIDE.Rmd}, section 0)
-plus \code{clusterProfiler}/\code{org.Hs.eg.db} (already needed by
+\code{BiocManager::install("pathview")}) plus \code{clusterProfiler}/\code{org.Hs.eg.db}
+(already needed by
 \code{\link[=network_enrich]{network_enrich()}}). \code{pathview} downloads each pathway's KGML/PNG from
 KEGG's REST API on first use (needs internet, like \code{db = "kegg"} in
 \code{\link[=network_enrich]{network_enrich()}} itself) and caches them under \code{kegg_dir} afterwards

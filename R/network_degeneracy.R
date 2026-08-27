@@ -1,21 +1,12 @@
 #' @include AllGenerics.R internal.R network_build.R network_layers.R
 NULL
 
-## network_degeneracy() -- Option A confirmed with Uriel (2026-07-23, chat):
-## pathway-based grouping, built on top of network_enrich()'s output, rather
-## than a direct target-set Jaccard. "Degeneracy" here is the systems-biology
-## sense (Edelman & Gally, 2001, PNAS 98(24), 13763-8): structurally
-## different elements that can perform the same/similar function. Applied to
-## a compound-target network, two compounds are "degenerate" with respect to
-## each other when they act on largely DIFFERENT targets (low structural
-## overlap) but those targets converge on largely the SAME enriched pathways
-## (high functional overlap) -- i.e. redundant routes to the same biological
-## effect. This is a genuinely different question from network_hub_penalty()
-## (how promiscuous is one target) or network_centrality() (how important is
-## one node): degeneracy is a *pairwise compound* property, and it only
-## exists once the pathway layer (network_enrich()) is available -- unlike
-## every other network_* function so far, this one has a hard dependency on
-## another network_* function's output, not just on network_build().
+## "Degeneracy" in the systems-biology sense (Edelman & Gally, 2001, PNAS
+## 98(24), 13763-8): two compounds are degenerate when they act on largely
+## DIFFERENT targets but those targets converge on largely the SAME
+## enriched pathways -- redundant routes to the same effect. A pairwise
+## compound property. Unlike the rest of network_*, this has a hard
+## dependency on network_enrich()'s output, not just network_build().
 
 #' Pairwise functional degeneracy between compounds (pathway-based)
 #'
@@ -63,8 +54,8 @@ NULL
 #'   target set makes GO's pathway_jaccard uninformatively close to 1 for
 #'   nearly every pair -- GO's hierarchical redundancy means most compounds
 #'   end up sharing at least some very generic term, which flattens
-#'   `degeneracy_score` toward "everything looks degenerate" (confirmed
-#'   against real Chilcuague data, 2026-08-25). `network_enrich()`'s own
+#'   `degeneracy_score` toward "everything looks degenerate".
+#'   `network_enrich()`'s own
 #'   `simplify_go` addresses the same root cause upstream (fewer, less
 #'   redundant GO terms in the first place); this argument is the
 #'   complementary downstream lever, for when you want KEGG's coarser
@@ -122,7 +113,7 @@ network_degeneracy <- function(proj, condition = NULL, pathway_db = NULL) {
   if (!requireNamespace("clusterProfiler", quietly = TRUE) || !requireNamespace("org.Hs.eg.db", quietly = TRUE)) {
     cli::cli_abort(c(
       "{.fn network_degeneracy} needs {.pkg clusterProfiler} and {.pkg org.Hs.eg.db} (same UniProt -> Entrez mapping as {.fn network_enrich}), not installed.",
-      "i" = "See {.file TESTING_GUIDE.Rmd}, section 0, for the {.fn BiocManager::install} chunk."
+      "i" = "Install them with {.code BiocManager::install(c(\"clusterProfiler\", \"org.Hs.eg.db\"))}."
     ))
   }
 

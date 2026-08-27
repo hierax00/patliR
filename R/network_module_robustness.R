@@ -1,13 +1,10 @@
 #' @include AllGenerics.R internal.R network_build.R
 NULL
 
-## network_module_robustness() -- module detection (dbscan::hdbscan()) +
-## targeted-attack percolation (Schneider et al. 2011 R-index) per module,
-## on network_build()'s per-condition graph. Verified dbscan::hdbscan()'s
-## real signature against CRAN docs before writing this (2026-07-23):
-## hdbscan(x, minPts, ...) where x is a numeric matrix or a dist object;
-## there is no default for minPts (unlike some clustering functions), so it
-## is exposed here as `min_module_size` rather than silently hardcoded.
+## Module detection (dbscan::hdbscan()) + targeted-attack percolation
+## (Schneider et al. 2011 R-index) per module, on network_build()'s
+## per-condition graph. hdbscan() has no default for minPts, so it is
+## exposed here as `min_module_size` rather than hardcoded.
 
 #' Detect network modules and measure each module's robustness to targeted
 #' node removal
@@ -24,54 +21,26 @@ NULL
 #' not random failure), tracking what fraction of the module stays in its
 #' largest connected component at each step. Summarizes that fragmentation
 #' curve as the **R-index** (Schneider, C.M. et al. 2011, *PNAS* 108(10),
-#' 3838-41 -- see `patliR_manual.md`, section 9, where `plot_robustness()`
-#' will visualize the curve this function computes): the mean largest-
+#' 3838-41; `plot_robustness()` visualizes this curve): the mean largest-
 #' component fraction across all removal steps, from `0` (module collapses
-#' immediately) to `1` (module stays fully connected however much you
-#' remove -- only possible for a single-node module).
+#' immediately) to `1` (stays fully connected -- only possible for a
+#' single-node module).
 #'
-#' @section HDBSCAN "noise" points get their own module, tagged as such (2026-08-14):
-#' HDBSCAN labels points that do not belong to any dense cluster as cluster
-#' `0` ("noise"). Earlier versions **excluded** these nodes entirely from
-#' module-level robustness output. On real, messier compound-target graphs
-#' this silently dropped a meaningful fraction of nodes from every
-#' downstream consumer of [patliRResults()]`(proj, "network_module_robustness")`
-#' with no trace beyond a log line -- a node that never clustered cleanly is
-#' not the same thing as a node that does not exist, and hiding it entirely
-#' made "how many nodes does this condition actually cover" silently wrong.
-#' Now every noise node in a component is collected into its own module
-#' (`module_type = "noise"` in the summary table, vs. `"cluster"` for
-#' HDBSCAN's real clusters and the small-graph/no-clusters fallback module),
-#' and its robustness is still computed the same way as any other module --
-#' a percolation curve over a scattered set of nodes is a legitimate (if
-#' less structurally meaningful) thing to measure, and consistently
-#' including it beats a second special case. Components that produce no
-#' noise at all simply have no `"noise"` module row. How many nodes were
-#' noise, and which, is always logged either way.
+#' @section HDBSCAN "noise" points get their own module:
+#' Points HDBSCAN does not assign to a dense cluster (label `0`, "noise")
+#' are collected into their own module (`module_type = "noise"`, vs.
+#' `"cluster"`) rather than dropped, so the covered-node count stays
+#' correct. Their robustness is computed the same way as any other module.
 #'
-#' @section Small graphs may not have real modules:
-#' If a connected component has fewer than `2 * min_module_size` nodes,
-#' HDBSCAN is not run on it at all (not enough points to distinguish
-#' "cluster" from "noise" meaningfully) -- that **component** is treated as
-#' a single module instead, and this is logged. This matters in practice:
-#' `patliR`'s own bundled example data produces graphs this small.
-#'
-#' @section Disconnected graphs are clustered per connected component:
-#' Real compound-target networks (unlike `patliR`'s small bundled example)
-#' are frequently **disconnected** -- a target reachable only through
-#' compounds absent from the current condition, or an isolated
-#' compound-target pair with no path to the rest of the graph. HDBSCAN
-#' requires a distance matrix, and `igraph::distances()` returns `Inf` for
-#' any pair of nodes in different components; `dbscan::hdbscan()` does not
-#' validate its input for non-finite values and crashes on it (confirmed
-#' against its own source, 2026-08-11 -- not documented, just reproduced).
-#' Rather than special-casing `Inf`, `.network_detect_modules()` first
-#' splits the graph into its connected components (`igraph::components()`)
-#' and runs the small-graph fallback and/or HDBSCAN **within each component
-#' separately** -- cross-component node pairs were never meaningfully
-#' clusterable together anyway, since no path connects them. Module IDs
-#' (`M1`, `M2`, ...) are assigned sequentially across all components, and
-#' the log message reports each component's outcome.
+#' @section Small and disconnected graphs:
+#' A connected component with fewer than `2 * min_module_size` nodes is
+#' treated as a single module (HDBSCAN is not run on it), logged. Real
+#' compound-target networks are frequently disconnected;
+#' `igraph::distances()` returns `Inf` across components and
+#' `dbscan::hdbscan()` crashes on non-finite input, so
+#' `.network_detect_modules()` splits the graph into connected components
+#' (`igraph::components()`) and clusters within each separately. Module IDs
+#' (`M1`, `M2`, ...) are assigned sequentially across all components.
 #'
 #' @inheritParams network_build
 #' @param clustering Only `"hdbscan"` is implemented.
@@ -316,12 +285,11 @@ network_module_robustness <- function(proj, condition = NULL,
 #' `s(0) = 1` state. `curve[1] == 1` (the untouched graph) is still kept in
 #' the returned `curve` for plotting (so [plot_robustness()] can draw the
 #' curve starting from "nothing removed yet"), but must be dropped before
-#' averaging into `r_index` -- averaging it in was a real bug (found
-#' 2026-08-25): it systematically inflates `r_index`, worst for exactly the
-#' small modules this package's networks typically have after HDBSCAN
-#' splits a component (e.g. a 1-node module used to report `r_index = 0.5`
-#' via `mean(c(1, 0))`, when Schneider's own definition for `N = 1` is
-#' `s(1) = 0`).
+#' averaging into `r_index` -- averaging it in systematically inflates
+#' `r_index`, worst for the small modules this package's networks typically
+#' have after HDBSCAN splits a component (a 1-node module would report
+#' `r_index = 0.5` via `mean(c(1, 0))`, when Schneider's definition for
+#' `N = 1` is `s(1) = 0`).
 #' @return `list(curve = numeric vector, length vcount(g)+1, curve[1] == 1;
 #'   r_index = mean(curve[-1]))`.
 #' @keywords internal

@@ -1,17 +1,10 @@
 #' @include AllGenerics.R internal.R patliR_project.R
 NULL
 
-## patliR_export_llm() -- Uriel asked directly in chat for "un export del
-## objeto que permita subírselo a un LLM". Deliberately generic over
-## patliRResults() (loops over whatever is actually present) rather than
-## hardcoding a bespoke summary per family -- keeps this function correct
-## automatically as new network_*/bias_*/etc. results get added, at the
-## cost of a plainer, less curated narrative than a bespoke report would
-## give. That curated narrative is exactly what the still-unimplemented
-## report_generate() and "narrador" module (both in patliR_manual.md,
-## "Planeado / no implementado") are for -- this function is a raw,
-## complete data dump for an LLM to read and reason over itself, not a
-## pre-written summary.
+## Loops over whatever patliRResults() currently holds rather than a fixed
+## per-family summary, so it stays correct as new result types are added.
+## A raw data dump, not a curated narrative (that is report_generate()'s
+## job -- see ROADMAP.md).
 
 #' Export a project's full state as plain text, for an LLM to read
 #'

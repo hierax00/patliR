@@ -11,7 +11,7 @@ test_that(".fetch_external() does not crash when the underlying error message co
   ## `{`/`}` -- cli::cli_warn() treats every bullet as a glue template, so
   ## that fragment made it try to parse() the JSON as R code and threw a
   ## confusing meta-error that fully masked the real "could not reach the
-  ## resource" warning. See DEVLOG.md.
+  ## resource" warning.
   cache_dir <- tempfile("patliR_test_cache_")
   fetch_fun <- function() stop('bad response: {"class_results": ["a", "b"]}')
 

@@ -11,8 +11,7 @@ test_that("tox_local() flags PAINS alerts and never adds a hard_cutoff-style pas
 })
 
 test_that("tox_local() re-running on a subset of compounds does not wipe out the rest of the table", {
-  ## Same regression class as adme_local() -- see DEVLOG.md. tox_local()
-  ## has multiple rows per compound (one per alert); the upsert must
+  ## tox_local() has multiple rows per compound (one per alert); the upsert must
   ## replace all of a re-run compound's rows, not just one, while leaving
   ## every other compound's rows untouched.
   proj <- .test_project()
@@ -29,7 +28,7 @@ test_that("tox_local() re-running on a subset of compounds does not wipe out the
 
 test_that("tox_local() flags Brenk alerts now that the full 105-alert set is bundled", {
   ## Was: "tox_local() errors clearly on 'brenk' since it is not bundled
-  ## yet" -- stale since 2026-08-11 (see DEVLOG.md), when the complete
+  ## yet" -- stale since 2026-08-11, when the complete
   ## Brenk set (inst/extdata/brenk_smarts.csv, 105 alerts, cross-validated
   ## against RDKit's own compiled FilterCatalogs.BRENK) got bundled and
   ## `alert_sets = c("pains", "brenk")` became the default. Rewritten to
@@ -121,4 +120,9 @@ test_that("tox_report() always returns the fixed disclaimer note, regardless of 
   report <- tox_report(proj)
   expect_true(all(c("compound_id", "n_pains_alerts", "n_imported_properties") %in% names(report$summary)))
   expect_identical(report$note, report_empty$note)
+
+  ## the summary is persisted as plain CSV, like every other family's output
+  csv_path <- file.path(projectDir(proj), "results", "tox_report.csv")
+  expect_true(file.exists(csv_path))
+  expect_equal(nrow(utils::read.csv(csv_path)), nrow(report$summary))
 })

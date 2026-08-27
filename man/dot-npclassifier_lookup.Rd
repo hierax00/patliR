@@ -13,24 +13,15 @@
 \description{
 Look up a compound's NPClassifier pathway/superclass/class by SMILES
 }
-\section{Why this throttles and retries (2026-08-11)}{
+\section{Why this throttles and retries}{
 
-On real data, \code{compounds_classify()} calls this once per compound in a
-tight \code{lapply()} (tens to low hundreds of back-to-back requests). Tested
-directly against the live endpoint: isolated requests -- including ones
-with stereochemistry (\code{@}, \code{@}) and percent-escaped characters -- always
-return valid JSON, so this is not a SMILES-encoding bug. But real
-natural-product runs (74/74 compounds, EFLO-S dataset) got a \verb{200 OK}
-whose body was HTML instead of the documented JSON, for essentially
-every compound. That pattern -- works in isolation, fails under volume --
-is the signature of a rate-limit or anti-bot response returned with a
-success status rather than \code{429}/\code{503} (so httr2's default transient-
-response detection, which only looks at status code, would never catch
-it). NPClassifier/GNPS2 publish no documented rate limit, so there is no
-official number to throttle to; one request per second is a conservative,
-polite default. \code{req_throttle()}'s token bucket is shared across calls to
-the same host within one R session, so this applies across the whole
-\code{compounds_classify()} loop, not just within one call.
+\code{compounds_classify()} calls this once per compound in a tight loop.
+Under that volume NPClassifier starts returning \verb{200 OK} with an HTML
+body instead of JSON -- an undocumented rate limit returned with a
+success status, so httr2's status-code-based transient detection never
+catches it. There is no published rate limit; one request per second is
+a conservative default. \code{req_throttle()}'s token bucket is shared per
+host per session, so it applies across the whole loop.
 }
 
 \keyword{internal}

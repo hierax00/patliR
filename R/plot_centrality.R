@@ -11,6 +11,7 @@ NULL
 #' than one is in scope.
 #'
 #' @inheritParams network_build
+#' @inheritParams plot_save_params
 #' @param measure Single measure to plot: `"degree"` (default),
 #'   `"betweenness"`, or `"hub_score"` -- must already be a column of
 #'   `patliRResults(proj, "network_centrality")`, i.e. requested in the

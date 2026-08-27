@@ -31,5 +31,4 @@ Initial public release. Core pipeline implemented and tested, pre-1.0.
   project's own reference database.
 - `patliR_export_llm()` — flat-text project export for LLM analysis.
 
-See [`patliR_manual.md`](patliR_manual.md) (section "Planeado / no
-implementado") for what's designed but not yet built.
+See [`ROADMAP.md`](ROADMAP.md) for what's designed but not yet built.

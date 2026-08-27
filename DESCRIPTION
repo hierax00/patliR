@@ -60,7 +60,8 @@ Suggests:
     pathview,
     shiny,
     DT,
-    fingerprint
+    fingerprint,
+    ChemmineR
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 SystemRequirements: Java (>= 8) (required by rcdk / rJava for cheminformatics
@@ -100,6 +101,7 @@ Collate:
     'patliR-package.R'
     'patliR_project.R'
     'patliR_export_llm.R'
+    'plot-save-params.R'
     'plot_adme_upset.R'
     'plot_admet_radar.R'
     'plot_boiled_egg.R'

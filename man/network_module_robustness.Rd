@@ -57,59 +57,29 @@ degree after every removal -- the standard "malicious attack" strategy,
 not random failure), tracking what fraction of the module stays in its
 largest connected component at each step. Summarizes that fragmentation
 curve as the \strong{R-index} (Schneider, C.M. et al. 2011, \emph{PNAS} 108(10),
-3838-41 -- see \code{patliR_manual.md}, section 9, where \code{plot_robustness()}
-will visualize the curve this function computes): the mean largest-
+3838-41; \code{plot_robustness()} visualizes this curve): the mean largest-
 component fraction across all removal steps, from \code{0} (module collapses
-immediately) to \code{1} (module stays fully connected however much you
-remove -- only possible for a single-node module).
+immediately) to \code{1} (stays fully connected -- only possible for a
+single-node module).
 }
-\section{HDBSCAN "noise" points get their own module, tagged as such (2026-08-14)}{
+\section{HDBSCAN "noise" points get their own module}{
 
-HDBSCAN labels points that do not belong to any dense cluster as cluster
-\code{0} ("noise"). Earlier versions \strong{excluded} these nodes entirely from
-module-level robustness output. On real, messier compound-target graphs
-this silently dropped a meaningful fraction of nodes from every
-downstream consumer of \code{\link[=patliRResults]{patliRResults()}}\verb{(proj, "network_module_robustness")}
-with no trace beyond a log line -- a node that never clustered cleanly is
-not the same thing as a node that does not exist, and hiding it entirely
-made "how many nodes does this condition actually cover" silently wrong.
-Now every noise node in a component is collected into its own module
-(\code{module_type = "noise"} in the summary table, vs. \code{"cluster"} for
-HDBSCAN's real clusters and the small-graph/no-clusters fallback module),
-and its robustness is still computed the same way as any other module --
-a percolation curve over a scattered set of nodes is a legitimate (if
-less structurally meaningful) thing to measure, and consistently
-including it beats a second special case. Components that produce no
-noise at all simply have no \code{"noise"} module row. How many nodes were
-noise, and which, is always logged either way.
+Points HDBSCAN does not assign to a dense cluster (label \code{0}, "noise")
+are collected into their own module (\code{module_type = "noise"}, vs.
+\code{"cluster"}) rather than dropped, so the covered-node count stays
+correct. Their robustness is computed the same way as any other module.
 }
 
-\section{Small graphs may not have real modules}{
+\section{Small and disconnected graphs}{
 
-If a connected component has fewer than \code{2 * min_module_size} nodes,
-HDBSCAN is not run on it at all (not enough points to distinguish
-"cluster" from "noise" meaningfully) -- that \strong{component} is treated as
-a single module instead, and this is logged. This matters in practice:
-\code{patliR}'s own bundled example data produces graphs this small.
-}
-
-\section{Disconnected graphs are clustered per connected component}{
-
-Real compound-target networks (unlike \code{patliR}'s small bundled example)
-are frequently \strong{disconnected} -- a target reachable only through
-compounds absent from the current condition, or an isolated
-compound-target pair with no path to the rest of the graph. HDBSCAN
-requires a distance matrix, and \code{igraph::distances()} returns \code{Inf} for
-any pair of nodes in different components; \code{dbscan::hdbscan()} does not
-validate its input for non-finite values and crashes on it (confirmed
-against its own source, 2026-08-11 -- not documented, just reproduced).
-Rather than special-casing \code{Inf}, \code{.network_detect_modules()} first
-splits the graph into its connected components (\code{igraph::components()})
-and runs the small-graph fallback and/or HDBSCAN \strong{within each component
-separately} -- cross-component node pairs were never meaningfully
-clusterable together anyway, since no path connects them. Module IDs
-(\code{M1}, \code{M2}, ...) are assigned sequentially across all components, and
-the log message reports each component's outcome.
+A connected component with fewer than \code{2 * min_module_size} nodes is
+treated as a single module (HDBSCAN is not run on it), logged. Real
+compound-target networks are frequently disconnected;
+\code{igraph::distances()} returns \code{Inf} across components and
+\code{dbscan::hdbscan()} crashes on non-finite input, so
+\code{.network_detect_modules()} splits the graph into connected components
+(\code{igraph::components()}) and clusters within each separately. Module IDs
+(\code{M1}, \code{M2}, ...) are assigned sequentially across all components.
 }
 
 \examples{

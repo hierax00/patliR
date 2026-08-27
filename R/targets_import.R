@@ -6,18 +6,14 @@ NULL
 #' @description
 #' Imports a CSV exported from a target-prediction platform
 #' (SwissTargetPrediction, SuperPred, ...). `patliR` does not run its own
-#' target-prediction model in v1.0 (a proper implementation would need to
-#' replicate ChEMBL's own curation to be trustworthy -- see
-#' `patliR_manual.md`, section 4) -- you run the platform yourself, download
-#' its export, and this function reconciles it against [compounds()].
+#' target-prediction model (see `ROADMAP.md`) -- you run the platform
+#' yourself, download its export, and this function reconciles it against
+#' [compounds()].
 #'
 #' Most of these platforms only accept one compound per run, so their
 #' natural export convention is one file per compound. The default
-#' (`id_from = "filename"`) expects files named exactly `Targets<pubchem_id>.
-#' csv` (no separator, e.g. `Targets5280443.csv`) -- the same convention
-#' already used by the `network-pharmacology-cookbook` this package
-#' modernizes, kept as-is so migrating existing result files needs no
-#' renaming.
+#' (`id_from = "filename"`) expects files named exactly `Targets<pubchem_id>.csv`
+#' (no separator, e.g. `Targets5280443.csv`).
 #'
 #' @inheritParams compounds
 #' @param path Path to the CSV file to import.

@@ -21,8 +21,7 @@ derived-edge fan-out per compound than one that includes GO -- a
 direct, no-tuning alternative to \code{\link[=network_enrich]{network_enrich()}}'s own \code{simplify_go}
 for keeping \code{\link[=network_motifs]{network_motifs()}}/\code{\link[=network_degeneracy]{network_degeneracy()}}/
 \code{\link[=plot_network_layers]{plot_network_layers()}} from turning into an unreadable hairball on a
-real, densely-annotated target set (confirmed against real Chilcuague
-data, 2026-08-25).}
+densely-annotated target set.}
 }
 \value{
 \code{data.frame(uniprot_id, pathway_id)}, or \code{NULL} if

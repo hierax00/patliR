@@ -25,6 +25,7 @@ NULL
 #' pulling in `UpSetR`/`ComplexUpset`.
 #'
 #' @inheritParams network_build
+#' @inheritParams plot_save_params
 #' @param top_n Integer, default `15`. Only the `top_n` largest
 #'   intersections are shown -- with more than a handful of conditions the
 #'   number of possible combinations grows fast.

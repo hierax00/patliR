@@ -41,8 +41,7 @@ NULL
 #' **complete 105-alert set** from Brenk, R. et al. (2008), "Lessons
 #' Learnt from Assembling Screening Libraries for Drug Discovery for
 #' Neglected Diseases", *ChemMedChem* 3, 435-444,
-#' \doi{10.1002/cmdc.200700139}. Cross-validated two ways before bundling
-#' (see `patliR_manual.md` for the full provenance/reproduction script):
+#' \doi{10.1002/cmdc.200700139}. Cross-validated two ways before bundling:
 #' count and alert names confirmed
 #' against RDKit's own compiled `FilterCatalogs.BRENK` (105 entries), exact
 #' SMARTS text taken from PatWalters/rd_filters' `alert_collection.csv`
@@ -150,8 +149,7 @@ tox_local <- function(proj, compound_ids = NULL, alert_sets = c("pains", "brenk"
 #' The upstream WEHI PAINS list encodes each filter's original identity as a
 #' `regId` string like `"amino_acridine_A(1)"` -- base name plus a frequency
 #' count in parens. Our loader splits that into separate `name`/`frequency`
-#' columns (see the transcription script at the end of `TESTING_GUIDE.Rmd`),
-#' which drops the guarantee of uniqueness: the real bundled data has the
+#' columns, which drops the guarantee of uniqueness: the real bundled data has the
 #' base name `"amino_acridine_A"` twice, for two different SMARTS
 #' (frequencies 1 and 46). `smarts` is always unique (it is the actual
 #' structural identity); `(name, frequency)` together are also always
@@ -177,7 +175,7 @@ tox_local <- function(proj, compound_ids = NULL, alert_sets = c("pains", "brenk"
   if (!nzchar(path) || !file.exists(path)) {
     cli::cli_abort(c(
       "{.val inst/extdata/brenk_smarts.csv} not found in this {.pkg patliR} install.",
-      "i" = "Re-install the package, or see {.file TESTING_GUIDE.Rmd} to regenerate it.",
+      "i" = "Re-install the package to restore it.",
       "i" = "Use {.code tox_local(proj, alert_sets = \"pains\")} in the meantime."
     ))
   }

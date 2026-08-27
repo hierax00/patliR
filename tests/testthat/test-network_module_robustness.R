@@ -58,7 +58,7 @@ test_that("network_module_robustness() tags every module 'cluster'/'noise' and d
   expect_true(all(summary_tbl$module_type %in% c("cluster", "noise")))
   ## The core of the design change: every node in the condition's graph is
   ## accounted for by exactly one module's n_nodes, whether or not HDBSCAN
-  ## considered it "noise" -- see DEVLOG.md, 2026-08-14.
+  ## considered it "noise".
   expect_equal(sum(summary_tbl$n_nodes), igraph::vcount(g))
 })
 
@@ -80,7 +80,7 @@ test_that("network_module_robustness() writes a matching fragmentation curve", {
     ## Q = 1..N only -- the pre-removal Q = 0 row (n_removed == 0,
     ## fraction == 1, checked above) is kept in the curve for plotting but
     ## must be excluded from this average (see .network_percolate(),
-    ## internal, and DEVLOG.md 2026-08-25).
+    ## internal,).
     post_removal <- curve_m$largest_component_fraction[curve_m$n_removed > 0]
     expect_equal(mean(post_removal), summary_tbl$r_index[summary_tbl$module_id == m])
   }
@@ -120,7 +120,7 @@ test_that("network_module_robustness() rejects min_module_size < 2", {
 
 test_that(".network_detect_modules() clusters disconnected graphs per connected component instead of crashing (regression: real EFLO-S 'Index out of bounds' crash, 2026-08-11)", {
   testthat::skip_if_not_installed("dbscan")
-  ## Root cause (see DEVLOG.md, 2026-08-11): igraph::distances() returns
+  ## Root cause: igraph::distances() returns
   ## Inf for node pairs in different connected components, and
   ## dbscan::hdbscan() has no validation against non-finite input -- fed a
   ## whole-graph distance matrix with Inf entries, it crashed with an

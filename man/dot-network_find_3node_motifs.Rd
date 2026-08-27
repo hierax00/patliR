@@ -33,9 +33,8 @@ Per-node cost here is \code{choose(degree(a), 2)} (every pair of \code{a}'s
 out-neighbors) -- for most nodes this is tiny, but a handful of hub
 nodes (e.g. a compound with a large derived \code{compound -> pathway}
 fan-out) can have \code{degree} in the thousands, and \code{choose(2500, 2)} ~=
-3.1 million pairs dominates the whole search all by itself (confirmed
-against real Chilcuague data, 2026-08-25: ~10 min total, driven by
-exactly this -- see \code{\link[=network_enrich]{network_enrich()}}'s \code{simplify_go} for reducing
+3.1 million pairs dominates the whole search all by itself (~10 min
+total in practice -- see \code{\link[=network_enrich]{network_enrich()}}'s \code{simplify_go} for reducing
 that fan-out at the source instead). The per-node computation
 (\code{ff_worker}, defined below) is embarrassingly parallel -- nodes never
 share mutable state -- so \code{n_cores > 1} splits the node loop across a

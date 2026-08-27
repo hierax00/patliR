@@ -5,6 +5,8 @@
 .Ruserdata
 *.Rcheck/
 *.tar.gz
+check_out.txt
+Rplots.pdf
 
 # patliR runtime artifacts (regenerable from a fresh pipeline run)
 .patliR_cache/

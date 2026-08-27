@@ -1,27 +1,18 @@
 #' @include AllGenerics.R internal.R network_build.R
 NULL
 
-## Shared internal builder: the directed compound -> target -> {pathway,
-## disease} layered graph that gives network_motifs() (and, once feasible,
-## network_bowtie()) real directed-graph semantics instead of forcing a
-## bipartite-undirected reinterpretation. Confirmed with Uriel (2026-07-23,
-## chat) before building this: rather than fabricate a "proxy" motif/bowtie
-## definition on the undirected compound-target graph, build a genuinely
-## directed structure from data patliR already computes:
+## Shared internal builder for the directed layered graph that gives
+## network_motifs()/network_bowtie() real directed-graph semantics:
 ##
 ##   compound --acts on--> target --participates in--> pathway
 ##                              \--associated with-----> disease
 ##
-## Two "derived" edge kinds (compound_pathway_derived, compound_disease_
-## derived) are added too: if a compound reaches a pathway/disease only via
-## one of its targets, that transitive relationship is made an explicit
-## edge. This is not fabricating a new relationship -- it is exactly what
-## "this compound affects this pathway" already means once you have
-## compound->target->pathway -- but it is what turns a compound->target->
-## pathway chain into an actual feed-forward-loop-eligible triangle
-## (compound->target, compound->pathway, target->pathway), which is the
-## real point of building this layer: network_motifs() needs triangles to
-## find, not just a 3-hop chain.
+## Two "derived" edge kinds (compound_pathway_derived,
+## compound_disease_derived) are added: when a compound reaches a
+## pathway/disease only via one of its targets, that transitive edge is
+## made explicit. This turns a compound->target->pathway chain into a
+## feed-forward-loop-eligible triangle, which is what network_motifs()
+## needs to find.
 
 #' Build the directed compound-target-pathway-disease layered graph for one
 #' condition
@@ -128,8 +119,7 @@ NULL
 #'   direct, no-tuning alternative to [network_enrich()]'s own `simplify_go`
 #'   for keeping [network_motifs()]/[network_degeneracy()]/
 #'   [plot_network_layers()] from turning into an unreadable hairball on a
-#'   real, densely-annotated target set (confirmed against real Chilcuague
-#'   data, 2026-08-25).
+#'   densely-annotated target set.
 #' @return `data.frame(uniprot_id, pathway_id)`, or `NULL` if
 #'   `network_enrich()` was never run for this condition (with a matching
 #'   `db`, if `pathway_db` was given), or the mapping packages are not

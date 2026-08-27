@@ -70,8 +70,8 @@ Draws the same compound-target layout \code{\link[=plot_network_layers]{plot_net
 adds one extra curved edge per compound pair from
 \code{\link[=network_degeneracy]{network_degeneracy()}} whose \code{degeneracy_score >= min_degeneracy} --
 visualizing directly on the network which compounds converge on the same
-targets/pathways ("a qué efecto llegan", Uriel's own framing), rather
-than reading \code{degeneracy_score} off a table with no structural context.
+targets/pathways, rather than reading \code{degeneracy_score} off a table
+with no structural context.
 Degeneracy edges are drawn as a slight arc (not a straight line) purely
 so they are visually distinguishable from the underlying compound-target
 edges even when a pair of compounds happens to sit close together.

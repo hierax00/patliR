@@ -86,10 +86,9 @@ Force-directed layout of \code{.network_layered_graph()}'s underlying data
 targets, and (opt-in, see \code{layers}) whichever pathways/diseases those
 targets reach, colored by layer, node size scaled by degree, and only
 the highest-degree ("hub") nodes labeled -- the same visual language as
-Yildirim et al. 2007's drug-target network figure (\doi{10.1038/nbt1338},
-the reference Uriel shared, 2026-07-23): one big connected "hairball"
-plus many small disconnected components, categorical node colors with a
-fixed legend, hubs called out by name.
+Yildirim et al. 2007's drug-target network figure (\doi{10.1038/nbt1338}):
+one big connected "hairball" plus many small disconnected components,
+categorical node colors with a fixed legend, hubs called out by name.
 }
 \section{\code{condition = NULL} pools every built condition into one graph}{
 
@@ -108,12 +107,11 @@ for the original per-condition view.
 \section{Layers are opt-in beyond compound/target, on purpose}{
 
 Default \code{layers = c("compound", "target")}, \strong{not} \code{"pathway"} or
-\code{"disease"}. Two independent reasons, both confirmed against real
-renders (2026-07-23): \code{network_enrich()} can return hundreds of
-significant GO/Reactome terms, each attaching to its target as a
-degree-1 leaf, which turns the plot into an unreadable dandelion (see
-\code{max_pathways} for how to include pathways without that happening); and
-Yildirim et al.'s own reference figure does not draw disease genes as
+\code{"disease"}. Two independent reasons: \code{network_enrich()} can return
+hundreds of significant GO/Reactome terms, each attaching to its target
+as a degree-1 leaf, which turns the plot into an unreadable dandelion
+(see \code{max_pathways} for how to include pathways without that happening);
+and Yildirim et al.'s own reference figure does not draw disease genes as
 graph nodes at all -- they measure drug-target-to-disease-gene distance
 in the interactome as a \emph{separate} analysis (exactly what
 \code{\link[=network_proximity]{network_proximity()}} already does in this package), not as part of

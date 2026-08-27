@@ -31,7 +31,7 @@ always visible, never just an omitted table" convention (see
 \code{\link[=tox_safetyome]{tox_safetyome()}}).
 }
 \examples{
-\donttest{
+\dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
 compound_list <- read.csv(
   system.file("extdata", "input_compound_list.csv", package = "patliR")

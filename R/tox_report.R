@@ -31,8 +31,14 @@ NULL
 #'       not a pass/fail verdict. Review each flagged compound
 #'       individually."`).
 #'   }
-#'   Nothing is written to `proj` or to disk -- this is a read-only summary
-#'   over existing [patliRResults()].
+#'   `proj` itself is not modified (this function returns a `list`, not a
+#'   `proj`), but the `summary` table is written to `results/tox_report.csv`
+#'   inside [projectDir()] as a side effect -- the same plain-CSV
+#'   source-of-truth every other family produces, so the per-compound
+#'   toxicity/PAINS view survives the R session and is picked up by
+#'   [patliR_load()] (as `patliRResults(proj, "tox_report")`) and by
+#'   [patliR_export_llm()]. Nothing is written when there are no
+#'   [tox_local()]/[tox_safetyome()]/[tox_import()] results to summarize.
 #'
 #' @examples
 #' \donttest{
@@ -45,6 +51,8 @@ NULL
 #' report <- tox_report(proj)
 #' report$summary
 #' report$note
+#' # also on disk, as the durable per-compound view:
+#' read.csv(file.path(projectDir(proj), "results", "tox_report.csv"))
 #' }
 #'
 #' @export
@@ -127,5 +135,8 @@ tox_report <- function(proj) {
     )
   })
 
-  list(summary = do.call(rbind, rows), note = note)
+  summary <- do.call(rbind, rows)
+  .write_results_csv(proj, "tox_report", summary)
+
+  list(summary = summary, note = note)
 }

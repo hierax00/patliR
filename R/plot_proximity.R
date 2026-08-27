@@ -19,7 +19,7 @@ NULL
 #' One point per (`condition`, `compound_id`) row of
 #' `patliRResults(proj, "network_proximity")`, `z_score` on the y-axis,
 #' compounds sorted by `z_score`, with reference lines at `z = 0` and the
-#' usual `z = \eqn{\pm}1.96` two-sided 95% bands. Points are colored by
+#' usual \eqn{z = \pm 1.96} two-sided 95% bands. Points are colored by
 #' whether they cross that threshold -- a very negative `z_score` means
 #' the compound's targets sit significantly *closer* to the disease module
 #' than the degree-matched null model, i.e. topologically meaningful
@@ -33,6 +33,7 @@ NULL
 #' actually persisted.
 #'
 #' @inheritParams network_build
+#' @inheritParams plot_save_params
 #' @param disease Character EFO ID, or `NULL` (default) for every disease
 #'   present in `patliRResults(proj, "network_proximity")` (faceted).
 #' @param engine `"static"` (default) or `"ggiraph"`, save/out_dir/width/

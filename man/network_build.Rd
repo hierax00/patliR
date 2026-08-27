@@ -42,22 +42,15 @@ Builds one bipartite compound-target graph per condition column of
 \code{\link[=patliRResults]{patliRResults()}}. Only compounds actually present (\code{1}) in a condition,
 and their targets, go into that condition's graph.
 
-This is the foundation the rest of the \verb{network_*} family
-(\code{network_centrality()}, \code{network_hub_penalty()},
-\code{network_module_robustness()}, etc. -- see \code{patliR_manual.md}, section 6)
-will build on; none of those are implemented yet.
+This is the foundation the rest of the \verb{network_*} family builds on.
 }
-\section{Why \code{target_source = "imported"} is the default, not \code{"consensus"}}{
+\section{Why \code{target_source = "imported"} is the default}{
 
-The design in \code{patliR_manual.md} lists \code{target_source = c("consensus", "bipartite", "imported")}, \code{"consensus"} first. \code{targets_consensus()} and
-\code{targets_bipartite()} are not implemented yet (see \code{patliR_manual.md},
-section 4), so defaulting to either would fail on essentially every real
-call -- \code{"imported"} (from \code{\link[=targets_import]{targets_import()}}/\code{\link[=targets_import_batch]{targets_import_batch()}})
-is the only source that actually exists right now, so it is the default
-here, and the other two raise a clear "not implemented yet" error if
-requested (same pattern as \code{"coconut"} in \code{\link[=refdb_build]{refdb_build()}}). Once
-\code{targets_consensus()}/\code{targets_bipartite()} ship, wire them in here rather
-than changing this default silently.
+\code{targets_consensus()} and \code{targets_bipartite()} are not implemented yet
+(see \code{ROADMAP.md}), so \code{"imported"} (from
+\code{\link[=targets_import]{targets_import()}}/\code{\link[=targets_import_batch]{targets_import_batch()}}) is the only source that
+exists; the other two raise a clear "not implemented yet" error if
+requested.
 }
 
 \section{Edges are enriched with disease association when available}{

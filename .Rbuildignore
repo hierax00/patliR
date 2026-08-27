@@ -6,3 +6,5 @@
 ^LICENSE\.md$
 ^\.patliR_cache$
 ^test_results.*$
+^check_out\.txt$
+^.*\.Rcheck$

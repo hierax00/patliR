@@ -29,6 +29,18 @@ present in \code{patliRResults(proj, "network_proximity")} (faceted).}
 
 \item{engine}{\code{"static"} (default) or \code{"ggiraph"}, save/out_dir/width/
 height/dpi -- same as \code{\link[=plot_network_layers]{plot_network_layers()}}.}
+
+\item{save}{Logical, default \code{TRUE}. Whether to also write the plot to
+disk (in addition to returning it).}
+
+\item{out_dir}{Directory to write the file(s) to when \code{save = TRUE}.
+\code{NULL} (default) means \code{file.path(projectDir(proj), "plots")}.}
+
+\item{width, height}{Numeric, plot size in inches, passed to
+\code{\link[ggplot2:ggsave]{ggplot2::ggsave()}} (or the function's native device).}
+
+\item{dpi}{Numeric resolution in dots per inch for raster output, passed
+to \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}.}
 }
 \value{
 A \code{ggplot} object or \code{girafe} htmlwidget. If \code{save = TRUE}
@@ -39,7 +51,7 @@ A \code{ggplot} object or \code{girafe} htmlwidget. If \code{save = TRUE}
 One point per (\code{condition}, \code{compound_id}) row of
 \code{patliRResults(proj, "network_proximity")}, \code{z_score} on the y-axis,
 compounds sorted by \code{z_score}, with reference lines at \code{z = 0} and the
-usual \code{z = \eqn{\pm}1.96} two-sided 95\% bands. Points are colored by
+usual \eqn{z = \pm 1.96} two-sided 95\% bands. Points are colored by
 whether they cross that threshold -- a very negative \code{z_score} means
 the compound's targets sit significantly \emph{closer} to the disease module
 than the degree-matched null model, i.e. topologically meaningful

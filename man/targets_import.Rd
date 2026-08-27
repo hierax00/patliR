@@ -64,17 +64,14 @@ known compound are logged (\code{"targets_import_unmatched"}) and excluded.
 \description{
 Imports a CSV exported from a target-prediction platform
 (SwissTargetPrediction, SuperPred, ...). \code{patliR} does not run its own
-target-prediction model in v1.0 (a proper implementation would need to
-replicate ChEMBL's own curation to be trustworthy -- see
-\code{patliR_manual.md}, section 4) -- you run the platform yourself, download
-its export, and this function reconciles it against \code{\link[=compounds]{compounds()}}.
+target-prediction model (see \code{ROADMAP.md}) -- you run the platform
+yourself, download its export, and this function reconciles it against
+\code{\link[=compounds]{compounds()}}.
 
 Most of these platforms only accept one compound per run, so their
 natural export convention is one file per compound. The default
-(\code{id_from = "filename"}) expects files named exactly \verb{Targets<pubchem_id>. csv} (no separator, e.g. \code{Targets5280443.csv}) -- the same convention
-already used by the \code{network-pharmacology-cookbook} this package
-modernizes, kept as-is so migrating existing result files needs no
-renaming.
+(\code{id_from = "filename"}) expects files named exactly \verb{Targets<pubchem_id>.csv}
+(no separator, e.g. \code{Targets5280443.csv}).
 }
 \examples{
 \donttest{

@@ -14,7 +14,7 @@ test_that("adme_local() re-running on a subset of compounds does not wipe out th
   ## bare overwrite -- calling adme_local() again for just one compound
   ## after already running it for the whole project silently collapsed
   ## the table to that one compound. Fixed via the same .network_upsert()
-  ## pattern the network_* family already used. See DEVLOG.md.
+  ## pattern the network_* family already used.
   proj <- .test_project()
   proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
   proj <- adme_local(proj)

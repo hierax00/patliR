@@ -63,8 +63,7 @@ downloaded directly (no truncation) and confirmed complete.
 \strong{complete 105-alert set} from Brenk, R. et al. (2008), "Lessons
 Learnt from Assembling Screening Libraries for Drug Discovery for
 Neglected Diseases", \emph{ChemMedChem} 3, 435-444,
-\doi{10.1002/cmdc.200700139}. Cross-validated two ways before bundling
-(see \code{patliR_manual.md} for the full provenance/reproduction script):
+\doi{10.1002/cmdc.200700139}. Cross-validated two ways before bundling:
 count and alert names confirmed
 against RDKit's own compiled \code{FilterCatalogs.BRENK} (105 entries), exact
 SMARTS text taken from PatWalters/rd_filters' \code{alert_collection.csv}

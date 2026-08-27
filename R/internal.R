@@ -197,16 +197,12 @@
 #' Parse, validate, and canonicalize a vector of SMILES in one pass
 #'
 #' @description
-#' This used to compute an InChIKey via `rcdk::get.inchi.key()` -- which
-#' turned out not to exist in `rcdk` at all (that function lives only in
-#' the GitHub-only, non-CRAN `CDK-R/rinchi` package, so depending on it
-#' would have blocked a Bioconductor submission outright; see the
-#' `patliR_manual.md` decision log). We use a canonical SMILES (CDK's own
-#' `Canonical` + `UseAromaticSymbols` flavor) as the structure-identity key
-#' instead -- deterministic within `patliR`/CDK, but **not** guaranteed to
+#' The structure-identity key is a CDK canonical SMILES (`Canonical` +
+#' `UseAromaticSymbols` flavor), not an InChIKey -- `rcdk` on CRAN has no
+#' InChIKey function. Deterministic within CDK, but **not** guaranteed to
 #' match the canonical SMILES another toolkit (RDKit, OpenBabel, PubChem,
-#' ChEMBL) would generate for the same molecule. Cross-platform joins
-#' (`adme_import()`, `refdb_build()`) account for this -- see their source.
+#' ChEMBL) produces for the same molecule; cross-platform joins
+#' (`adme_import()`, `refdb_build()`) account for this. See `DESIGN.md`.
 #'
 #' Also keeps the *real* rcdk/rJava error message instead of collapsing
 #' every failure into a generic "invalid" flag -- silently swallowing the

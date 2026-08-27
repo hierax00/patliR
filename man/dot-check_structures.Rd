@@ -12,16 +12,12 @@ A \code{data.frame} with columns \code{valid} (logical), \code{canonical_smiles}
 otherwise the actual condition message from rcdk/rJava).
 }
 \description{
-This used to compute an InChIKey via \code{rcdk::get.inchi.key()} -- which
-turned out not to exist in \code{rcdk} at all (that function lives only in
-the GitHub-only, non-CRAN \code{CDK-R/rinchi} package, so depending on it
-would have blocked a Bioconductor submission outright; see the
-\code{patliR_manual.md} decision log). We use a canonical SMILES (CDK's own
-\code{Canonical} + \code{UseAromaticSymbols} flavor) as the structure-identity key
-instead -- deterministic within \code{patliR}/CDK, but \strong{not} guaranteed to
+The structure-identity key is a CDK canonical SMILES (\code{Canonical} +
+\code{UseAromaticSymbols} flavor), not an InChIKey -- \code{rcdk} on CRAN has no
+InChIKey function. Deterministic within CDK, but \strong{not} guaranteed to
 match the canonical SMILES another toolkit (RDKit, OpenBabel, PubChem,
-ChEMBL) would generate for the same molecule. Cross-platform joins
-(\code{adme_import()}, \code{refdb_build()}) account for this -- see their source.
+ChEMBL) produces for the same molecule; cross-platform joins
+(\code{adme_import()}, \code{refdb_build()}) account for this. See \code{DESIGN.md}.
 
 Also keeps the \emph{real} rcdk/rJava error message instead of collapsing
 every failure into a generic "invalid" flag -- silently swallowing the

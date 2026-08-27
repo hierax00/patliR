@@ -1,56 +1,23 @@
 #' @include AllGenerics.R internal.R network_build.R network_proximity.R
 NULL
 
-## network_bowtie() -- confirmed with Uriel (chat, 2026-07-23) after two
-## substrates turned out unusable for a classic bowtie decomposition:
-##   1. The directed compound-target-pathway-disease layered graph
-##      (network_layers.R) is a DAG by construction -- no cycles, so its
-##      largest strongly connected component is always a single node
-##      (see network_motifs.R's roxygen for that discovery).
-##   2. STRINGdb's regular interaction graph (`get_graph()`, already used
-##      by network_proximity()) has real cycles, but is UNDIRECTED --
-##      bowtie's core/in-component/out-component split is a directed-graph
-##      concept (core = largest *strongly connected* component), so an
-##      undirected graph collapses "core" back to "the whole connected
-##      component" -- the same trivial-collapse problem, from the opposite
-##      direction (cycles without direction, instead of direction without
-##      cycles).
+## A bowtie decomposition needs a directed graph with cycles. The layered
+## graph (network_layers.R) is a DAG (no cycles); STRING's regular graph
+## has cycles but is undirected. So this uses STRING's directed "actions"
+## channel (protein.actions.v<version>...txt.gz), which no STRINGdb R
+## method exposes -- it is downloaded and parsed directly, cached under
+## cacheDir(proj)/stringdb/. Only mechanistically-characterized
+## interactions get a direction, so this is a much sparser graph than the
+## regular "links" file.
 ##
-## Real fix: STRING separately publishes a directed "actions" channel
-## (protein.actions.v<version>/<species>...txt.gz -- confirmed against
-## STRING's own file-format documentation and the 2025 STRING paper on
-## directionality of regulation, PMC11701646, 2026-07-23) with `action`
-## (activation/inhibition/...), `is_directional`, and `a_is_acting` columns
-## marking which protein acts on which for interactions with a known
-## mechanism. This file is NOT exposed by any `STRINGdb` R package method
-## (confirmed against its full method list, rdrr.io, 2026-07-23) -- it is
-## downloaded and parsed directly here, cached under the same
-## `cacheDir(proj)/stringdb/` directory `.network_stringdb()` already uses
-## (same "safe to delete, redownloads" cache principle). It covers a much
-## sparser subset of the interactome than the regular "links" file (only
-## mechanistically-characterized interactions get a direction), which is
-## the real, unavoidable price of getting a genuine directed substrate.
+## `actions_version` defaults to "11.0" (not the pipeline-wide "12.0"):
+## the actions flat file was discontinued after v11.0. STRING protein IDs
+## are stable Ensembl accessions across versions, so a v12.0 mapping with a
+## v11.0 actions graph is not an ID mismatch.
 ##
-## `actions_version` defaults to "11.0", NOT the pipeline-wide `version`
-## (default "12.0"): confirmed by first-run failure (2026-07-23, 404 on
-## protein.actions.v12.0) and then against STRING's own download page
-## (string-db.org/cgi/download) and directory listings on
-## stringdb-downloads.org -- the "actions" flat file was discontinued
-## after v11.0 and was never republished for v11.5 or v12.0. `version`
-## still defaults to "12.0" for the UniProt -> STRING_id mapping
-## (`.network_stringdb()`, shared with the rest of the `network_*` family)
-## since that mapping is unaffected and should stay current; STRING protein
-## IDs (`<species>.ENSPxxxxxxx`) are stable Ensembl accessions across
-## versions, so mixing a v12.0 mapping with a v11.0 actions graph does not
-## introduce an ID-space mismatch.
-##
-## Since bowtie describes the architecture of a whole network (Broder et
-## al. 2000's original web-graph bowtie was global, not computed per query)
-## rather than a per-condition property, the decomposition itself is
-## computed ONCE per (species, version) and cached -- then each condition's
-## mapped targets are annotated with which bowtie component they fall into,
-## the same "compute the shared substrate once, join per condition" pattern
-## network_proximity() already uses for the interactome itself.
+## The decomposition is a whole-network property, so it is computed once
+## per (species, version) and cached; each condition's targets are then
+## annotated with which component they fall into.
 
 #' Bowtie architecture of the STRING directed-action network, annotated per
 #' condition's targets
@@ -135,7 +102,7 @@ network_bowtie <- function(proj, condition = NULL, species = 9606, version = "12
   if (!requireNamespace("STRINGdb", quietly = TRUE)) {
     cli::cli_abort(c(
       "{.fn network_bowtie} needs {.pkg STRINGdb} (for UniProt -> STRING_id mapping), not installed.",
-      "i" = "See {.file TESTING_GUIDE.Rmd}, section 0, for the {.fn BiocManager::install} chunk."
+      "i" = "Install it with {.code BiocManager::install(\"STRINGdb\")}."
     ))
   }
   conditions <- .network_resolve_conditions(proj, condition)

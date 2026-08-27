@@ -2,7 +2,7 @@
 % Please edit documentation in R/refdb.R
 \name{.chembl_url_encode_smiles}
 \alias{.chembl_url_encode_smiles}
-\title{Percent-encode a SMILES string for use as a ChEMBL URL \emph{path segment}}
+\title{Percent-encode a SMILES string for use as a ChEMBL URL path segment}
 \usage{
 .chembl_url_encode_smiles(smiles)
 }
@@ -10,20 +10,10 @@
 Character scalar, safe to paste into a ChEMBL path-segment URL.
 }
 \description{
-ChEMBL's structure-search endpoints (\verb{/similarity/<smiles>/<threshold>},
-\verb{/substructure/<smiles>}) take the SMILES as a literal path segment, not
-a query parameter -- confirmed directly against the live API
-(2026-08-25): a fully percent-encoded SMILES (\code{utils::URLencode(smiles, reserved = TRUE)}, encoding \code{=}, \code{(}, \verb{)}, ...) makes the endpoint return
-\verb{HTTP 500} for \emph{every} SMILES, including trivial ones (caffeine,
-aspirin) -- this, not any particular SMILES's content, was the actual
-cause of the \verb{refdb_chembl_*} \verb{HTTP 500} failures seen against real
-Chilcuague data. Leaving \code{=}/\code{(}/\verb{)}/etc. as literal characters (i.e.
-\emph{not} URL-reserved-encoding them) works. Only three characters
-genuinely need escaping because they change how the URL itself is
-parsed regardless: \verb{#} (starts a URL fragment -- confirmed to silently
-truncate the request into an unrelated \verb{HTTP 404}), \code{/} (a path
-separator), and \verb{\%} (starts a percent-escape, so any literal \verb{\%} in a
-SMILES ring-closure like \verb{\%10} must be escaped first or it corrupts
-every escape after it).
+ChEMBL's structure-search endpoints take the SMILES as a literal path
+segment. Only \verb{#}, \code{/}, and \verb{\%} need escaping (they change how the URL
+itself is parsed); reserved-encoding \code{=}/\code{(}/\verb{)} makes the endpoint
+return \verb{HTTP 500}. \verb{\%} must be escaped first, or it corrupts the \verb{\%23}/
+\verb{\%2F} escapes this function then adds.
 }
 \keyword{internal}

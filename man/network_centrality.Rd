@@ -52,17 +52,12 @@ wants probability-weighted centrality, it needs to explicitly transform
 the raw column through.
 }
 
-\section{\code{hub_score()} -> \code{hits_scores()} (2026-07-23)}{
+\section{Hub score}{
 
-\code{igraph::hub_score()} is deprecated as of igraph 2.0.3 (confirmed against
-the live \code{r.igraph.org} reference docs before migrating, not assumed).
-\code{igraph::hits_scores(g, weights = NA)} is the replacement -- it returns a
-named list (\code{hub}, \code{authority}, \code{value}, \code{options}) instead of
-\code{hub_score()}'s \code{list(vector, value, options)}, so the code here reads
-\verb{$hub} where it used to read \verb{$vector}. The Kleinberg hub-score values
-themselves are unchanged (same underlying computation, just renamed/
-restructured), so this migration is not expected to change any prior
-\code{network_centrality()} output numerically.
+\code{igraph::hub_score()} is deprecated as of igraph 2.0.3;
+\code{igraph::hits_scores(g, weights = NA)} is the replacement and the code
+reads its \verb{$hub} element. Same underlying Kleinberg computation, so
+output is numerically unchanged.
 }
 
 \examples{

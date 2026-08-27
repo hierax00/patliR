@@ -26,6 +26,18 @@ untouched in \code{patliRResults(proj, "network_edges")}.}
 \item{top_n}{Integer, default \code{15}. Only the \code{top_n} largest
 intersections are shown -- with more than a handful of conditions the
 number of possible combinations grows fast.}
+
+\item{save}{Logical, default \code{TRUE}. Whether to also write the plot to
+disk (in addition to returning it).}
+
+\item{out_dir}{Directory to write the file(s) to when \code{save = TRUE}.
+\code{NULL} (default) means \code{file.path(projectDir(proj), "plots")}.}
+
+\item{width, height}{Numeric, plot size in inches, passed to
+\code{\link[ggplot2:ggsave]{ggplot2::ggsave()}} (or the function's native device).}
+
+\item{dpi}{Numeric resolution in dots per inch for raster output, passed
+to \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}.}
 }
 \value{
 A \code{patchwork} object (bar chart on top of the dot-matrix,

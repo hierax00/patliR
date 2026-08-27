@@ -38,12 +38,12 @@ wizard (`launch_app()`), and a couple of standalone utilities
 Not yet implemented: `rank_*` (candidate prioritization), `dock_*`/
 `report_*` (docking prep and final report generation), `coconut_*`/
 `tcm_*` (COCONUT/TCM database import), `targets_bipartite()`/
-`targets_consensus()`, KEGG-directed network completion, an AI narration
-module, and the rest of the FOPER 2026 scope.
+`targets_consensus()`, KEGG-directed network completion, and an AI
+narration module — see [`ROADMAP.md`](ROADMAP.md).
 
-For what every function does — signature, output, and the design
-rationale behind it — plus the full list of what's designed but not yet
-built, see [`patliR_manual.md`](patliR_manual.md).
+For what every function does — signature, output, design rationale — read
+its help page. For the cross-cutting design decisions, see
+[`DESIGN.md`](DESIGN.md).
 
 ## Design in one paragraph
 
@@ -88,18 +88,9 @@ projectLog(proj)
 
 ## Documentation
 
-- [`patliR_manual.md`](patliR_manual.md) — single reference covering both
-  every implemented function family (purpose, signature, output, design
-  rationale) and everything designed but not yet built (section "Planeado
-  / no implementado").
-
-A step-by-step interactive walkthrough exists for local development
-(`TESTING_GUIDE_00_QUICKSTART.Rmd`, `TESTING_GUIDE_10_CHILCUAGUE.Rmd`,
-`TESTING_GUIDE_90_REFERENCE.Rmd` — split 2026-08-14, was one file) but
-isn't part of this repo, since the real-data sections run against real,
-unpublished lab data — every function it exercises is documented on its
-own help page (`?prep_compounds`, `?network_build`, ...) and in
-`patliR_manual.md`.
+- Each function has its own help page (`?prep_compounds`, `?network_build`, ...).
+- [`DESIGN.md`](DESIGN.md) — the cross-cutting design decisions.
+- [`ROADMAP.md`](ROADMAP.md) — what is designed but not yet built.
 
 ## Bundled reference data
 
@@ -115,11 +106,7 @@ A few functions ship small, curated reference tables under
 - **Safetyome core panel** (500 genes) — Liu et al. (2026),
   *Toxicological Sciences* 209(3), kfag021. Transcribed from the paper's
   Supplementary Table 4. Redistribution terms for this specific table
-  were not independently confirmed at the time of writing — see
-  `patliR_manual.md`, section 3, if this ever needs revisiting.
-
-See `patliR_manual.md` for full provenance and the exact rationale behind
-what each function does and doesn't include.
+  were not independently confirmed at the time of writing.
 
 ## License
 

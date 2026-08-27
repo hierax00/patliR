@@ -1,24 +1,12 @@
 #' @include AllGenerics.R internal.R adme_local.R
 NULL
 
-## plot_chemical_space() -- reduces adme_local()'s physicochemical
-## descriptors to 2D (PCA by default, base R stats::prcomp(), no new
-## Suggests; UMAP optional via the `umap` package, new Suggests) and colors
-## points by chemical family (compounds_classify()'s NPClassifier pathway)
-## or by any drug-likeness rule/route flag. Loosely inspired by the classic
-## "chemical space" figures that color-code whole molecule categories
-## (e.g. Reymond & Awale, 2012) -- reconstructed for patliR's own domain
-## (natural product extracts), not copied: our axes are physicochemical
-## descriptors of *our* compounds, not a universal chemical-space model
-## trained across DNA/peptides/graphenes/etc. Convex-hull outlines per
-## family group (base R grDevices::chull(), no new dependency) stand in
-## for that figure's colored "wedges". Design discussed with Uriel in chat
-## (2026-08-11); "overlay_targets" (superimposing target/protein shapes on
-## the same space, an idea in patliR_manual.md's "Planeado / no
-## implementado" section) is deliberately NOT attempted here -- proteins
-## do not have logP/TPSA in the same sense
-## compounds do, so a joint embedding is a separate, harder design question
-## left for a future round rather than guessed at now.
+## Reduces adme_local()'s descriptors to 2D (PCA via base stats::prcomp();
+## UMAP optional via the `umap` package) and colors points by chemical
+## family or any drug-likeness/route flag. Convex-hull outlines per family
+## via grDevices::chull(). Overlaying target/protein shapes on the same
+## space is not attempted -- proteins have no logP/TPSA, so a joint
+## embedding is a separate design question (see ROADMAP.md).
 
 #' Chemical space plot: 2D projection of compounds, colored by family
 #'
@@ -266,12 +254,12 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
 #' group's centroid
 #'
 #' @description
-#' Visual language modeled on the classic "chemical space" figures Uriel
-#' referenced in chat (2026-08-11) -- e.g. the GDB/chemical-universe style
-#' plots that draw two arrows crossing at a shared origin instead of a
-#' boxed axis, and label each colored region directly on the plot instead
-#' of relying only on a legend. Reconstructed for patliR's own axes (PCA/
-#' UMAP of *our* compounds' physicochemical descriptors), not copied --
+#' Visual language modeled on the classic "chemical space" figures (e.g.
+#' the GDB/chemical-universe style plots) that draw two arrows crossing at
+#' a shared origin instead of a boxed axis, and label each colored region
+#' directly on the plot instead of relying only on a legend. Reconstructed
+#' for patliR's own axes (PCA/UMAP of our compounds' physicochemical
+#' descriptors), not copied --
 #' see the header comment of this file for why a literal reproduction
 #' would not even make sense here (our "categories" are chemical families
 #' within one extract, not whole molecule classes like DNA/peptides/

@@ -1,30 +1,20 @@
 #' @include AllGenerics.R internal.R network_build.R
 NULL
 
-## network_enrich() -- pathway/ontology enrichment layer on top of
-## network_build()'s per-condition target sets (patliR_manual.md, section 6).
-##
-## Verified against the live Bioconductor reference docs before writing this
-## (2026-07-23) rather than assumed from memory, given this project's history
-## of shipping plausible-but-wrong API/data details (InChIKey, PAINS/Brenk,
-## the obsolete EFO ID -- see patliR_manual.md, sections 3-4, and
-## TESTING_GUIDE.Rmd): `enrichPathway()` (ReactomePA) only ever accepts
-## Entrez gene IDs, with no keyType argument to change that, so this
-## function always maps UniProt -> Entrez once via clusterProfiler::bitr()
-## and feeds Entrez IDs to whichever backend was requested, rather than
-## relying on per-function keyType support that is inconsistent across
-## enrichGO()/enrichKEGG()/enrichPathway().
+## ReactomePA::enrichPathway() only accepts Entrez gene IDs (no keyType
+## argument), so this function maps UniProt -> Entrez once via
+## clusterProfiler::bitr() and feeds Entrez to whichever backend was
+## requested, rather than relying on per-function keyType support that is
+## inconsistent across enrichGO()/enrichKEGG()/enrichPathway().
 
 #' Pathway/ontology enrichment over each condition's target set
 #'
 #' @description
 #' For each condition already built by [network_build()], maps its distinct
 #' UniProt target IDs to Entrez Gene IDs (`org.Hs.eg.db`) and runs an
-#' over-representation test against GO, Reactome, or KEGG gene sets. This is
-#' the "vía" (pathway) annotation layer referenced in `patliR_manual.md`,
-#' section 6 -- it does not change the graph built by [network_build()]
-#' itself, it produces a separate enrichment results table keyed by
-#' condition.
+#' over-representation test against GO, Reactome, or KEGG gene sets. It does
+#' not change the graph built by [network_build()]; it produces a separate
+#' enrichment results table keyed by condition.
 #'
 #' @section Heavy, optional dependencies -- not installed by default:
 #' Unlike `igraph` (a hard `Imports` dependency of the whole `network_*`
@@ -32,8 +22,9 @@ NULL
 #' large Bioconductor annotation databases, kept in `Suggests` rather than
 #' `Imports` so that installing `patliR` itself stays light. You need:
 #' `org.Hs.eg.db` and `clusterProfiler` always (ID mapping, plus GO/KEGG
-#' enrichment); `ReactomePA` additionally for `db = "reactome"`. See
-#' `TESTING_GUIDE.Rmd`, section 0, for the install chunk. Calling this
+#' enrichment); `ReactomePA` additionally for `db = "reactome"`. Install
+#' with `BiocManager::install(c("clusterProfiler", "org.Hs.eg.db",
+#' "ReactomePA"))`. Calling this
 #' without the right package installed raises a clear error naming exactly
 #' which package is missing, rather than a cryptic "could not find
 #' function".
@@ -44,9 +35,8 @@ NULL
 #' touch the network. `db = "kegg"` is different:
 #' `clusterProfiler::enrichKEGG()` queries KEGG's REST API live on every
 #' call (there is no current local Bioconductor package for this -- the old
-#' `KEGG.db` is deprecated). The original design sketch in
-#' `patliR_manual.md` claimed the whole family needed "no new fetch"; that
-#' was true for GO/Reactome but not KEGG, and has been corrected there.
+#' `KEGG.db` is deprecated). GO and Reactome are fully local once their
+#' packages are installed.
 #'
 #' @inheritParams compounds
 #' @param condition Character vector of condition names (must already have
@@ -63,11 +53,11 @@ NULL
 #' @param simplify_go Logical, default `TRUE`. Only used when `db = "go"`.
 #'   GO terms are hierarchical and highly redundant -- a real target set
 #'   routinely comes back with hundreds of "significant" GO terms, many of
-#'   them near-duplicate parent/child terms covering almost the same genes
-#'   (confirmed against real Chilcuague data, 2026-08-25: this redundancy is
-#'   what made [network_motifs()]'s derived `compound -> pathway` layer
-#'   explode to compound out-degrees in the thousands, since every
-#'   near-duplicate GO term adds its own derived edge). When `TRUE`, runs
+#'   them near-duplicate parent/child terms covering almost the same genes.
+#'   This redundancy is what makes [network_motifs()]'s derived
+#'   `compound -> pathway` layer explode to compound out-degrees in the
+#'   thousands, since every near-duplicate GO term adds its own derived
+#'   edge. When `TRUE`, runs
 #'   [clusterProfiler::simplify()] (semantic-similarity-based, via
 #'   \pkg{GOSemSim}) on the `db = "go"` result before returning it -- this
 #'   removes redundant terms by *similarity*, not by tightening

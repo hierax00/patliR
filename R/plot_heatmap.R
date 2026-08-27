@@ -1,28 +1,12 @@
 #' @include AllGenerics.R internal.R network_build.R plot_network_layers.R
 NULL
 
-## plot_heatmap() -- migrated 2026-08-16 to the real pheatmap()-based
-## rendering from the reference cookbook
-## (Farmacologia de Redes Juanjo/06_predocking_analysis/
-## 06_predocking_analysis.Rmd, "Heatmap Generation" step -- real code read
-## directly from github.com/hierax00/network-pharmacology-cookbook before
-## writing a line here, per the project's policy of never guessing an
-## external library's behavior). Replaces the geom_tile()-without-
-## dendrogram substitute this function shipped with before (see
-## patliR_manual.md section 6's old "Deliberadamente sin agregar" note for
-## pheatmap -- that call is now reversed).
-##
-## Contract change from the rest of plot_* (documented, not accidental):
-## pheatmap::pheatmap() is a grid/base-graphics function, not ggplot2 --
-## `engine = c("static", "ggiraph")` is dropped from this function's
-## signature because ggiraph only wraps ggplot2 geoms, there is nothing
-## for it to attach to here. `save = TRUE` also switches from PNG
-## (ggplot2::ggsave(), like the rest of the family) to PDF, matching the
-## cookbook exactly -- a clustered heatmap with printed numbers reads much
-## better as vector output. pheatmap() manages its own output device via
-## its `filename` argument (confirmed against pheatmap's own source,
-## `heatmap_motor()`, rather than assumed) -- no manual pdf()/dev.off()
-## needed here.
+## Uses pheatmap::pheatmap() for real hierarchical clustering on both axes.
+## Contract differs from the rest of plot_* on purpose: pheatmap is
+## grid/base graphics, not ggplot2, so there is no `engine` argument
+## (ggiraph has nothing to wrap), and `save = TRUE` writes PDF (via
+## pheatmap's own `filename` argument) rather than PNG -- a clustered
+## heatmap with printed cell values reads better as vector output.
 
 #' Heatmap of compound-target association or compound-condition presence
 #' (real `pheatmap()`)
@@ -47,8 +31,8 @@ NULL
 #'   directly without `filename`).
 #' @param out_dir Directory for the PDF, default `file.path(projectDir(proj), "plots")`.
 #' @param width,height `NULL` (default) to size the plot to the matrix
-#'   (`max(8, n_cols * 0.9 + 2)` / `max(6, n_rows * 0.5 + 2)`, the
-#'   cookbook's own sizing rule), or an explicit number of inches.
+#'   (`max(8, n_cols * 0.9 + 2)` / `max(6, n_rows * 0.5 + 2)`), or an
+#'   explicit number of inches.
 #'
 #' @return The `pheatmap` object returned by `pheatmap::pheatmap()`
 #'   (`list(tree_row, tree_col, kmeans, gtable)`) -- re-drawable with

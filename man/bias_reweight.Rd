@@ -33,7 +33,7 @@ itself. Entries not flagged \code{"promiscuo"} keep \code{score_ajustado == scor
 downstream consumer can always fall back to the unadjusted count.
 }
 \examples{
-\donttest{
+\dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
 compound_list <- read.csv(
   system.file("extdata", "input_compound_list.csv", package = "patliR")

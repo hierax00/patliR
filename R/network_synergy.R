@@ -1,31 +1,12 @@
 #' @include AllGenerics.R internal.R network_build.R network_proximity.R
 NULL
 
-## network_synergy() -- interim design, confirmed with Uriel (chat,
-## 2026-07-23): the original sketch in patliR_manual.md (section 6) ranks
-## candidate compounds via a not-yet-implemented rank_candidates() (family
-## 8, bias_*/reporting) before forming pairs ("pairs = 'rank_top'"), to
-## avoid the combinatorial blow-up of scoring every possible compound pair.
-## Since rank_candidates() does not exist yet, Uriel asked for BOTH: (1) a
-## concrete interim ranking defined now (using scores that already exist --
-## network_proximity()'s z_score, since "close to the disease module" is
-## exactly what a candidate-ranking step should reward), and (2)
-## pairs = "all" as an escape hatch that skips ranking entirely and scores
-## every pair -- useful for small conditions where the combinatorial cost
-## is a non-issue.
-##
-## Once rank_candidates() ships, "rank_top" here should be revisited to use
-## it (same "documented deviation, revisit later" pattern as
-## network_build()'s target_source default -- see that file's roxygen).
-##
-## Simplification vs. the original design sketch: the original signature
-## had permutations/seed for a permutation-based significance test of the
-## synergy score itself. That is deferred here -- network_proximity()
-## already carries its own permutation-based z_score per compound (with its
-## own seed, logged), and layering a second independent permutation test on
-## top of that, using an interim (soon-to-change) ranking step, would be a
-## lot of statistical machinery to build on a foundation Uriel already
-## flagged as temporary. Revisit once rank_candidates() exists.
+## Interim design until rank_candidates() ships (see ROADMAP.md).
+## `pairs = "rank_top"` ranks candidates by network_proximity()'s z_score
+## before pairing (avoids the combinatorial blow-up); `pairs = "all"` skips
+## ranking and scores every pair, for small conditions. No permutation test
+## on the synergy score itself -- network_proximity() already carries its
+## own permutation z_score per compound.
 
 #' Candidate synergistic compound pairs (target complementarity + joint
 #' disease proximity)
@@ -46,11 +27,9 @@ NULL
 #' `synergy_score = complementarity * joint_closeness`: high only when a
 #' pair is both structurally complementary *and* jointly close to the
 #' disease module (the pattern the network-medicine literature associates
-#' with real drug/compound synergy, as opposed to two compounds that are
-#' simply redundant, or two compounds that are complementary but biologically
-#' irrelevant to the disease of interest -- see `patliR_manual.md`, section
-#' 6, "Innovaciones incorporadas", for the literature this design is based
-#' on).
+#' with real synergy, as opposed to two compounds that are simply
+#' redundant, or complementary but biologically irrelevant to the disease
+#' -- see `DESIGN.md`).
 #'
 #' @section Requires [network_proximity()] to have already run for `disease`:
 #' Unlike [network_degeneracy()] (which only needs [network_build()]), pair
@@ -64,8 +43,8 @@ NULL
 #' `z_score` (most negative = closest to the disease module = best) and
 #' only forms pairs among the top `top_n`, avoiding the combinatorial cost
 #' of scoring every possible pair -- this is an **interim** stand-in for the
-#' not-yet-implemented `rank_candidates()` (see `patliR_manual.md`, section
-#' 6). `"all"` scores every compound pair in the condition's network
+#' not-yet-implemented `rank_candidates()` (see `ROADMAP.md`). `"all"`
+#' scores every compound pair in the condition's network
 #' regardless of ranking; pairs involving a compound with no
 #' [network_proximity()] score (e.g. it had no targets mappable to STRING)
 #' get `NA` in the proximity-derived columns, not a fabricated score.

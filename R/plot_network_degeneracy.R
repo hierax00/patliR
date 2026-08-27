@@ -1,16 +1,10 @@
 #' @include AllGenerics.R internal.R plot_network_layers.R network_degeneracy.R
 NULL
 
-## plot_network_degeneracy() -- Uriel's original ask (chat, 2026-07-23,
-## before plot_network_layers() was even started): "plotear
-## network_degeneracy() sobre la red, para ver a qué efecto llegan" --
-## i.e. draw compound-compound "these two converge on the same
-## targets/pathways" links directly on top of the compound-target graph,
-## instead of leaving degeneracy_score as a standalone table. Reuses
-## plot_network_layers()'s whole layout pipeline (.network_layered_graph_multi(),
-## .network_layers_plot_data(), .network_layers_layer_colors()) rather than
-## recomputing a layout from scratch -- same base network, one extra edge
-## layer.
+## Draws network_degeneracy()'s compound-compound convergence links on top
+## of the compound-target graph. Reuses plot_network_layers()'s layout
+## pipeline rather than recomputing one -- same base network, one extra
+## edge layer.
 
 #' Compound-target network with `network_degeneracy()` convergence links
 #' overlaid
@@ -21,8 +15,8 @@ NULL
 #' adds one extra curved edge per compound pair from
 #' [network_degeneracy()] whose `degeneracy_score >= min_degeneracy` --
 #' visualizing directly on the network which compounds converge on the same
-#' targets/pathways ("a qué efecto llegan", Uriel's own framing), rather
-#' than reading `degeneracy_score` off a table with no structural context.
+#' targets/pathways, rather than reading `degeneracy_score` off a table
+#' with no structural context.
 #' Degeneracy edges are drawn as a slight arc (not a straight line) purely
 #' so they are visually distinguishable from the underlying compound-target
 #' edges even when a pair of compounds happens to sit close together.

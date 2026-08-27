@@ -40,9 +40,7 @@ per administration route.
 \section{Drug-likeness vs. lead-likeness rules, and which ones patliR does \emph{not} implement}{
 
 Five binary pass/fail rules are computed, each a real published
-criterion, never invented or approximated from memory (see the
-\code{patliR_manual.md} note on this project's standing policy against
-fabricating chemistry):
+criterion:
 \itemize{
 \item \strong{Lipinski Ro5} (\code{ro5_pass}) -- Lipinski et al. (2001), \emph{Adv.
 Drug Deliv. Rev.} 46, 3-26: MW <= 500, logP <= 5, HBD <= 5, HBA <= 10.
@@ -63,23 +61,15 @@ literature "lead-like properties" rule (narrower than drug-likeness,
 meant for hit-to-lead triage rather than a final candidate) -- see
 \code{adme_filter(rules = "oprea")}.
 }
-\strong{Deliberately not implemented}, per an explicit scope decision with
-Uriel (chat, 2026-08-11): Hughes et al. (2008, \emph{Bioorg. Med. Chem.
-Lett.} 18, 4872-4875, cLogP/TPSA vs. in vivo toxicity risk), Ritchie &
-Macdonald (2009, \emph{Drug Discov. Today} 14, 1011-1020, aromatic ring
-count vs. developability) and Lovering et al. (2009, \emph{J. Med. Chem.} 52,
-6752-6756, Fsp3 vs. clinical success) are \emph{correlational findings}, not
-binary pass/fail rules the original papers themselves define with a
-cutoff -- implementing a hard cutoff for them would mean inventing a
-threshold the source literature does not give, which is exactly what
-this project avoids doing (same principle as the Brenk SMARTS
-incident). Also dropped: an unidentified "Omran" rule Uriel could not
-confirm a source for. Muegge (2001, \emph{J. Med. Chem.} 44, 1841-1846) is a
-real, well-cited pass/fail rule but its exact numeric thresholds could
-not be independently re-confirmed against the primary source (paywalled)
-in this session -- deferred rather than transcribed from memory; revisit
-if/when the primary source is available (UAQ library access, most
-likely).
+\strong{Deliberately not implemented}: Hughes et al. (2008, \emph{Bioorg. Med.
+Chem. Lett.} 18, 4872-4875), Ritchie & Macdonald (2009, \emph{Drug Discov.
+Today} 14, 1011-1020) and Lovering et al. (2009, \emph{J. Med. Chem.} 52,
+6752-6756) are \emph{correlational findings}, not binary pass/fail rules the
+original papers define with a cutoff -- a hard cutoff for them would
+mean inventing a threshold the source literature does not give. Muegge
+(2001, \emph{J. Med. Chem.} 44, 1841-1846) is a real pass/fail rule but its
+exact thresholds could not be re-confirmed against the (paywalled)
+primary source -- deferred rather than transcribed from memory.
 }
 
 \section{BOILED-Egg (please read the WLogP caveat)}{
@@ -112,7 +102,7 @@ the injectable caveat above -- same approximation applies).
 and 4 (optimum 1-3).
 }
 None of these route flags are a formulation or regulatory
-recommendation -- see \code{\link[=rank_candidates]{rank_candidates()}} (not yet implemented) for the
+recommendation -- see \code{rank_candidates()} (not yet implemented) for the
 disclaimer that always accompanies them in a report.
 }
 

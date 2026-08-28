@@ -92,12 +92,11 @@ test_that(".network_layered_graph()'s pathway_db restricts the layer to matching
   expect_setequal(pathway_nodes_kegg, "hsa00001")
 })
 
-test_that(".network_find_3node_motifs() gives identical results with n_cores = 1 and n_cores > 1", {
-  testthat::skip_if_not_installed("parallel")
-  ## Small synthetic directed graph with genuine feed-forward-loop
-  ## triangles (A -> B, A -> C, B -> C), built directly rather than via a
-  ## real project -- exercises the n_cores > 1 PSOCK-cluster code path
-  ## without needing network_enrich()/a real pathway layer.
+test_that(".network_find_3node_motifs() lists the exact feed-forward and feedback triples", {
+  ## A1 -> B1 -> C1 with A1 -> C1  : feed-forward loop
+  ## A1 -> B1 -> C1 -> A1          : feedback loop (a 3-cycle, listed once
+  ##                                per starting node)
+  ## A2 -> B2 -> C2 with A2 -> C2  : a second, isolated feed-forward loop
   edges <- data.frame(
     from = c("A1", "A1", "B1", "A2", "A2", "B2", "C1"),
     to   = c("B1", "C1", "C1", "B2", "C2", "C2", "A1")
@@ -109,14 +108,21 @@ test_that(".network_find_3node_motifs() gives identical results with n_cores = 1
   )
   g <- igraph::graph_from_data_frame(edges, directed = TRUE, vertices = vertices)
 
-  seq_res <- patliR:::.network_find_3node_motifs(g, n_cores = 1L)
-  par_res <- patliR:::.network_find_3node_motifs(g, n_cores = 2L)
+  res <- patliR:::.network_find_3node_motifs(g)
+  key <- function(d) sort(paste(d$motif_type, d$node_a, d$node_b, d$node_c))
 
-  seq_sorted <- seq_res[do.call(order, seq_res), ]
-  par_sorted <- par_res[do.call(order, par_res), ]
-  rownames(seq_sorted) <- NULL
-  rownames(par_sorted) <- NULL
+  expect_setequal(
+    key(res),
+    c("feed_forward A1 B1 C1", "feed_forward A2 B2 C2",
+      "feedback A1 B1 C1", "feedback B1 C1 A1", "feedback C1 A1 B1")
+  )
+  ## layers come straight from the vertex attribute
+  ffl <- res[res$motif_type == "feed_forward" & res$node_a == "A1", ]
+  expect_equal(unlist(ffl[, c("layer_a", "layer_b", "layer_c")], use.names = FALSE),
+               c("compound", "target", "pathway"))
+})
 
-  expect_true(nrow(seq_res) > 0) ## sanity: the fixture graph actually has motifs to find
-  expect_equal(seq_sorted, par_sorted)
+test_that("network_motifs() ignores the deprecated n_cores with a warning", {
+  proj <- .network_stats_test_setup()
+  expect_warning(network_motifs(proj, condition = "FLO-ET", n_cores = 4L), "deprecated")
 })

@@ -2,52 +2,24 @@
 % Please edit documentation in R/network_motifs.R
 \name{.network_find_3node_motifs}
 \alias{.network_find_3node_motifs}
-\title{Directed 3-node motif search over the layered graph, using precomputed
-adjacency lists and a hashed edge-existence index instead of repeated
-full-edge-list scans}
+\title{Directed 3-node pattern enumeration over the layered graph, as a
+vectorised join over the edge list}
 \usage{
-.network_find_3node_motifs(g, n_cores = 1L)
+.network_find_3node_motifs(g)
 }
 \value{
 \code{data.frame(motif_type, node_a, node_b, node_c, layer_a, layer_b, layer_c)}.
 }
 \description{
-The original implementation called \code{has_edge(a, b)} (a full \code{O(E)} scan
-of the edge list) inside doubly- and triply-nested loops over every
-node's out-neighbors -- \code{O(n * d^2 * E)} overall. That is fine for
-\code{patliR}'s bundled example (tens of nodes), but real conditions with a
-\code{network_enrich()} pathway layer can push some nodes' out-degree well
-past that assumption, and the brute-force scan cost then dominates
-(confirmed: ~221s for this one context in a real run). This version
-precomputes each node's out-neighbors once
-(\code{split()}) and answers \code{has_edge()} via a hashed lookup (an environment
-used as a hash map, keyed \code{from}/\code{to} joined with an ASCII 0x01 control
-byte -- a character that cannot appear in a node name, so this cannot
-collide the way plain string concatenation could for names like
-\code{"AB"} vs \code{"A"}+\code{"B"}). Output (row content and order) is unchanged from the
-original brute-force version.
+A feed-forward loop is a transitive triple \code{A -> B -> C} with \code{A -> C}
+present; a feedback loop is \code{A -> B -> C} with \code{C -> A} present. Both are
+found by materialising every two-path once (\code{merge()} joining each
+edge's head to the next edge's tail) and testing the closing edge with a
+single hashed \code{match()} against the edge set -- work bounded by the
+number of two-paths, done inside compiled \code{merge}/\code{match} rather than an
+R loop over out-neighbour pairs. This replaced a per-node
+\code{choose(out_degree, 2)} search that took minutes on a hub-heavy graph.
+The edge key joins \code{from}/\code{to} with an ASCII \code{0x01} byte, which cannot
+occur in a node name, so \code{"A"} + \code{"BC"} and \code{"AB"} + \code{"C"} never collide.
 }
-\section{Feed-forward-loop search is the part that gets parallelized}{
-
-Per-node cost here is \code{choose(degree(a), 2)} (every pair of \code{a}'s
-out-neighbors) -- for most nodes this is tiny, but a handful of hub
-nodes (e.g. a compound with a large derived \code{compound -> pathway}
-fan-out) can have \code{degree} in the thousands, and \code{choose(2500, 2)} ~=
-3.1 million pairs dominates the whole search all by itself (~10 min
-total in practice -- see \code{\link[=network_enrich]{network_enrich()}}'s \code{simplify_go} for reducing
-that fan-out at the source instead). The per-node computation
-(\code{ff_worker}, defined below) is embarrassingly parallel -- nodes never
-share mutable state -- so \code{n_cores > 1} splits the node loop across a
-\code{parallel::makePSOCKcluster()} cluster (works identically on
-Windows/macOS/Linux, unlike fork-based \code{mclapply()}). \code{parLapply()}
-serializes the worker closure (which captures \code{out_neighbors}/
-\code{has_edge}/\code{layer_of} by lexical scoping) to each worker automatically,
-so no manual \code{clusterExport()} bookkeeping is needed. The feedback-loop
-search is left sequential -- it is structurally guaranteed empty for
-this graph (see the exported function's docs) and is cheap in practice
-(most out-neighbors two hops downstream are terminal pathway/disease
-nodes with no further out-neighbors), so parallelizing it would only
-add cluster overhead for no real gain.
-}
-
 \keyword{internal}

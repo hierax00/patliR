@@ -14,23 +14,10 @@ of \code{\link[=binarizedMatrix]{binarizedMatrix()}}), or \code{NULL} (default) 
 condition. Rebuilding a subset leaves previously-built conditions
 untouched in \code{patliRResults(proj, "network_edges")}.}
 
-\item{n_cores}{Integer, default \code{1L} (sequential, the original
-behaviour). The feed-forward-loop search is embarrassingly parallel
-over nodes (see \code{.network_find_3node_motifs()}, internal) -- real
-layered graphs can have a handful of hub nodes (compounds with a large
-derived \code{compound -> pathway} fan-out, see \code{\link[=network_enrich]{network_enrich()}}'s
-\code{simplify_go} for reducing that fan-out at the source) whose
-\code{choose(degree, 2)} pair count dominates total runtime (on the order
-of ~10 min on a ~2800-node/~48000-edge network).
-\code{n_cores > 1} splits the node loop across a \code{parallel::makePSOCKcluster()}
-cluster (works identically on Windows/macOS/Linux, unlike
-fork-based \code{mclapply()}) -- worth it mainly when a handful of nodes have
-very high degree, since those nodes' \code{O(d^2)} cost dominates and a
-PSOCK worker gets one whole such node's pair-enumeration to itself,
-not because the \emph{number} of nodes is large. \code{parallel::detectCores()}
-is a reasonable starting point; do not request more workers than the
-number of \emph{high-degree} nodes, since idle workers with only
-low-degree nodes left add cluster-startup overhead for no real gain.}
+\item{n_cores}{Deprecated and ignored. The enumeration is now a
+vectorised join over the edge list (all two-paths at once, then a
+hashed closing-edge test), fast enough that a \code{parallel} cluster would
+cost more than it saves. Kept only so old calls do not error.}
 
 \item{pathway_db}{See \code{.network_target_pathway_edges()}, internal --
 restrict the pathway layer to specific \code{network_enrich()} \code{db} value(s)
@@ -48,31 +35,39 @@ type contribute no rows (not a row full of \code{NA}s) -- see
 \code{projectLog(proj)} for a summary count either way.
 }
 \description{
-Searches the condition's directed compound-target-pathway-disease graph
-(see \code{.network_layered_graph()}, internal) for two classic 3-node
-directed network motifs (Milo et al. 2002, \emph{Science} 298, 824-827):
+Lists the condition's directed compound-target-pathway-disease graph
+(see \code{.network_layered_graph()}, internal) for two 3-node patterns
+(the shapes described by Milo et al. 2002, \emph{Science} 298, 824-827):
 \itemize{
-\item \strong{Feed-forward loop}: A -> B, A -> C, B -> C. In this graph, the only
-way this occurs is a compound acting on a pathway/disease both
+\item \strong{Feed-forward loop}: A -> B, B -> C, A -> C (a transitive triple).
+In this graph that is a compound acting on a pathway/disease both
 directly (the "derived" edges built by \code{.network_layered_graph()}) and
 indirectly through one of its targets -- e.g. compound X hits pathway
-P both because target T (which X also hits) participates in P.
+P because target T (which X also hits) participates in P.
 \item \strong{Feedback loop}: A -> B, B -> C, C -> A (a directed 3-cycle).
 }
 }
-\section{Feedback loops are structurally impossible in this graph, by construction}{
+\section{This is an occurrence list, not a validated motif set}{
 
-Every edge in \code{.network_layered_graph()} points strictly "downstream"
-(compound -> target -> pathway/disease, plus same-direction derived
-shortcuts) -- there is no edge type that ever points back toward a
-compound or from a pathway/disease back to a target. A directed 3-cycle
-therefore cannot exist in the current layered graph, so
-\code{network_motifs()} finding zero feedback loops is an expected, correct
-result, not evidence of a bug. Feedback loops of the kind the original
-design envisioned would need a genuinely cyclic substrate (e.g. a
-protein-protein interaction network, which does have feedback) --
-\code{network_bowtie()} runs into the same structural issue, see its own
-documentation.
+A "motif" in the Milo et al. sense is a subgraph that occurs
+significantly more often than in degree-preserving randomised networks.
+\code{network_motifs()} does \strong{not} run that null model -- and it could not
+meaningfully, because most feed-forward loops here are \emph{guaranteed by
+construction}: \code{.network_layered_graph()} builds the closing
+\code{compound -> pathway} / \code{compound -> disease} edge as exactly the
+transitive shortcut of the two-hop path, so every such path is
+automatically a feed-forward triple. Read the output as "which triples
+realise this shape", useful for tracing a compound's routes to a
+pathway, not as evidence that the biology favours feed-forward control.
+}
+
+\section{Feedback loops are structurally impossible in this graph}{
+
+Every edge in \code{.network_layered_graph()} points strictly downstream
+(compound -> target -> pathway/disease), so a directed 3-cycle cannot
+exist. The search still runs (cheaply, on the same enumeration) so a
+future cyclic substrate would be picked up, but on the current graph it
+always returns zero -- expected, not a bug.
 }
 
 \examples{

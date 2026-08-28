@@ -56,4 +56,13 @@ test_that("network_synergy() with pairs = 'rank_top' and pairs = 'all' both run 
   result_all <- patliRResults(proj_all, "network_synergy")
   expect_equal(nrow(result_all), choose(length(compounds), 2))
   expect_true(all(result_all$complementarity >= 0 & result_all$complementarity <= 1))
+
+  ## Cheng conjunction: synergy_score is scored iff BOTH z_score < 0, and
+  ## is never a negative-signed "far from disease" artefact.
+  expect_true("both_proximal" %in% names(result_all))
+  scored <- !is.na(result_all$synergy_score)
+  expect_equal(scored, result_all$both_proximal)
+  expect_equal(result_all$both_proximal,
+               result_all$z_score_a < 0 & result_all$z_score_b < 0)
+  expect_true(all(result_all$synergy_score[scored] >= 0))
 })

@@ -49,13 +49,23 @@ mapping \code{\link[=network_enrich]{network_enrich()}} itself uses, see \code{.
 internal).
 \item \code{degeneracy_score = pathway_jaccard * (1 - target_jaccard)}: high only
 when two compounds are functionally similar (\code{pathway_jaccard} near 1)
-\emph{despite} being structurally distinct (\code{target_jaccard} near 0) -- the
-systems-biology definition of degeneracy (Edelman & Gally, 2001, \emph{PNAS}
-98(24), 13763-8): different elements, same function. A pair that hits
-the same targets is not "degenerate", it is just redundant/identical;
-a pair that hits different targets AND different pathways is simply
-unrelated. Only the different-targets/same-pathways quadrant scores
-high here.
+\emph{despite} being structurally distinct (\code{target_jaccard} near 0) --
+different elements, same function, in the spirit of degeneracy as
+Edelman & Gally (2001, \emph{PNAS} 98(24), 13763-8) describe it
+qualitatively (their quantitative measure, Tononi et al. 1999, is a
+different, information-theoretic construction). A pair that hits the
+same targets is redundant, not degenerate; a pair that shares neither
+targets nor pathways is unrelated. Only the different-targets /
+same-pathways quadrant scores high.
+
+The multiplicative form is a convenience scalarisation, not a derived
+result -- and in sparse target data \code{target_jaccard} is ~0 for almost
+every pair, so \code{degeneracy_score} collapses to roughly
+\code{pathway_jaccard}. Read \code{target_jaccard} and \code{pathway_jaccard}
+together (the columns are both in the output) rather than leaning on
+the scalar alone; \code{pathway_jaccard} is also an unweighted set overlap
+over GO terms, so it does not account for term specificity (see
+\code{ROADMAP.md} -- a \code{GOSemSim} semantic-similarity version is planned).
 }
 }
 \section{Requires \code{\link[=network_enrich]{network_enrich()}} to have already run for the condition}{

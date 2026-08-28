@@ -17,19 +17,30 @@ NULL
 #'
 #' - **Complementarity** (`1 - target_jaccard`): how different the two
 #'   compounds' target sets are -- a pair that hits the same targets is
-#'   redundant, not synergistic.
-#' - **Joint disease proximity** (`-mean(z_score_a, z_score_b)`, from
-#'   already-computed [network_proximity()] results for `disease`): how
-#'   much closer than random *both* compounds' targets are to the disease
-#'   gene module -- a pair only scores well here if both members are
-#'   independently plausible against this disease, not just one of them.
+#'   redundant, not synergistic. (This is *set* overlap, a proxy for the
+#'   network separation `s_AB` of Menche et al. 2015 / Cheng et al. 2019 --
+#'   see the caveat below.)
+#' - **Both individually proximal**: the pair is scored only when
+#'   `z_score_a < 0` **and** `z_score_b < 0` (`both_proximal`), the
+#'   Complementary Exposure requirement of Cheng et al. (2019, *Nat Commun*
+#'   10:1197) -- both members must independently sit closer than random to
+#'   the disease module. Pairs that fail this get `synergy_score = NA`, not
+#'   a misleadingly signed number.
+#' - **Joint closeness** (`-max(z_score_a, z_score_b)`): keyed to the
+#'   *weaker* member, so a pair is only as strong as its worse compound --
+#'   a conjunction, not an average one very-close compound could carry.
 #'
-#' `synergy_score = complementarity * joint_closeness`: high only when a
-#' pair is both structurally complementary *and* jointly close to the
-#' disease module (the pattern the network-medicine literature associates
-#' with real synergy, as opposed to two compounds that are simply
-#' redundant, or complementary but biologically irrelevant to the disease
-#' -- see `DESIGN.md`).
+#' `synergy_score = complementarity * joint_closeness` when `both_proximal`,
+#' else `NA`.
+#'
+#' @section This is a heuristic, not Cheng et al. (2019) as published:
+#' Cheng et al. define Complementary Exposure as a *classification region*
+#' (`s_AB >= 0` and both drugs proximal), using the topological network
+#' separation `s_AB`, not a multiplicative score and not target-set
+#' Jaccard. `1 - target_jaccard` and `s_AB` can disagree (disjoint target
+#' sets can still overlap topologically). A real `s_AB` implementation is
+#' planned (see `ROADMAP.md`); until then read `both_proximal` +
+#' `complementarity` + the two `z_score`s directly, not just the scalar.
 #'
 #' @section Requires [network_proximity()] to have already run for `disease`:
 #' Unlike [network_degeneracy()] (which only needs [network_build()]), pair
@@ -59,8 +70,8 @@ NULL
 #' @return The updated `proj`, with a `network_synergy` entry in
 #'   [patliRResults()] (columns `condition`, `disease_id`, `compound_a`,
 #'   `compound_b`, `target_jaccard`, `complementarity`, `z_score_a`,
-#'   `z_score_b`, `joint_closeness`, `synergy_score`, `pairs_mode`), also
-#'   written to `results/network_synergy.csv`.
+#'   `z_score_b`, `both_proximal`, `joint_closeness`, `synergy_score`,
+#'   `pairs_mode`), also written to `results/network_synergy.csv`.
 #'
 #' @examples
 #' \dontrun{
@@ -151,13 +162,21 @@ network_synergy <- function(proj, condition = NULL, disease,
       za <- z_of[[a]]; zb <- z_of[[b]]
       za <- if (is.null(za)) NA_real_ else za
       zb <- if (is.null(zb)) NA_real_ else zb
-      joint_closeness <- if (!is.na(za) && !is.na(zb)) -mean(c(za, zb)) else NA_real_
-      synergy_score <- if (!is.na(joint_closeness)) complementarity * joint_closeness else NA_real_
+
+      ## Cheng et al. (2019) Complementary Exposure: BOTH members must be
+      ## individually proximal to the disease module. `joint_closeness` is
+      ## then keyed to the *weaker* member (min(-z) = -max(z)), so a pair is
+      ## only as strong as its worse compound -- a conjunction, not an
+      ## average that a single very-close compound could carry.
+      both_proximal <- !is.na(za) && !is.na(zb) && za < 0 && zb < 0
+      joint_closeness <- if (!is.na(za) && !is.na(zb)) -max(za, zb) else NA_real_
+      synergy_score <- if (both_proximal) complementarity * joint_closeness else NA_real_
 
       pair_rows[[i]] <- data.frame(
         condition = cond, disease_id = disease, compound_a = a, compound_b = b,
         target_jaccard = target_jaccard, complementarity = complementarity,
-        z_score_a = za, z_score_b = zb, joint_closeness = joint_closeness,
+        z_score_a = za, z_score_b = zb, both_proximal = both_proximal,
+        joint_closeness = joint_closeness,
         synergy_score = synergy_score, pairs_mode = pairs, stringsAsFactors = FALSE
       )
     }
@@ -188,7 +207,8 @@ network_synergy <- function(proj, condition = NULL, disease,
   data.frame(
     condition = character(0), disease_id = character(0), compound_a = character(0),
     compound_b = character(0), target_jaccard = double(0), complementarity = double(0),
-    z_score_a = double(0), z_score_b = double(0), joint_closeness = double(0),
+    z_score_a = double(0), z_score_b = double(0), both_proximal = logical(0),
+    joint_closeness = double(0),
     synergy_score = double(0), pairs_mode = character(0), stringsAsFactors = FALSE
   )
 }

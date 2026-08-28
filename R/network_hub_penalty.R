@@ -14,12 +14,21 @@ NULL
 #' specific `measures` choice would be a fragile dependency for a two-line
 #' formula that only ever needs plain degree).
 #'
-#' A target hit by every compound in the condition (`degree_raw ==
-#' N_compounds`) gets `score_adjusted = 0` -- maximally promiscuous, fully
-#' discounted. A target hit by only one compound out of many keeps close to
-#' its raw degree (`log(N_compounds / 1)` is large) -- same intuition as
-#' TF-IDF, and the same log-ratio [bias_reweight()] reuses at the
-#' reference-database level instead of at this per-condition-network level.
+#' Writing `p = degree_raw / N_compounds`, the formula is `N_compounds * p *
+#' log(1 / p)` -- `N_compounds` times the Shannon surprisal of `p`. It is
+#' `0` at `p = 1` (a target every compound hits: maximally promiscuous,
+#' fully discounted) and `0` in the limit `p -> 0`, with a **maximum at
+#' `p = 1/e`** (a target hit by ~37% of the condition's compounds). So it
+#' up-weights targets of *intermediate* specificity rather than being
+#' monotone in selectivity. [bias_reweight()] reuses the same expression at
+#' the whole-reference-database level.
+#'
+#' @section Known limitation:
+#' Because the score peaks at `p = 1/e`, a moderately promiscuous target
+#' can outrank a highly selective one -- the name "penalty" oversells what
+#' a non-monotone weight does. Treat `score_adjusted` as "intermediate-
+#' specificity emphasis", not a clean selectivity ranking. Whether this is
+#' the wanted behaviour is flagged for revision (see `ROADMAP.md`).
 #'
 #' @inheritParams network_build
 #'
@@ -67,6 +76,12 @@ network_hub_penalty <- function(proj, condition = NULL) {
     if (length(target_ids) == 0) {
       rows[[cond]] <- .empty_network_hub_penalty_row()
       next
+    }
+    if (n_compounds_total <= 1) {
+      cli::cli_warn(c(
+        "Condition {.val {cond}} has {n_compounds_total} present compound(s); {.fn network_hub_penalty} is degenerate here.",
+        "i" = "Every {.code score_adjusted} will be {.val 0} (log(1/1))."
+      ))
     }
 
     degree_raw <- igraph::degree(g, v = igraph::V(g)[is_target])

@@ -33,8 +33,8 @@ compounds (by \code{z_score}) to form pairs among. Default \code{10}.}
 The updated \code{proj}, with a \code{network_synergy} entry in
 \code{\link[=patliRResults]{patliRResults()}} (columns \code{condition}, \code{disease_id}, \code{compound_a},
 \code{compound_b}, \code{target_jaccard}, \code{complementarity}, \code{z_score_a},
-\code{z_score_b}, \code{joint_closeness}, \code{synergy_score}, \code{pairs_mode}), also
-written to \code{results/network_synergy.csv}.
+\code{z_score_b}, \code{both_proximal}, \code{joint_closeness}, \code{synergy_score},
+\code{pairs_mode}), also written to \code{results/network_synergy.csv}.
 }
 \description{
 For pairs of compounds present in a condition's network, combines two
@@ -42,21 +42,34 @@ signals into a \code{synergy_score}:
 \itemize{
 \item \strong{Complementarity} (\code{1 - target_jaccard}): how different the two
 compounds' target sets are -- a pair that hits the same targets is
-redundant, not synergistic.
-\item \strong{Joint disease proximity} (\code{-mean(z_score_a, z_score_b)}, from
-already-computed \code{\link[=network_proximity]{network_proximity()}} results for \code{disease}): how
-much closer than random \emph{both} compounds' targets are to the disease
-gene module -- a pair only scores well here if both members are
-independently plausible against this disease, not just one of them.
+redundant, not synergistic. (This is \emph{set} overlap, a proxy for the
+network separation \code{s_AB} of Menche et al. 2015 / Cheng et al. 2019 --
+see the caveat below.)
+\item \strong{Both individually proximal}: the pair is scored only when
+\code{z_score_a < 0} \strong{and} \code{z_score_b < 0} (\code{both_proximal}), the
+Complementary Exposure requirement of Cheng et al. (2019, \emph{Nat Commun}
+10:1197) -- both members must independently sit closer than random to
+the disease module. Pairs that fail this get \code{synergy_score = NA}, not
+a misleadingly signed number.
+\item \strong{Joint closeness} (\code{-max(z_score_a, z_score_b)}): keyed to the
+\emph{weaker} member, so a pair is only as strong as its worse compound --
+a conjunction, not an average one very-close compound could carry.
 }
 
-\code{synergy_score = complementarity * joint_closeness}: high only when a
-pair is both structurally complementary \emph{and} jointly close to the
-disease module (the pattern the network-medicine literature associates
-with real synergy, as opposed to two compounds that are simply
-redundant, or complementary but biologically irrelevant to the disease
--- see \code{DESIGN.md}).
+\code{synergy_score = complementarity * joint_closeness} when \code{both_proximal},
+else \code{NA}.
 }
+\section{This is a heuristic, not Cheng et al. (2019) as published}{
+
+Cheng et al. define Complementary Exposure as a \emph{classification region}
+(\code{s_AB >= 0} and both drugs proximal), using the topological network
+separation \code{s_AB}, not a multiplicative score and not target-set
+Jaccard. \code{1 - target_jaccard} and \code{s_AB} can disagree (disjoint target
+sets can still overlap topologically). A real \code{s_AB} implementation is
+planned (see \code{ROADMAP.md}); until then read \code{both_proximal} +
+\code{complementarity} + the two \code{z_score}s directly, not just the scalar.
+}
+
 \section{Requires \code{\link[=network_proximity]{network_proximity()}} to have already run for \code{disease}}{
 
 Unlike \code{\link[=network_degeneracy]{network_degeneracy()}} (which only needs \code{\link[=network_build]{network_build()}}), pair

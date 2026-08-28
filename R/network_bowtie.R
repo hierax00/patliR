@@ -10,14 +10,15 @@ NULL
 ## interactions get a direction, so this is a much sparser graph than the
 ## regular "links" file.
 ##
-## `actions_version` defaults to "11.0" (not the pipeline-wide "12.0"):
-## the actions flat file was discontinued after v11.0. STRING protein IDs
-## are stable Ensembl accessions across versions, so a v12.0 mapping with a
-## v11.0 actions graph is not an ID mismatch.
+## `actions_version` defaults to "11.0" (the actions flat file was
+## discontinued after v11.0). The UniProt -> STRING_id mapping is done
+## against that SAME release, not a newer one -- STRING re-derives its ENSP
+## identifier space every release, so mixing versions would silently drop
+## retired IDs into the "not in the actions network" bucket.
 ##
 ## The decomposition is a whole-network property, so it is computed once
-## per (species, version) and cached; each condition's targets are then
-## annotated with which component they fall into.
+## per (species, actions_version) and cached; each condition's targets are
+## then annotated with which component they fall into.
 
 #' Bowtie architecture of the STRING directed-action network, annotated per
 #' condition's targets
@@ -52,25 +53,28 @@ NULL
 #' component membership.
 #'
 #' @inheritParams network_proximity
-#' @param actions_version STRING release to use for the directed "actions"
-#'   file specifically (see `.network_stringdb_actions_graph()`, internal).
-#'   Defaults to `"11.0"`, independently of `version` (default `"12.0"`,
-#'   used for the UniProt -> STRING_id mapping): STRING discontinued the
-#'   "actions" flat file after v11.0 and never republished it for v11.5 or
-#'   v12.0, so `version`'s default does not work for this file and the two
-#'   are tracked separately.
+#' @param actions_version STRING release for the directed "actions" file
+#'   *and* the UniProt -> STRING_id mapping (see
+#'   `.network_stringdb_actions_graph()`, internal). Defaults to `"11.0"`:
+#'   STRING discontinued the "actions" flat file after v11.0.
+#' @param version Deprecated and unused -- both the actions graph and the
+#'   ID mapping now use `actions_version` (mixing releases dropped retired
+#'   ENSP IDs into the "not in the actions network" bucket). Kept so old
+#'   calls do not error.
 #'
 #' @return The updated `proj`, with two entries in [patliRResults()]:
 #'   `network_bowtie` (columns `condition`, `compound_id`, `uniprot_id`,
 #'   `string_id`, `bowtie_component` -- one row per (condition, compound,
-#'   target); targets that could not be mapped to the STRING action network
-#'   get `bowtie_component = "unmapped"`, not a dropped row) and
+#'   target). `bowtie_component` is `"core"` / `"in_component"` /
+#'   `"out_component"` / `"other"` (tendrils, tubes, disconnected) for a
+#'   target in the action graph, `"not_in_action_network"` for a target
+#'   that maps to STRING but is absent from the sparse directed action
+#'   graph, or `"unmapped"` for a target with no STRING_id at all -- none
+#'   are dropped) and
 #'   `network_bowtie_summary` (columns `species`, `version`, `n_nodes`,
 #'   `n_edges`, `n_core`, `n_in_component`, `n_out_component`, `n_other` --
-#'   one row per `(species, version)`, describing the global decomposition
-#'   regardless of which conditions were annotated; `version` here is
-#'   `actions_version`, the release the actions graph was actually built
-#'   from). Both written to their matching `results/*.csv`.
+#'   one row per `(species, version)`; `version` here is `actions_version`).
+#'   Both written to their matching `results/*.csv`.
 #'
 #' @examples
 #' \dontrun{
@@ -119,7 +123,11 @@ network_bowtie <- function(proj, condition = NULL, species = 9606, version = "12
     stringsAsFactors = FALSE
   )
 
-  string_db <- .network_stringdb(proj, species, version, score_threshold = 0)
+  ## Map UniProt -> STRING_id against the SAME STRING release as the actions
+  ## graph (`actions_version`, not the pipeline-wide `version`): STRING
+  ## re-derives its ENSP identifier space each release, so a v12.0 mapping
+  ## checked against a v11.0 actions graph would silently miss retired IDs.
+  string_db <- .network_stringdb(proj, species, actions_version, score_threshold = 0)
   edges_all <- patliRResults(proj, "network_edges")
   rows <- vector("list", length(conditions))
   names(rows) <- conditions
@@ -145,7 +153,11 @@ network_bowtie <- function(proj, condition = NULL, species = 9606, version = "12
     string_id <- uni_to_string[ct$uniprot_id]
     component <- ifelse(
       is.na(string_id), "unmapped",
-      ifelse(string_id %in% names(bowtie), bowtie[string_id], "other")
+      ## a mapped target that is absent from the (much sparser) directed
+      ## actions graph is NOT a bow-tie finding -- keep it distinct from a
+      ## genuine tendril/tube node, which the classifier already folds into
+      ## "other".
+      ifelse(string_id %in% names(bowtie), bowtie[string_id], "not_in_action_network")
     )
 
     rows[[cond]] <- data.frame(
@@ -166,7 +178,7 @@ network_bowtie <- function(proj, condition = NULL, species = 9606, version = "12
   proj <- .log_append(
     proj, step = "network_bowtie", id = NA_character_,
     message = paste0(
-      "species ", species, " v", version, ": ", summary_row$n_nodes, " nodes / ", summary_row$n_edges,
+      "species ", species, " v", actions_version, ": ", summary_row$n_nodes, " nodes / ", summary_row$n_edges,
       " directed action edges -- core=", summary_row$n_core, ", in=", summary_row$n_in_component,
       ", out=", summary_row$n_out_component, ", other=", summary_row$n_other
     )

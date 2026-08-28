@@ -46,6 +46,20 @@ guessing.
 
 - **`network_kegg_complete()`** — add KEGG's directed topology to the
   network. Deferred on time budget.
+- **`network_hub_penalty()` scoring** — `d * log(N/d)` is non-monotone
+  (peaks at `d = N/e`), so a moderately promiscuous target can outrank a
+  selective one. Decide whether "intermediate-specificity emphasis" is
+  actually wanted or switch to a monotone selectivity weight.
+- **`network_synergy()`** — replace `1 - Jaccard(targets)` with a real
+  network separation `s_AB` (Menche et al. 2015) and report Cheng et al.
+  (2019)'s Complementary Exposure classification, not just the scalar.
+- **`network_module_robustness()` clustering** — HDBSCAN on integer graph
+  distances degenerates to single-linkage; add modularity-based options
+  (`cluster_leiden`, or bipartite modularity) via the `clustering=` arg.
+- **`network_degeneracy()`** — swap `pathway_jaccard` for GO semantic
+  similarity (GOSemSim, already a dependency); add a permutation null.
+- **`network_centrality()`** — bipartite-aware normalisation so `degree` /
+  `betweenness` are comparable across `node_type` (Borgatti & Everett 1997).
 - **`bias_audit()` categorical enrichment** — the half of the original
   design with no code: MeSH / Disease Ontology enrichment vs. a
   STRING/DrugBank/reference background. Needs a confirmed category source.

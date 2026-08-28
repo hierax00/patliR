@@ -24,29 +24,30 @@ untouched in \code{patliRResults(proj, "network_edges")}.}
 \item{species}{NCBI taxonomy ID passed to \code{STRINGdb$new()}. Default
 \code{9606} (human).}
 
-\item{version}{STRING database version passed to \code{STRINGdb$new()}.
-Default \code{"12.0"}.}
+\item{version}{Deprecated and unused -- both the actions graph and the
+ID mapping now use \code{actions_version} (mixing releases dropped retired
+ENSP IDs into the "not in the actions network" bucket). Kept so old
+calls do not error.}
 
-\item{actions_version}{STRING release to use for the directed "actions"
-file specifically (see \code{.network_stringdb_actions_graph()}, internal).
-Defaults to \code{"11.0"}, independently of \code{version} (default \code{"12.0"},
-used for the UniProt -> STRING_id mapping): STRING discontinued the
-"actions" flat file after v11.0 and never republished it for v11.5 or
-v12.0, so \code{version}'s default does not work for this file and the two
-are tracked separately.}
+\item{actions_version}{STRING release for the directed "actions" file
+\emph{and} the UniProt -> STRING_id mapping (see
+\code{.network_stringdb_actions_graph()}, internal). Defaults to \code{"11.0"}:
+STRING discontinued the "actions" flat file after v11.0.}
 }
 \value{
 The updated \code{proj}, with two entries in \code{\link[=patliRResults]{patliRResults()}}:
 \code{network_bowtie} (columns \code{condition}, \code{compound_id}, \code{uniprot_id},
 \code{string_id}, \code{bowtie_component} -- one row per (condition, compound,
-target); targets that could not be mapped to the STRING action network
-get \code{bowtie_component = "unmapped"}, not a dropped row) and
+target). \code{bowtie_component} is \code{"core"} / \code{"in_component"} /
+\code{"out_component"} / \code{"other"} (tendrils, tubes, disconnected) for a
+target in the action graph, \code{"not_in_action_network"} for a target
+that maps to STRING but is absent from the sparse directed action
+graph, or \code{"unmapped"} for a target with no STRING_id at all -- none
+are dropped) and
 \code{network_bowtie_summary} (columns \code{species}, \code{version}, \code{n_nodes},
 \code{n_edges}, \code{n_core}, \code{n_in_component}, \code{n_out_component}, \code{n_other} --
-one row per \verb{(species, version)}, describing the global decomposition
-regardless of which conditions were annotated; \code{version} here is
-\code{actions_version}, the release the actions graph was actually built
-from). Both written to their matching \verb{results/*.csv}.
+one row per \verb{(species, version)}; \code{version} here is \code{actions_version}).
+Both written to their matching \verb{results/*.csv}.
 }
 \description{
 Downloads STRING's directed "actions" file for \code{species} (activation/

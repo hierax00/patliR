@@ -23,13 +23,23 @@ NULL
 #'   internal).
 #' - `degeneracy_score = pathway_jaccard * (1 - target_jaccard)`: high only
 #'   when two compounds are functionally similar (`pathway_jaccard` near 1)
-#'   *despite* being structurally distinct (`target_jaccard` near 0) -- the
-#'   systems-biology definition of degeneracy (Edelman & Gally, 2001, *PNAS*
-#'   98(24), 13763-8): different elements, same function. A pair that hits
-#'   the same targets is not "degenerate", it is just redundant/identical;
-#'   a pair that hits different targets AND different pathways is simply
-#'   unrelated. Only the different-targets/same-pathways quadrant scores
-#'   high here.
+#'   *despite* being structurally distinct (`target_jaccard` near 0) --
+#'   different elements, same function, in the spirit of degeneracy as
+#'   Edelman & Gally (2001, *PNAS* 98(24), 13763-8) describe it
+#'   qualitatively (their quantitative measure, Tononi et al. 1999, is a
+#'   different, information-theoretic construction). A pair that hits the
+#'   same targets is redundant, not degenerate; a pair that shares neither
+#'   targets nor pathways is unrelated. Only the different-targets /
+#'   same-pathways quadrant scores high.
+#'
+#'   The multiplicative form is a convenience scalarisation, not a derived
+#'   result -- and in sparse target data `target_jaccard` is ~0 for almost
+#'   every pair, so `degeneracy_score` collapses to roughly
+#'   `pathway_jaccard`. Read `target_jaccard` and `pathway_jaccard`
+#'   together (the columns are both in the output) rather than leaning on
+#'   the scalar alone; `pathway_jaccard` is also an unweighted set overlap
+#'   over GO terms, so it does not account for term specificity (see
+#'   `ROADMAP.md` -- a `GOSemSim` semantic-similarity version is planned).
 #'
 #' @section Requires [network_enrich()] to have already run for the condition:
 #' Unlike [network_centrality()] or [network_hub_penalty()] (which only need

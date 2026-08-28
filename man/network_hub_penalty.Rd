@@ -31,12 +31,23 @@ to have run first (deliberately: coupling this to another function's
 specific \code{measures} choice would be a fragile dependency for a two-line
 formula that only ever needs plain degree).
 
-A target hit by every compound in the condition (\code{degree_raw == N_compounds}) gets \code{score_adjusted = 0} -- maximally promiscuous, fully
-discounted. A target hit by only one compound out of many keeps close to
-its raw degree (\code{log(N_compounds / 1)} is large) -- same intuition as
-TF-IDF, and the same log-ratio \code{\link[=bias_reweight]{bias_reweight()}} reuses at the
-reference-database level instead of at this per-condition-network level.
+Writing \code{p = degree_raw / N_compounds}, the formula is \code{N_compounds * p * log(1 / p)} -- \code{N_compounds} times the Shannon surprisal of \code{p}. It is
+\code{0} at \code{p = 1} (a target every compound hits: maximally promiscuous,
+fully discounted) and \code{0} in the limit \code{p -> 0}, with a \strong{maximum at
+\code{p = 1/e}} (a target hit by ~37\% of the condition's compounds). So it
+up-weights targets of \emph{intermediate} specificity rather than being
+monotone in selectivity. \code{\link[=bias_reweight]{bias_reweight()}} reuses the same expression at
+the whole-reference-database level.
 }
+\section{Known limitation}{
+
+Because the score peaks at \code{p = 1/e}, a moderately promiscuous target
+can outrank a highly selective one -- the name "penalty" oversells what
+a non-monotone weight does. Treat \code{score_adjusted} as "intermediate-
+specificity emphasis", not a clean selectivity ranking. Whether this is
+the wanted behaviour is flagged for revision (see \code{ROADMAP.md}).
+}
+
 \examples{
 \dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))

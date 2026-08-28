@@ -14,14 +14,9 @@ is a confidence, not a distance).
 \description{
 \code{unique()} on both \code{source_ids} and \code{target_ids} before calling
 \code{igraph::distances()}: igraph's underlying C routine rejects a \verb{to=}
-argument with duplicate vertices ("Target vertex list must not have any
-duplicates"). Duplicates are expected here, not a caller bug:
-\code{.network_resample_degree_matched()} draws each node independently \emph{with
-replacement} from its degree bin, so two different input nodes
-frequently resample to the same replacement, especially for small
-target sets (a handful of disease genes). Since the "closest" measure
-only cares about the \emph{set} of source/target nodes, deduping changes
-nothing about the result -- it only removes a redundant row/column
-\code{igraph::distances()} would otherwise refuse to compute.
+argument with duplicate vertices. \code{.network_resample_degree_matched()}
+returns distinct nodes, but the observed sets can still contain a
+repeat, and the "closest" measure only cares about the node \emph{set}, so
+deduping is harmless.
 }
 \keyword{internal}

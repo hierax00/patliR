@@ -50,10 +50,10 @@ run can be reproduced exactly.}
 The updated \code{proj}, with a \code{network_proximity} entry in
 \code{\link[=patliRResults]{patliRResults()}} (columns \code{condition}, \code{compound_id}, \code{disease_id},
 \code{n_targets_mapped}, \code{n_disease_genes_mapped}, \code{d_observed},
-\code{d_random_mean}, \code{d_random_sd}, \code{z_score}, \code{n_random}, \code{seed_used}),
-also written to \code{results/network_proximity.csv}. Compounds with zero
-targets mappable to the STRING network for \code{species} contribute no row
-(logged instead).
+\code{d_random_mean}, \code{d_random_sd}, \code{z_score}, \code{p_empirical},
+\code{p_adjusted}, \code{n_random}, \code{seed_used}), also written to
+\code{results/network_proximity.csv}. Compounds with zero targets mappable
+to the STRING network for \code{species} contribute no row (logged instead).
 }
 \description{
 For each compound present in a condition's network (\code{\link[=network_build]{network_build()}}),
@@ -91,15 +91,20 @@ dropped without a trace.
 
 \section{Degree-preserving null model}{
 
-For each of the \code{n_random} iterations, every protein in the compound's
-target set \emph{and} every protein in the disease's gene set is independently
-replaced by a randomly chosen STRING node from the same degree decile bin
-(an approximation of Guney et al.'s degree-preserving resampling), and the
-"closest" distance is recomputed on this resampled pair of sets. \code{z_score = (d_observed - mean(d_random)) / sd(d_random)}; a strongly negative
-\code{z_score} means the compound's targets are topologically closer to the
-disease genes than expected by chance given their degree. \code{seed} (if
-supplied) is used only for this resampling and does not leak into the
-caller's RNG state (same isolation pattern as
+The STRING graph is first restricted to its largest connected component
+(Guney et al. 2016; Menche et al. 2015). For each of the \code{n_random}
+iterations, the compound's target set and the disease's gene set are
+each replaced by an equal-size set of \strong{distinct} STRING nodes drawn
+from the same degree bins -- bins built from consecutive degree values,
+each extended until it holds >= 100 nodes (Guney et al.'s Methods), not
+fixed quantiles. The "closest" distance is recomputed on the resampled
+pair. \code{z_score = (d_observed - mean(d_random)) / sd(d_random)}; a
+strongly negative \code{z_score} means the compound's targets are
+topologically closer to the disease genes than expected by chance given
+their degree. \code{p_empirical} is the left-tail permutation p, and
+\code{p_adjusted} its Benjamini-Hochberg value across every compound in the
+call. \code{seed} (if supplied) is used only for this resampling and does not
+leak into the caller's RNG state (same isolation pattern as
 \code{\link[=network_module_robustness]{network_module_robustness()}}'s percolation step).
 }
 

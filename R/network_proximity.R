@@ -46,16 +46,20 @@ NULL
 #' dropped without a trace.
 #'
 #' @section Degree-preserving null model:
-#' For each of the `n_random` iterations, every protein in the compound's
-#' target set *and* every protein in the disease's gene set is independently
-#' replaced by a randomly chosen STRING node from the same degree decile bin
-#' (an approximation of Guney et al.'s degree-preserving resampling), and the
-#' "closest" distance is recomputed on this resampled pair of sets. `z_score
-#' = (d_observed - mean(d_random)) / sd(d_random)`; a strongly negative
-#' `z_score` means the compound's targets are topologically closer to the
-#' disease genes than expected by chance given their degree. `seed` (if
-#' supplied) is used only for this resampling and does not leak into the
-#' caller's RNG state (same isolation pattern as
+#' The STRING graph is first restricted to its largest connected component
+#' (Guney et al. 2016; Menche et al. 2015). For each of the `n_random`
+#' iterations, the compound's target set and the disease's gene set are
+#' each replaced by an equal-size set of **distinct** STRING nodes drawn
+#' from the same degree bins -- bins built from consecutive degree values,
+#' each extended until it holds >= 100 nodes (Guney et al.'s Methods), not
+#' fixed quantiles. The "closest" distance is recomputed on the resampled
+#' pair. `z_score = (d_observed - mean(d_random)) / sd(d_random)`; a
+#' strongly negative `z_score` means the compound's targets are
+#' topologically closer to the disease genes than expected by chance given
+#' their degree. `p_empirical` is the left-tail permutation p, and
+#' `p_adjusted` its Benjamini-Hochberg value across every compound in the
+#' call. `seed` (if supplied) is used only for this resampling and does not
+#' leak into the caller's RNG state (same isolation pattern as
 #' [network_module_robustness()]'s percolation step).
 #'
 #' @inheritParams network_build
@@ -80,10 +84,10 @@ NULL
 #' @return The updated `proj`, with a `network_proximity` entry in
 #'   [patliRResults()] (columns `condition`, `compound_id`, `disease_id`,
 #'   `n_targets_mapped`, `n_disease_genes_mapped`, `d_observed`,
-#'   `d_random_mean`, `d_random_sd`, `z_score`, `n_random`, `seed_used`),
-#'   also written to `results/network_proximity.csv`. Compounds with zero
-#'   targets mappable to the STRING network for `species` contribute no row
-#'   (logged instead).
+#'   `d_random_mean`, `d_random_sd`, `z_score`, `p_empirical`,
+#'   `p_adjusted`, `n_random`, `seed_used`), also written to
+#'   `results/network_proximity.csv`. Compounds with zero targets mappable
+#'   to the STRING network for `species` contribute no row (logged instead).
 #'
 #' @examples
 #' \dontrun{
@@ -149,6 +153,23 @@ network_proximity <- function(proj, condition = NULL, disease,
 
   string_db <- .network_stringdb(proj, species, version, score_threshold)
   g <- string_db$get_graph()
+
+  ## Guney et al. (2016) and Menche et al. (2015) both work on the
+  ## interactome's largest connected component -- a target outside it has
+  ## no finite distance to the disease module and would otherwise be
+  ## silently dropped (biasing d_observed downward) or make min() warn.
+  comp <- igraph::components(g)
+  lcc <- which.max(comp$csize)
+  n_dropped <- sum(comp$membership != lcc)
+  if (n_dropped > 0) {
+    g <- igraph::induced_subgraph(g, which(comp$membership == lcc))
+    proj <- .log_append(
+      proj, step = "network_proximity", id = NA_character_,
+      message = paste0("restricted STRING network to its largest connected component (",
+                        igraph::vcount(g), " nodes; ", n_dropped, " dropped)")
+    )
+  }
+
   degree_all <- igraph::degree(g)
   bins <- .network_degree_bins(degree_all)
 
@@ -212,13 +233,21 @@ network_proximity <- function(proj, condition = NULL, disease,
       } else {
         NA_real_
       }
+      ## left-tail permutation p: how often is a random module at least as
+      ## close as the observed one. (1 + .) / (n + 1) is the standard
+      ## never-zero estimator (Phipson & Smyth 2010).
+      p_empirical <- if (length(d_random) > 0) {
+        (1 + sum(d_random <= d_observed)) / (length(d_random) + 1)
+      } else {
+        NA_real_
+      }
 
       cond_rows[[i]] <- data.frame(
         condition = cond, compound_id = cp, disease_id = disease,
         n_targets_mapped = length(source_string), n_disease_genes_mapped = length(target_string),
         d_observed = d_observed, d_random_mean = d_random_mean, d_random_sd = d_random_sd,
-        z_score = z_score, n_random = length(d_random), seed_used = used_seed,
-        stringsAsFactors = FALSE
+        z_score = z_score, p_empirical = p_empirical, n_random = length(d_random),
+        seed_used = used_seed, stringsAsFactors = FALSE
       )
     }
 
@@ -233,6 +262,10 @@ network_proximity <- function(proj, condition = NULL, disease,
 
   result <- do.call(rbind, rows)
   rownames(result) <- NULL
+  ## BH across every (condition, compound) proximity test in this call
+  if (nrow(result) > 0 && "p_empirical" %in% names(result)) {
+    result$p_adjusted <- stats::p.adjust(result$p_empirical, method = "BH")
+  }
   result <- .network_upsert(proj, "network_proximity", result, c("condition", "disease_id", "compound_id"))
 
   patliRResults(proj, "network_proximity") <- result
@@ -255,37 +288,77 @@ network_proximity <- function(proj, condition = NULL, disease,
                score_threshold = score_threshold, input_directory = dir)
 }
 
-#' Degree decile bins over every node of the interactome -- the pool each
-#' random resampling draws from, per node, to approximately preserve degree.
+#' Degree bins over every node of the interactome -- the pool each random
+#' resampling draws from, per node, to preserve degree.
+#'
+#' @details
+#' Guney et al. (2016), *Nat Commun* 7:10331, Methods: bins are built from
+#' *consecutive degree values*, a bin extended until it holds at least
+#' `min_per_bin` (100) nodes. This keeps bins fine-grained at low degree
+#' and only coarsens in the sparse high-degree tail -- unlike fixed
+#' quantile bins, where a single decile on a scale-free graph spans an
+#' enormous degree range and a hub can be swapped for a low-degree node,
+#' destroying degree preservation exactly where the hub bias it corrects
+#' for is strongest.
 #' @return A list of integer vectors (node indices), one per bin.
 #' @keywords internal
-.network_degree_bins <- function(degree_all, n_bins = 10) {
-  breaks <- stats::quantile(degree_all, probs = seq(0, 1, length.out = n_bins + 1), type = 1)
-  breaks[1] <- breaks[1] - 1 ## make the lowest bin inclusive of the minimum
-  bin_id <- cut(degree_all, breaks = unique(breaks), include.lowest = TRUE, labels = FALSE)
-  split(seq_along(degree_all), bin_id)
+.network_degree_bins <- function(degree_all, min_per_bin = 100) {
+  ord <- order(degree_all)
+  degs_sorted <- degree_all[ord]
+  uniq_degs <- unique(degs_sorted)
+
+  ## walk up the unique degrees, closing a bin once it has >= min_per_bin
+  bin_of_degree <- integer(length(uniq_degs))
+  b <- 1L
+  count <- 0L
+  for (i in seq_along(uniq_degs)) {
+    bin_of_degree[i] <- b
+    count <- count + sum(degs_sorted == uniq_degs[i])
+    if (count >= min_per_bin) { b <- b + 1L; count <- 0L }
+  }
+  ## a trailing under-full bin is merged into the previous one
+  if (count > 0 && b > 1L) bin_of_degree[bin_of_degree == b] <- b - 1L
+
+  node_bin <- bin_of_degree[match(degree_all, uniq_degs)]
+  split(seq_along(degree_all), node_bin)
 }
 
-#' Replace each node in `string_ids` with a random node from the same
-#' degree bin (with replacement across nodes, i.e. two input nodes in the
-#' same bin may draw the same replacement).
-#' @return Character vector of STRING IDs, same length as `string_ids`.
+#' Replace `string_ids` with an equal-size set of *distinct* nodes drawn
+#' from the same degree bins.
+#'
+#' @details
+#' Nodes are grouped by their degree bin and, per bin, `k` distinct
+#' replacements are drawn from that bin's pool -- so the returned set has
+#' exactly `length(string_ids)` distinct nodes, matching Guney et al.'s
+#' "a set of |S| proteins with matching degrees". Drawing each node
+#' independently with replacement (and then `unique()`-ing downstream)
+#' would shrink the random set, inflating its distance variance and
+#' shrinking `|z_score|` in a way that varies with set size.
+#' @return Character vector of STRING IDs, length `length(string_ids)`.
 #' @keywords internal
 .network_resample_degree_matched <- function(string_ids, degree_all, bins) {
   node_names <- names(degree_all)
   bin_of_node <- integer(length(degree_all))
   for (b in seq_along(bins)) bin_of_node[bins[[b]]] <- b
 
-  vapply(string_ids, function(sid) {
-    idx <- match(sid, node_names)
-    b <- bin_of_node[idx]
-    pool <- bins[[b]]
-    ## sample(pool, 1) would misbehave if length(pool) == 1 -- sample()
-    ## treats a length-1 numeric x as "sample from 1:x", not as "the pool
-    ## is this one element" (a well-known base-R footgun). sample.int() on
-    ## the pool's length, then indexing into pool, avoids that entirely.
-    node_names[pool[sample.int(length(pool), 1)]]
-  }, character(1), USE.NAMES = FALSE)
+  idx <- match(string_ids, node_names)
+  by_bin <- split(seq_along(idx), bin_of_node[idx])
+
+  out <- character(length(string_ids))
+  for (bs in names(by_bin)) {
+    slots <- by_bin[[bs]]
+    pool <- bins[[as.integer(bs)]]
+    k <- length(slots)
+    ## distinct draw; if the bin is smaller than k (rare, only in the
+    ## coarse tail) fall back to with-replacement for that bin.
+    picks <- if (k <= length(pool)) {
+      pool[sample.int(length(pool), k)]
+    } else {
+      pool[sample.int(length(pool), k, replace = TRUE)]
+    }
+    out[slots] <- node_names[picks]
+  }
+  out
 }
 
 #' Guney et al. (2016) "closest" distance between two node sets on `g`
@@ -293,15 +366,10 @@ network_proximity <- function(proj, condition = NULL, disease,
 #' @description
 #' `unique()` on both `source_ids` and `target_ids` before calling
 #' `igraph::distances()`: igraph's underlying C routine rejects a `to=`
-#' argument with duplicate vertices ("Target vertex list must not have any
-#' duplicates"). Duplicates are expected here, not a caller bug:
-#' `.network_resample_degree_matched()` draws each node independently *with
-#' replacement* from its degree bin, so two different input nodes
-#' frequently resample to the same replacement, especially for small
-#' target sets (a handful of disease genes). Since the "closest" measure
-#' only cares about the *set* of source/target nodes, deduping changes
-#' nothing about the result -- it only removes a redundant row/column
-#' `igraph::distances()` would otherwise refuse to compute.
+#' argument with duplicate vertices. `.network_resample_degree_matched()`
+#' returns distinct nodes, but the observed sets can still contain a
+#' repeat, and the "closest" measure only cares about the node *set*, so
+#' deduping is harmless.
 #'
 #' @return A single numeric (unweighted shortest-path hops, `weights = NA`
 #'   -- same rationale as [network_centrality()]: STRING's `combined_score`
@@ -320,7 +388,8 @@ network_proximity <- function(proj, condition = NULL, disease,
     condition = character(0), compound_id = character(0), disease_id = character(0),
     n_targets_mapped = integer(0), n_disease_genes_mapped = integer(0),
     d_observed = double(0), d_random_mean = double(0), d_random_sd = double(0),
-    z_score = double(0), n_random = integer(0), seed_used = integer(0),
+    z_score = double(0), p_empirical = double(0), n_random = integer(0),
+    seed_used = integer(0),
     stringsAsFactors = FALSE
   )
 }

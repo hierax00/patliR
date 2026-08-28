@@ -2,16 +2,26 @@
 % Please edit documentation in R/network_proximity.R
 \name{.network_degree_bins}
 \alias{.network_degree_bins}
-\title{Degree decile bins over every node of the interactome -- the pool each
-random resampling draws from, per node, to approximately preserve degree.}
+\title{Degree bins over every node of the interactome -- the pool each random
+resampling draws from, per node, to preserve degree.}
 \usage{
-.network_degree_bins(degree_all, n_bins = 10)
+.network_degree_bins(degree_all, min_per_bin = 100)
 }
 \value{
 A list of integer vectors (node indices), one per bin.
 }
 \description{
-Degree decile bins over every node of the interactome -- the pool each
-random resampling draws from, per node, to approximately preserve degree.
+Degree bins over every node of the interactome -- the pool each random
+resampling draws from, per node, to preserve degree.
+}
+\details{
+Guney et al. (2016), \emph{Nat Commun} 7:10331, Methods: bins are built from
+\emph{consecutive degree values}, a bin extended until it holds at least
+\code{min_per_bin} (100) nodes. This keeps bins fine-grained at low degree
+and only coarsens in the sparse high-degree tail -- unlike fixed
+quantile bins, where a single decile on a scale-free graph spans an
+enormous degree range and a hub can be swapped for a low-degree node,
+destroying degree preservation exactly where the hub bias it corrects
+for is strongest.
 }
 \keyword{internal}

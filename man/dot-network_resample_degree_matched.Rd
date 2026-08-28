@@ -2,18 +2,25 @@
 % Please edit documentation in R/network_proximity.R
 \name{.network_resample_degree_matched}
 \alias{.network_resample_degree_matched}
-\title{Replace each node in \code{string_ids} with a random node from the same
-degree bin (with replacement across nodes, i.e. two input nodes in the
-same bin may draw the same replacement).}
+\title{Replace \code{string_ids} with an equal-size set of \emph{distinct} nodes drawn
+from the same degree bins.}
 \usage{
 .network_resample_degree_matched(string_ids, degree_all, bins)
 }
 \value{
-Character vector of STRING IDs, same length as \code{string_ids}.
+Character vector of STRING IDs, length \code{length(string_ids)}.
 }
 \description{
-Replace each node in \code{string_ids} with a random node from the same
-degree bin (with replacement across nodes, i.e. two input nodes in the
-same bin may draw the same replacement).
+Replace \code{string_ids} with an equal-size set of \emph{distinct} nodes drawn
+from the same degree bins.
+}
+\details{
+Nodes are grouped by their degree bin and, per bin, \code{k} distinct
+replacements are drawn from that bin's pool -- so the returned set has
+exactly \code{length(string_ids)} distinct nodes, matching Guney et al.'s
+"a set of |S| proteins with matching degrees". Drawing each node
+independently with replacement (and then \code{unique()}-ing downstream)
+would shrink the random set, inflating its distance variance and
+shrinking \verb{|z_score|} in a way that varies with set size.
 }
 \keyword{internal}

@@ -39,24 +39,45 @@ test_that("network_proximity() errors clearly on an unknown disease_id", {
   )
 })
 
-test_that(".network_degree_bins()/.network_resample_degree_matched() preserve length and vocabulary", {
-  testthat::skip_if_not_installed("STRINGdb")
+test_that(".network_degree_bins() builds >=min_per_bin bins from consecutive degrees (Guney rule)", {
   set.seed(1)
-  degree_all <- stats::setNames(sample(1:50, 30, replace = TRUE), paste0("n", 1:30))
-  bins <- patliR:::.network_degree_bins(degree_all)
-  resampled <- patliR:::.network_resample_degree_matched(names(degree_all)[1:5], degree_all, bins)
-  expect_length(resampled, 5)
-  expect_true(all(resampled %in% names(degree_all)))
+  degree_all <- stats::setNames(
+    pmax(1L, rpois(2000, 4) + rbinom(2000, 40, 0.1)),
+    paste0("n", 1:2000)
+  )
+  bins <- patliR:::.network_degree_bins(degree_all, min_per_bin = 100)
+
+  sizes <- lengths(bins)
+  expect_true(all(utils::head(sizes, -1) >= 100))          # all but last >= 100
+  deg_ranges <- lapply(bins, function(ix) range(degree_all[ix]))
+  for (i in seq_len(length(bins) - 1)) {                   # contiguous in degree
+    expect_lte(deg_ranges[[i]][2], deg_ranges[[i + 1]][1])
+  }
+})
+
+test_that(".network_resample_degree_matched() returns an equal-size set of distinct, degree-matched nodes", {
+  set.seed(2)
+  degree_all <- stats::setNames(sample(1:60, 400, replace = TRUE), paste0("n", 1:400))
+  bins <- patliR:::.network_degree_bins(degree_all, min_per_bin = 50)
+
+  input <- names(degree_all)[1:12]
+  out <- patliR:::.network_resample_degree_matched(input, degree_all, bins)
+  expect_length(out, length(input))
+  expect_false(anyDuplicated(out) > 0)
+  expect_true(all(out %in% names(degree_all)))
+
+  bin_of <- integer(length(degree_all))
+  for (b in seq_along(bins)) bin_of[bins[[b]]] <- b
+  names(bin_of) <- names(degree_all)
+  expect_equal(unname(bin_of[out]), unname(bin_of[input]))
 })
 
 test_that(".network_closest_distance() tolerates duplicate source/target ids", {
-  ## Real bug, found by Uriel running network_proximity() against a live
-  ## STRINGdb download (2026-07-23): igraph::distances()'s underlying C
-  ## routine errors outright ("Target vertex list must not have any
-  ## duplicates") if `to=` has a repeated vertex -- and
-  ## .network_resample_degree_matched() legitimately produces duplicates
-  ## (independent sampling *with replacement* per node). No STRINGdb/
-  ## internet needed for this one -- a tiny synthetic igraph reproduces it.
+  ## igraph::distances()'s underlying C routine errors outright ("Target
+  ## vertex list must not have any duplicates") if `to=` has a repeated
+  ## vertex. The observed source/target sets can still carry a repeat, so
+  ## .network_closest_distance() dedups defensively. A tiny synthetic
+  ## igraph reproduces the constraint, no STRINGdb needed.
   g <- igraph::graph_from_data_frame(
     data.frame(from = c("a", "b", "c"), to = c("b", "c", "d"), stringsAsFactors = FALSE),
     directed = FALSE

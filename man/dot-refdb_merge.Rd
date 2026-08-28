@@ -4,13 +4,17 @@
 \alias{.refdb_merge}
 \title{Replace this run's rows in a reference table, keep every other
 compound's, drop exact-key duplicates. Makes \code{\link[=refdb_build]{refdb_build()}} idempotent,
-which the "every step is proj -> proj" contract needs.}
+which the "every step is proj -> proj" contract needs. Tolerates an
+\code{old} table written by an earlier schema (missing columns are filled
+with \code{NA} so the two frames can be \code{rbind()}-ed).}
 \usage{
 .refdb_merge(old, new, touched_ids, key)
 }
 \description{
 Replace this run's rows in a reference table, keep every other
 compound's, drop exact-key duplicates. Makes \code{\link[=refdb_build]{refdb_build()}} idempotent,
-which the "every step is proj -> proj" contract needs.
+which the "every step is proj -> proj" contract needs. Tolerates an
+\code{old} table written by an earlier schema (missing columns are filled
+with \code{NA} so the two frames can be \code{rbind()}-ed).
 }
 \keyword{internal}

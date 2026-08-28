@@ -7,10 +7,12 @@
 .pubchem_lookup(cid = NA_character_, smiles = NA_character_)
 }
 \description{
-\code{patliR} has no true InChIKey (see \code{.check_structures()}, internal), so
-this prefers the exact \code{pubchem_id} (CID) already on the compound when
-available (Scenario B input), and only falls back to a SMILES-based
-lookup -- which is exact-structure but canonicalization-sensitive -- when
-there is no CID.
+\code{patliR} has no locally computed InChIKey (see \code{.check_structures()},
+internal), so this prefers the exact \code{pubchem_id} (CID) already on the
+compound when available (Scenario B input), and only falls back to a
+SMILES-based lookup -- exact-structure but canonicalization-sensitive --
+when there is no CID. Returns the standard InChIKey and connectivity
+SMILES alongside the title so \code{reference_compounds} has a real
+structure-identity column.
 }
 \keyword{internal}

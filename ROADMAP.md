@@ -22,26 +22,32 @@ guessing.
 
 ## Reference / natural-product databases
 
-- **`.chembl_lookup()` identity chain** — it currently takes the first hit
-  of a 100%-Tanimoto *similarity* search, which is not an identity match
-  and picks wrong molecules (methyl palmitate -> methyl octanoate,
-  limonene -> wrong enantiomer, ...). Replace with: PubChem CID -> standard
-  InChIKey (batched) -> ChEMBL `standard_inchi_key__in` exact (batched) ->
-  InChIKey-skeleton fallback (flagged) -> SMILES flexmatch -> give up.
-  Drop-in code is in `reviews/refdb-chembl-pubchem-review.md`. Once it
-  lands, delete + rebuild the Chilcuague `reference_*.csv`.
-- **`.chembl_bioactivity()` pagination** — hard `limit = 50`, no paging, no
-  ordering; makes `bias_audit()`'s background a function of the fetch cap.
-  Paginate via `page_meta$next`, filter fields with `only=`, drop
-  non-target rows ("No relevant target", "Log S"), keep `standard_relation`
-  / `data_validity_comment` as columns.
-- **`reference_*` schema** — add `inchikey` + `match_type` +
-  `parent_chembl_id` + `fetched_at` to `reference_compounds`;
-  `standard_relation` + `pchembl_value` + `target_organism` + `assay_type`
-  + `data_validity_comment` to `reference_bioactivity`.
-- **fetchers: retry / throttle / User-Agent** — none of the three refdb
-  fetchers has any; identity cache keys should be chemical (CID/InChIKey),
-  not the project-local `C0001` id.
+- ~~**`.chembl_lookup()` identity chain**~~ — DONE (v0.1.0 dev, refdb.R).
+  Replaced the 100%-Tanimoto *similarity* search (which picked wrong
+  molecules: methyl palmitate -> methyl octanoate, limonene -> wrong
+  enantiomer) with a deterministic chain in `.chembl_resolve()`: PubChem
+  CID -> standard InChIKey (batched) ->
+  `molecule_structures__standard_inchi_key__in` exact (batched) ->
+  InChIKey-skeleton `__startswith` fallback (flagged `inchikey_skeleton`)
+  -> SMILES `flexmatch` (as a query parameter) -> give up.
+  `.chembl_pick()` breaks ties deterministically (own-parent, pref_name,
+  lowest id). **Still required: delete + rebuild the Chilcuague
+  `reference_*.csv`** (needs a full pipeline run).
+- ~~**`.chembl_bioactivity()` pagination**~~ — DONE. Hard `limit = 50`
+  removed; fully paginated via `page_meta$next`, `only=` field filter,
+  non-target rows dropped (`.chembl_nontarget_names` + missing
+  `target_chembl_id`), `standard_relation` / `pchembl_value` /
+  `data_validity_comment` kept as columns, deterministic ordering.
+- ~~**`reference_*` schema**~~ — DONE. `reference_compounds` +=
+  `inchikey`, `match_type`, `parent_chembl_id`, `fetched_at`;
+  `reference_bioactivity` += `standard_relation`, `pchembl_value`,
+  `target_organism`, `assay_type`, `data_validity_comment`.
+- ~~**fetchers: retry / throttle / User-Agent**~~ — DONE. All refdb
+  traffic goes through `.refdb_get_json()` (User-Agent, ~3 req/s throttle,
+  exponential-backoff retry on 429/5xx). Identity cache keys are now
+  chemical (`.refdb_batch_key()` over CIDs+SMILES for the batch;
+  `.refdb_identity_key()` = CID or SMILES digest per compound; bioactivity
+  keyed by resolved ChEMBL id), never the project-local `C0001` id.
 - **`prep_and_refdb()`** — optional thin wrapper (prep_compounds then
   refdb_build) for the Shiny app; do NOT add a `build_refdb=` flag to
   `prep_compounds()` (keeps that step pure/offline -- see `DESIGN.md`).

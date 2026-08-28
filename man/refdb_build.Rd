@@ -28,7 +28,10 @@ data, so failures do not stop the pipeline by default.}
 The updated \code{proj}, with \code{reference_compounds} and
 \code{reference_bioactivity} entries in \code{\link[=patliRResults]{patliRResults()}}, also written to
 \code{reference_compounds.csv} / \code{reference_bioactivity.csv} inside
-\code{\link[=projectDir]{projectDir()}}.
+\code{\link[=projectDir]{projectDir()}}. \code{reference_compounds} carries \code{inchikey}, \code{match_type},
+\code{parent_chembl_id} and \code{fetched_at}; \code{reference_bioactivity} carries
+\code{standard_relation}, \code{pchembl_value}, \code{target_organism}, \code{assay_type}
+and \code{data_validity_comment}.
 }
 \description{
 \code{refdb_build()} populates \code{reference_compounds.csv} and
@@ -45,6 +48,14 @@ forward-compatibility but is not implemented yet in this version --
 request it once \code{coconut_fetch()} (natural-product family) ships; asking
 for it now raises an informative error rather than pretending to
 succeed.
+
+ChEMBL identity is resolved by a deterministic identity chain, never a
+similarity search: PubChem CID -> standard InChIKey (batched) -> ChEMBL
+\code{standard_inchi_key} exact match (batched) -> InChIKey-skeleton match
+(first 14 characters, flagged as weaker in \code{match_type}) -> SMILES
+\code{flexmatch} -> give up. When a query returns several molecules the one
+kept is chosen by \code{\link[=.chembl_pick]{.chembl_pick()}} (own-parent, then has a preferred
+name, then lowest ChEMBL id), never simply the first.
 }
 \examples{
 \dontrun{

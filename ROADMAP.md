@@ -22,6 +22,29 @@ guessing.
 
 ## Reference / natural-product databases
 
+- **`.chembl_lookup()` identity chain** — it currently takes the first hit
+  of a 100%-Tanimoto *similarity* search, which is not an identity match
+  and picks wrong molecules (methyl palmitate -> methyl octanoate,
+  limonene -> wrong enantiomer, ...). Replace with: PubChem CID -> standard
+  InChIKey (batched) -> ChEMBL `standard_inchi_key__in` exact (batched) ->
+  InChIKey-skeleton fallback (flagged) -> SMILES flexmatch -> give up.
+  Drop-in code is in `reviews/refdb-chembl-pubchem-review.md`. Once it
+  lands, delete + rebuild the Chilcuague `reference_*.csv`.
+- **`.chembl_bioactivity()` pagination** — hard `limit = 50`, no paging, no
+  ordering; makes `bias_audit()`'s background a function of the fetch cap.
+  Paginate via `page_meta$next`, filter fields with `only=`, drop
+  non-target rows ("No relevant target", "Log S"), keep `standard_relation`
+  / `data_validity_comment` as columns.
+- **`reference_*` schema** — add `inchikey` + `match_type` +
+  `parent_chembl_id` + `fetched_at` to `reference_compounds`;
+  `standard_relation` + `pchembl_value` + `target_organism` + `assay_type`
+  + `data_validity_comment` to `reference_bioactivity`.
+- **fetchers: retry / throttle / User-Agent** — none of the three refdb
+  fetchers has any; identity cache keys should be chemical (CID/InChIKey),
+  not the project-local `C0001` id.
+- **`prep_and_refdb()`** — optional thin wrapper (prep_compounds then
+  refdb_build) for the Shiny app; do NOT add a `build_refdb=` flag to
+  `prep_compounds()` (keeps that step pure/offline -- see `DESIGN.md`).
 - **`coconut_fetch()`** — COCONUT 2.0 REST API, folded into
   `reference_*`. Endpoint not confirmed without guessing at the time of
   writing.

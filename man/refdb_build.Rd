@@ -6,7 +6,7 @@
 \usage{
 refdb_build(
   proj,
-  sources = c("pubchem", "chembl", "coconut"),
+  sources = c("pubchem", "chembl"),
   compound_ids = NULL,
   fetch_mode = c("warn_and_cache", "abort")
 )

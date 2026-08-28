@@ -201,7 +201,25 @@ prep_compounds <- function(proj, data,
 }
 
 #' @keywords internal
+#'
+#' PubChem renamed its PUG-REST SMILES properties (2025): the old
+#' `CanonicalSMILES` now comes back as `ConnectivitySMILES` and the
+#' stereo-bearing `IsomericSMILES` as the unqualified `SMILES`. The old
+#' names are still accepted on the *request* (HTTP 200) but the response
+#' key uses the new name, so reading `$CanonicalSMILES` silently returns
+#' `NULL`. We request the new names and read whichever column is present,
+#' preferring the stereo-bearing one, and fall back to the legacy keys so a
+#' future revert cannot silently break this again.
 .fetch_smiles_from_pubchem <- function(pubchem_ids, cache_dir, fetch_mode) {
+  pick_smiles <- function(res) {
+    for (col in c("SMILES", "IsomericSMILES", "ConnectivitySMILES", "CanonicalSMILES")) {
+      if (col %in% names(res)) {
+        v <- as.character(res[[col]][[1]])
+        if (!is.na(v) && nzchar(v)) return(v)
+      }
+    }
+    NA_character_
+  }
   vapply(pubchem_ids, function(cid) {
     if (is.na(cid) || !nzchar(cid)) return(NA_character_)
     fetched <- .fetch_external(
@@ -209,11 +227,16 @@ prep_compounds <- function(proj, data,
         if (!requireNamespace("webchem", quietly = TRUE)) {
           stop("the 'webchem' package is required to fetch SMILES from PubChem; install it or provide SMILES directly.")
         }
-        res <- webchem::pc_prop(as.character(cid), properties = "CanonicalSMILES")
-        res$CanonicalSMILES[[1]]
+        res <- webchem::pc_prop(as.character(cid),
+                                 properties = c("SMILES", "ConnectivitySMILES"))
+        s <- pick_smiles(res)
+        if (is.na(s)) stop("PubChem returned no SMILES for CID ", cid)
+        s
       },
       cache_dir = cache_dir,
-      cache_key = paste0("pubchem_smiles_", cid),
+      ## key bumped (was pubchem_smiles_) so caches poisoned by the
+      ## pre-rename NULL bug are not read back.
+      cache_key = paste0("pubchem_cid_smiles_", cid),
       mode = fetch_mode
     )
     if (is.null(fetched)) NA_character_ else as.character(fetched)

@@ -7,6 +7,39 @@ test_that("refdb_build() rejects 'coconut' as a source with an informative error
   )
 })
 
+test_that("refdb_build()'s default sources do not include the unimplemented 'coconut'", {
+  ## a bare refdb_build(proj) used to abort because match.arg(several.ok)
+  ## returned the whole default vector, which contained "coconut".
+  expect_false("coconut" %in% eval(formals(refdb_build)$sources))
+})
+
+test_that(".refdb_merge() replaces a compound's rows and drops key-duplicates (idempotent)", {
+  old <- data.frame(
+    compound_id = c("C0001", "C0001", "C0002"),
+    source = c("pubchem", "chembl", "pubchem"),
+    external_id = c("111", "CHEMBL1", "222"),
+    name = c("a", "a", "b"), stringsAsFactors = FALSE
+  )
+  ## re-run for C0001 only, with a changed external_id
+  new <- data.frame(
+    compound_id = c("C0001", "C0001"),
+    source = c("pubchem", "chembl"),
+    external_id = c("111", "CHEMBL_NEW"),
+    name = c("a", "a"), stringsAsFactors = FALSE
+  )
+  out <- patliR:::.refdb_merge(old, new, touched_ids = "C0001",
+                               key = c("compound_id", "source"))
+  ## C0002 untouched, C0001 replaced (not duplicated), 3 rows total
+  expect_equal(nrow(out), 3)
+  expect_equal(out$external_id[out$compound_id == "C0001" & out$source == "chembl"], "CHEMBL_NEW")
+  expect_true("C0002" %in% out$compound_id)
+
+  ## running the SAME merge twice is a no-op
+  out2 <- patliR:::.refdb_merge(out, new, touched_ids = "C0001", key = c("compound_id", "source"))
+  expect_equal(out2[order(out2$compound_id, out2$source), ],
+               out[order(out$compound_id, out$source), ], ignore_attr = TRUE)
+})
+
 test_that("refdb_build() warns and returns proj unchanged when there are no compounds", {
   proj <- .test_project()
   expect_warning(out <- refdb_build(proj, sources = "pubchem"), "No matching compounds")

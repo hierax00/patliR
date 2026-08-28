@@ -47,11 +47,14 @@ NULL
 #' }
 #'
 #' @export
-refdb_build <- function(proj, sources = c("pubchem", "chembl", "coconut"),
+refdb_build <- function(proj, sources = c("pubchem", "chembl"),
                          compound_ids = NULL,
                          fetch_mode = c("warn_and_cache", "abort")) {
   stopifnot(is(proj, "PatliRProject"))
-  sources <- match.arg(sources, several.ok = TRUE)
+  ## "coconut" is a valid name for forward-compat but not implemented; it is
+  ## NOT in the default (a bare `refdb_build(proj)` used to abort because
+  ## match.arg(several.ok = TRUE) returned all of the default vector).
+  sources <- match.arg(sources, choices = c("pubchem", "chembl", "coconut"), several.ok = TRUE)
   fetch_mode <- match.arg(fetch_mode)
 
   if ("coconut" %in% sources) {
@@ -68,8 +71,12 @@ refdb_build <- function(proj, sources = c("pubchem", "chembl", "coconut"),
     return(proj)
   }
 
-  ref_compounds <- patliRResults(proj, "reference_compounds") %||% .empty_reference_compounds()
-  ref_bioactivity <- patliRResults(proj, "reference_bioactivity") %||% .empty_reference_bioactivity()
+  ## Build ONLY this run's rows, then merge -- so a second refdb_build()
+  ## (or one after patliR_load() has restored the CSVs into the results
+  ## bag) replaces this run's compounds instead of duplicating every row.
+  new_compounds <- .empty_reference_compounds()
+  new_bioactivity <- .empty_reference_bioactivity()
+  n_resolved <- 0L
 
   for (i in seq_len(nrow(cmp))) {
     id <- cmp$id[i]
@@ -82,7 +89,7 @@ refdb_build <- function(proj, sources = c("pubchem", "chembl", "coconut"),
         cache_dir = cacheDir(proj), cache_key = paste0("refdb_pubchem_", id), mode = fetch_mode
       )
       if (!is.null(pc)) {
-        ref_compounds <- rbind(ref_compounds, data.frame(
+        new_compounds <- rbind(new_compounds, data.frame(
           compound_id = id, source = "pubchem", external_id = pc$cid,
           name = pc$name %||% NA_character_, stringsAsFactors = FALSE
         ))
@@ -95,7 +102,8 @@ refdb_build <- function(proj, sources = c("pubchem", "chembl", "coconut"),
         cache_dir = cacheDir(proj), cache_key = paste0("refdb_chembl_", id), mode = fetch_mode
       )
       if (!is.null(ch)) {
-        ref_compounds <- rbind(ref_compounds, data.frame(
+        n_resolved <- n_resolved + 1L
+        new_compounds <- rbind(new_compounds, data.frame(
           compound_id = id, source = "chembl", external_id = ch$chembl_id,
           name = ch$pref_name %||% NA_character_, stringsAsFactors = FALSE
         ))
@@ -105,17 +113,46 @@ refdb_build <- function(proj, sources = c("pubchem", "chembl", "coconut"),
         )
         if (!is.null(bio) && nrow(bio) > 0) {
           bio$compound_id <- id
-          ref_bioactivity <- rbind(ref_bioactivity, bio[, names(ref_bioactivity)])
+          new_bioactivity <- rbind(new_bioactivity, bio[, names(new_bioactivity)])
         }
       }
     }
   }
 
+  ref_compounds <- .refdb_merge(
+    patliRResults(proj, "reference_compounds") %||% .empty_reference_compounds(),
+    new_compounds, cmp$id, key = c("compound_id", "source"))
+  ref_bioactivity <- .refdb_merge(
+    patliRResults(proj, "reference_bioactivity") %||% .empty_reference_bioactivity(),
+    new_bioactivity, cmp$id,
+    key = c("compound_id", "target_chembl_id", "standard_type", "assay_chembl_id"))
+
   patliRResults(proj, "reference_compounds") <- ref_compounds
   patliRResults(proj, "reference_bioactivity") <- ref_bioactivity
   .write_results_csv(proj, "reference_compounds", ref_compounds)
   .write_results_csv(proj, "reference_bioactivity", ref_bioactivity)
+  proj <- .log_append(
+    proj, step = "refdb_build", id = NA_character_,
+    message = paste0("built reference DB for ", nrow(cmp), " compound(s): ",
+                      nrow(new_compounds), " identity row(s), ", nrow(new_bioactivity),
+                      " bioactivity row(s), ", n_resolved, " resolved on ChEMBL")
+  )
+  .write_log_csv(proj)
   proj
+}
+
+#' Replace this run's rows in a reference table, keep every other
+#' compound's, drop exact-key duplicates. Makes [refdb_build()] idempotent,
+#' which the "every step is proj -> proj" contract needs.
+#' @keywords internal
+.refdb_merge <- function(old, new, touched_ids, key) {
+  if (nrow(old) == 0) return(new)
+  old <- old[!old$compound_id %in% touched_ids, , drop = FALSE]
+  out <- rbind(old, new[, names(old), drop = FALSE])
+  key <- intersect(key, names(out))
+  if (length(key) > 0) out <- out[!duplicated(out[, key, drop = FALSE]), , drop = FALSE]
+  rownames(out) <- NULL
+  out
 }
 
 #' Incrementally update the reference database for new compounds

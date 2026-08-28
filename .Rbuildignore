@@ -10,3 +10,4 @@
 ^.*\.Rcheck$
 ^DESIGN\.md$
 ^ROADMAP\.md$
+^METHODS\.md$

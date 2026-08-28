@@ -148,7 +148,9 @@ A worked end-to-end script against a real dataset lives in
 | `bias_*` | MAD-based "promiscuous compound/target" flag against the reference DB |
 | `patliR_export_llm()` | flat-text dump of a whole project for an LLM to read |
 
-Everything is documented on its own help page. For the cross-cutting design
+Everything is documented on its own help page.
+[`METHODS.md`](METHODS.md) explains, in plain language, what each function
+actually computes and the theory behind it. For the cross-cutting design
 decisions see [`DESIGN.md`](DESIGN.md); for what is designed but not yet
 built see [`ROADMAP.md`](ROADMAP.md).
 

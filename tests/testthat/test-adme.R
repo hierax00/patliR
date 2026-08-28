@@ -47,6 +47,28 @@ test_that("adme_import() reconciles a SwissADME export via PubChem CID", {
   expect_true(all(!is.na(imported$compound_id)))
 })
 
+test_that("adme_import(mapping_file=) matches by row position", {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+
+  map_base <- file.path(projectDir(proj), "adme_bridge")
+  adme_export_smiles(proj, out_file = map_base)
+  map_path <- paste0(map_base, "_map.csv")
+
+  ## the bundled SwissADME example rows are in the same order as the
+  ## compound list, so row i -> row_order i
+  proj <- adme_import(
+    proj,
+    system.file("extdata", "import_adme_swissadme.csv", package = "patliR"),
+    platform = "swissadme",
+    mapping_file = map_path
+  )
+  imported <- patliRResults(proj, "adme_imported")
+  expect_true(nrow(imported) > 0)
+  expect_true(all(!is.na(imported$compound_id)))
+  expect_true(all(imported$compound_id %in% compounds(proj)$id))
+})
+
 test_that("adme_filter() marks pass/fail without removing anything by default", {
   proj <- .test_project()
   proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")

@@ -28,6 +28,13 @@ NULL
 #'   `platform = "other"`; ignored (a preset is used instead) for
 #'   `"swissadme"`/`"admetlab"` unless you explicitly pass one, in which
 #'   case yours takes precedence.
+#' @param mapping_file Path to the `<out_file>_map.csv` written by
+#'   [adme_export_smiles()], or `NULL` (default). When given, rows are
+#'   matched to `compound_id` **by position** against that file (the
+#'   platform returns its output in input order), not by SMILES or CID --
+#'   the reliable way to reconcile an export when the platform's own
+#'   canonical SMILES need not match patliR's. Takes precedence over the
+#'   `platform` matching rule.
 #'
 #' @details
 #' Built-in presets (confirmed against the column headers real exports
@@ -66,15 +73,18 @@ NULL
 #'
 #' @export
 adme_import <- function(proj, path, platform = c("swissadme", "admetlab", "other"),
-                         column_map = NULL) {
+                         column_map = NULL, mapping_file = NULL) {
   stopifnot(is(proj, "PatliRProject"), file.exists(path))
   platform <- match.arg(platform)
 
   raw <- .read_csv_safe(path)
   cmp <- compounds(proj)
 
-  match_result <- .import_match_compounds(raw, cmp, platform)
-  matched_id <- match_result$compound_id
+  matched_id <- if (!is.null(mapping_file)) {
+    .match_by_export_mapping(nrow(raw), mapping_file)
+  } else {
+    .import_match_compounds(raw, cmp, platform)$compound_id
+  }
   unmatched <- is.na(matched_id)
 
   if (any(unmatched)) {

@@ -35,3 +35,32 @@
   )
   network_build(proj)
 }
+
+## A stand-in for the object `.network_stringdb()` returns, so
+## network_proximity() can be exercised offline (the real path needs a
+## tens-to-hundreds-of-MB STRING flat-file download). `uniprot_ids` are the
+## accessions the test will ask about; each maps to a distinct STRING node
+## `s<i>`, and the graph is a connected star+path over those nodes so
+## degree binning and BFS distances are well defined.
+.fake_string_db <- function(uniprot_ids) {
+  ids <- unique(as.character(uniprot_ids))
+  string_ids <- stats::setNames(paste0("s", seq_along(ids)), ids)
+  n <- length(string_ids)
+  el <- rbind(
+    cbind(string_ids[rep(1L, n - 1L)], string_ids[-1L]),  # star from node 1
+    cbind(string_ids[-n], string_ids[-1L])                # + a path for degree variety
+  )
+  g <- igraph::simplify(igraph::graph_from_edgelist(matrix(as.character(el), ncol = 2), directed = FALSE))
+  list(
+    get_graph = function() g,
+    map = function(my_data_frame, my_data_frame_id_col_name,
+                   removeUnmappedRows = FALSE, quiet = TRUE) {
+      key <- as.character(my_data_frame[[my_data_frame_id_col_name]])
+      my_data_frame$STRING_id <- unname(string_ids[key])
+      if (isTRUE(removeUnmappedRows)) {
+        my_data_frame <- my_data_frame[!is.na(my_data_frame$STRING_id), , drop = FALSE]
+      }
+      my_data_frame
+    }
+  )
+}

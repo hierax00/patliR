@@ -8,6 +8,7 @@ network_proximity(
   proj,
   condition = NULL,
   disease,
+  disease_genes = c("disease_genes", "targets_disease"),
   species = 9606,
   version = "12.0",
   score_threshold = 400,
@@ -23,10 +24,21 @@ of \code{\link[=binarizedMatrix]{binarizedMatrix()}}), or \code{NULL} (default) 
 condition. Rebuilding a subset leaves previously-built conditions
 untouched in \code{patliRResults(proj, "network_edges")}.}
 
-\item{disease}{A single \code{disease_id} as it appears in
-\code{patliRResults(proj, "targets_disease")$disease_id} (i.e. already
-resolved by \code{\link[=targets_disease_filter]{targets_disease_filter()}} for at least one target in this
-project).}
+\item{disease}{A single \code{disease_id}. With \code{disease_genes = "disease_genes"}
+(the default) it must appear in
+\code{patliRResults(proj, "disease_genes")$disease_id} (i.e. it was fetched
+by \code{\link[=disease_genes_fetch]{disease_genes_fetch()}} or imported by \code{\link[=disease_genes_import]{disease_genes_import()}}).
+With \code{disease_genes = "targets_disease"} it must appear in
+\code{patliRResults(proj, "targets_disease")$disease_id} instead.}
+
+\item{disease_genes}{Which slot the disease module \code{T} is built from.
+\code{"disease_genes"} (default): the independent, disease -> target gene set
+from \code{\link[=disease_genes_fetch]{disease_genes_fetch()}} / \code{\link[=disease_genes_import]{disease_genes_import()}}. \code{"targets_disease"}:
+the legacy path -- \code{T} is drawn from \code{\link[=targets_disease_filter]{targets_disease_filter()}}, which
+only ever annotates UniProt IDs already predicted as targets, so \code{S}
+and \code{T} overlap by construction and the z-score is biased (a warning
+naming this circularity is emitted; the run is not aborted). Rows
+record which was used in the \code{disease_gene_source} column.}
 
 \item{species}{NCBI taxonomy ID passed to \code{STRINGdb$new()}. Default
 \code{9606} (human).}
@@ -49,8 +61,11 @@ run can be reproduced exactly.}
 \value{
 The updated \code{proj}, with a \code{network_proximity} entry in
 \code{\link[=patliRResults]{patliRResults()}} (columns \code{condition}, \code{compound_id}, \code{disease_id},
-\code{n_targets_mapped}, \code{n_disease_genes_mapped}, \code{d_observed},
-\code{d_random_mean}, \code{d_random_sd}, \code{z_score}, \code{p_empirical},
+\code{disease_gene_source}, \code{n_targets_mapped}, \code{n_disease_genes_mapped},
+\code{n_overlap} (\verb{|S ∩ T|} on the STRING-mapped sets, so the residual
+overlap driving \code{d_observed} toward 0 is always visible -- it equals
+\code{n_targets_mapped} exactly when \code{d_observed == 0}, i.e. \verb{S ⊆ T}),
+\code{d_observed}, \code{d_random_mean}, \code{d_random_sd}, \code{z_score}, \code{p_empirical},
 \code{n_random}, \code{seed_used}, \code{p_adjusted}), also written to
 \code{results/network_proximity.csv}. Compounds with zero targets mappable
 to the STRING network for \code{species} contribute no row (logged instead).
@@ -59,10 +74,23 @@ to the STRING network for \code{species} contribute no row (logged instead).
 For each compound present in a condition's network (\code{\link[=network_build]{network_build()}}),
 computes the topological "closest" distance (Guney et al. 2016, \emph{Nat
 Commun} 7:10331) between that compound's target set and a disease's
-associated gene set (from \code{\link[=targets_disease_filter]{targets_disease_filter()}}), on the STRING
-protein-protein interaction network (\code{STRINGdb}), and z-scores it against
-a degree-preserving random null model.
+associated gene set, on the STRING protein-protein interaction network
+(\code{STRINGdb}), and z-scores it against a degree-preserving random null
+model.
 }
+\section{Where the disease gene set comes from}{
+
+By default (\code{disease_genes = "disease_genes"}) the disease module \code{T} is
+the independent, disease -> target gene set from \code{\link[=disease_genes_fetch]{disease_genes_fetch()}}
+or \code{\link[=disease_genes_import]{disease_genes_import()}} -- built without reference to the compounds,
+so the z-score reflects topology. The legacy
+\code{disease_genes = "targets_disease"} path draws \code{T} from
+\code{\link[=targets_disease_filter]{targets_disease_filter()}}, which only annotates UniProt IDs already
+predicted as targets; \code{S} and \code{T} then overlap by construction and the
+statistic degrades to a set-membership lookup. That path still runs but
+emits a warning. The \code{n_overlap} column reports \verb{|S ∩ T|} either way.
+}
+
 \section{STRINGdb is a heavy, optional dependency, not installed by default}{
 
 Like the \code{network_enrich()} Bioconductor annotation packages, \code{STRINGdb}
@@ -126,10 +154,10 @@ proj <- targets_import_batch(
   platform = "superpred"
 )
 proj <- network_build(proj)
-proj <- targets_disease_filter(proj, disease = "type 2 diabetes mellitus")
+proj <- disease_genes_fetch(proj, disease = "type 2 diabetes mellitus")
 proj <- network_proximity(
   proj, condition = "FLO-ET",
-  disease = unique(patliRResults(proj, "targets_disease")$disease_id)[1]
+  disease = unique(patliRResults(proj, "disease_genes")$disease_id)[1]
 ) # needs STRINGdb + internet on first call
 patliRResults(proj, "network_proximity")
 }

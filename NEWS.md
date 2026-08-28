@@ -1,6 +1,45 @@
 # patliR (development version)
 
+## Disease gene sets (`disease_genes_*`)
+
+- **New `disease_genes_fetch()`** — fetches a disease's associated gene set
+  from Open Targets in the **disease -> target** direction
+  (`disease(efoId:){ associatedTargets{ rows{ target{ proteinIds } score } } }`,
+  paginated on `count`), mapping `proteinIds` with `source ==
+  "uniprot_swissprot"` to UniProt accessions (a target with several
+  Swiss-Prot accessions contributes one row each; a target with none is
+  logged and dropped). Stored in a new `disease_genes` results slot
+  (`results/disease_genes.csv`; columns `disease_id`, `disease_name`,
+  `uniprot_id`, `gene_symbol`, `association_score`, `source`, `fetched_at`),
+  upserted per `disease_id`. `disease` is resolved to a current EFO/MONDO
+  ID the same way `targets_disease_filter()` does it; `min_score` mirrors
+  `targets_disease_filter()`'s semantics and defaults to `NULL` (keep all).
+- **New `disease_genes_import()`** — the manual counterpart, for curated
+  lists (OMIM / GWAS Catalog / DisGeNET exports). Takes a data frame or a
+  CSV path with a UniProt-ID column (gene-symbol-only tables are rejected
+  with a clear message -- convert to accessions first); `source` records
+  provenance and `association_score` may be `NA`. Same slot / schema /
+  per-`disease_id` upsert as `disease_genes_fetch()`. Implements the
+  `disease_genes_import()` item from the roadmap.
+
 ## Network analysis (`network_*` / `plot_*`)
+
+- **`network_proximity()` no longer builds its disease module from the
+  compounds' own predicted targets.** It gains `disease_genes = c(
+  "disease_genes", "targets_disease")` (default `"disease_genes"`): the
+  default path builds the disease set `T` from the independent
+  `disease_genes` slot (`disease_genes_fetch()` / `disease_genes_import()`),
+  so the proximity z-score measures topology rather than set membership. It
+  aborts if that slot is missing or empty for the requested disease. The
+  legacy `disease_genes = "targets_disease"` path still runs but emits a
+  `cli_warn` naming the **circular**ity (`targets_disease` only annotates
+  UniProt IDs already predicted as targets, so `S` and `T` overlap by
+  construction). Output gains two columns: `disease_gene_source`
+  (`"disease_genes"` / `"targets_disease"`) and `n_overlap` = `|S ∩ T|` on
+  the STRING-mapped sets (equals `n_targets_mapped` exactly when
+  `d_observed == 0`, i.e. `S ⊆ T`). Both are declared in the empty-row
+  constructor, so `results/network_proximity.csv` stays column-stable
+  across zero-row reruns.
 
 - **`.network_upsert()` no longer keeps stale rows when a rerun produces
   zero rows for a condition.** It gains a `touched_keys` argument: callers

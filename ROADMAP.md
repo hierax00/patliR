@@ -16,9 +16,11 @@ guessing.
   ChEMBL's data curation well enough to trust an in-house predictor, not
   the algorithm. `targets_consensus()` needs at least two sources to
   combine, so it falls with the same decision.
-- **`disease_genes_import()`** — manual alternative to
-  `targets_disease_filter()`'s Open Targets call: import a disease-gene
-  list into the same `targets_disease` slot, with a `source` column.
+- ~~**`disease_genes_import()`**~~ — DONE (v0.1.0 dev, `disease_genes.R`).
+  Imports a curated disease-gene list into a dedicated `disease_genes`
+  slot (not `targets_disease`), alongside `disease_genes_fetch()` which
+  queries Open Targets in the disease -> target direction. Both feed
+  `network_proximity(disease_genes = "disease_genes")`.
 
 ## Reference / natural-product databases
 
@@ -82,6 +84,10 @@ guessing.
 - **`network_synergy()`** — replace `1 - Jaccard(targets)` with a real
   network separation `s_AB` (Menche et al. 2015) and report Cheng et al.
   (2019)'s Complementary Exposure classification, not just the scalar.
+  Note: the disease-module circularity that biased every `z_score` this
+  consumes is now fixed upstream (`network_proximity(disease_genes =
+  "disease_genes")`), so the `s_AB` work is no longer blocked by a fake
+  disease module.
 - **`network_module_robustness()` clustering** — HDBSCAN on integer graph
   distances degenerates to single-linkage; add modularity-based options
   (`cluster_leiden`, or bipartite modularity) via the `clustering=` arg.

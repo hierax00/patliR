@@ -19,9 +19,20 @@ NULL
 #' For each compound present in a condition's network ([network_build()]),
 #' computes the topological "closest" distance (Guney et al. 2016, *Nat
 #' Commun* 7:10331) between that compound's target set and a disease's
-#' associated gene set (from [targets_disease_filter()]), on the STRING
-#' protein-protein interaction network (`STRINGdb`), and z-scores it against
-#' a degree-preserving random null model.
+#' associated gene set, on the STRING protein-protein interaction network
+#' (`STRINGdb`), and z-scores it against a degree-preserving random null
+#' model.
+#'
+#' @section Where the disease gene set comes from:
+#' By default (`disease_genes = "disease_genes"`) the disease module `T` is
+#' the independent, disease -> target gene set from [disease_genes_fetch()]
+#' or [disease_genes_import()] -- built without reference to the compounds,
+#' so the z-score reflects topology. The legacy
+#' `disease_genes = "targets_disease"` path draws `T` from
+#' [targets_disease_filter()], which only annotates UniProt IDs already
+#' predicted as targets; `S` and `T` then overlap by construction and the
+#' statistic degrades to a set-membership lookup. That path still runs but
+#' emits a warning. The `n_overlap` column reports `|S ∩ T|` either way.
 #'
 #' @section STRINGdb is a heavy, optional dependency, not installed by default:
 #' Like the `network_enrich()` Bioconductor annotation packages, `STRINGdb`
@@ -63,10 +74,20 @@ NULL
 #' [network_module_robustness()]'s percolation step).
 #'
 #' @inheritParams network_build
-#' @param disease A single `disease_id` as it appears in
-#'   `patliRResults(proj, "targets_disease")$disease_id` (i.e. already
-#'   resolved by [targets_disease_filter()] for at least one target in this
-#'   project).
+#' @param disease A single `disease_id`. With `disease_genes = "disease_genes"`
+#'   (the default) it must appear in
+#'   `patliRResults(proj, "disease_genes")$disease_id` (i.e. it was fetched
+#'   by [disease_genes_fetch()] or imported by [disease_genes_import()]).
+#'   With `disease_genes = "targets_disease"` it must appear in
+#'   `patliRResults(proj, "targets_disease")$disease_id` instead.
+#' @param disease_genes Which slot the disease module `T` is built from.
+#'   `"disease_genes"` (default): the independent, disease -> target gene set
+#'   from [disease_genes_fetch()] / [disease_genes_import()]. `"targets_disease"`:
+#'   the legacy path -- `T` is drawn from [targets_disease_filter()], which
+#'   only ever annotates UniProt IDs already predicted as targets, so `S`
+#'   and `T` overlap by construction and the z-score is biased (a warning
+#'   naming this circularity is emitted; the run is not aborted). Rows
+#'   record which was used in the `disease_gene_source` column.
 #' @param species NCBI taxonomy ID passed to `STRINGdb$new()`. Default
 #'   `9606` (human).
 #' @param version STRING database version passed to `STRINGdb$new()`.
@@ -83,8 +104,11 @@ NULL
 #'
 #' @return The updated `proj`, with a `network_proximity` entry in
 #'   [patliRResults()] (columns `condition`, `compound_id`, `disease_id`,
-#'   `n_targets_mapped`, `n_disease_genes_mapped`, `d_observed`,
-#'   `d_random_mean`, `d_random_sd`, `z_score`, `p_empirical`,
+#'   `disease_gene_source`, `n_targets_mapped`, `n_disease_genes_mapped`,
+#'   `n_overlap` (`|S ∩ T|` on the STRING-mapped sets, so the residual
+#'   overlap driving `d_observed` toward 0 is always visible -- it equals
+#'   `n_targets_mapped` exactly when `d_observed == 0`, i.e. `S ⊆ T`),
+#'   `d_observed`, `d_random_mean`, `d_random_sd`, `z_score`, `p_empirical`,
 #'   `n_random`, `seed_used`, `p_adjusted`), also written to
 #'   `results/network_proximity.csv`. Compounds with zero targets mappable
 #'   to the STRING network for `species` contribute no row (logged instead).
@@ -107,22 +131,24 @@ NULL
 #'   platform = "superpred"
 #' )
 #' proj <- network_build(proj)
-#' proj <- targets_disease_filter(proj, disease = "type 2 diabetes mellitus")
+#' proj <- disease_genes_fetch(proj, disease = "type 2 diabetes mellitus")
 #' proj <- network_proximity(
 #'   proj, condition = "FLO-ET",
-#'   disease = unique(patliRResults(proj, "targets_disease")$disease_id)[1]
+#'   disease = unique(patliRResults(proj, "disease_genes")$disease_id)[1]
 #' ) # needs STRINGdb + internet on first call
 #' patliRResults(proj, "network_proximity")
 #' }
 #'
 #' @export
 network_proximity <- function(proj, condition = NULL, disease,
+                               disease_genes = c("disease_genes", "targets_disease"),
                                species = 9606, version = "12.0",
                                score_threshold = 400, n_random = 1000,
                                seed = NULL) {
   stopifnot(is(proj, "PatliRProject"))
   stopifnot(is.character(disease), length(disease) == 1, nzchar(disease))
   stopifnot(is.numeric(n_random), length(n_random) == 1, n_random >= 1)
+  disease_genes <- match.arg(disease_genes)
   if (!requireNamespace("STRINGdb", quietly = TRUE)) {
     cli::cli_abort(c(
       "{.fn network_proximity} needs {.pkg STRINGdb}, not installed.",
@@ -132,18 +158,42 @@ network_proximity <- function(proj, condition = NULL, disease,
 
   conditions <- .network_resolve_conditions(proj, condition)
 
-  disease_all <- patliRResults(proj, "targets_disease")
-  if (is.null(disease_all) || nrow(disease_all) == 0) {
-    cli::cli_abort(c(
-      "No {.val targets_disease} entry in {.arg proj}.",
-      "i" = "Run {.fn targets_disease_filter} first."
-    ))
-  }
-  disease_uniprot <- unique(disease_all$target_id[disease_all$disease_id == disease])
-  if (length(disease_uniprot) == 0) {
-    cli::cli_abort(c(
-      "No target associated with {.val {disease}} in {.val targets_disease}.",
-      "i" = "Available disease IDs: {.val {unique(disease_all$disease_id)}}."
+  if (disease_genes == "disease_genes") {
+    dg_all <- patliRResults(proj, "disease_genes")
+    if (is.null(dg_all) || nrow(dg_all) == 0) {
+      cli::cli_abort(c(
+        "No {.val disease_genes} entry in {.arg proj}.",
+        "i" = "Run {.fn disease_genes_fetch} or {.fn disease_genes_import} first.",
+        "i" = "To use the legacy (circular) disease set from {.fn targets_disease_filter}, pass {.code disease_genes = \"targets_disease\"}."
+      ))
+    }
+    disease_uniprot <- unique(dg_all$uniprot_id[dg_all$disease_id == disease & !is.na(dg_all$uniprot_id)])
+    if (length(disease_uniprot) == 0) {
+      cli::cli_abort(c(
+        "No gene associated with {.val {disease}} in {.val disease_genes}.",
+        "i" = "Available disease IDs: {.val {unique(dg_all$disease_id)}}.",
+        "i" = "Run {.fn disease_genes_fetch} / {.fn disease_genes_import} for {.val {disease}} first."
+      ))
+    }
+  } else {
+    disease_all <- patliRResults(proj, "targets_disease")
+    if (is.null(disease_all) || nrow(disease_all) == 0) {
+      cli::cli_abort(c(
+        "No {.val targets_disease} entry in {.arg proj}.",
+        "i" = "Run {.fn targets_disease_filter} first."
+      ))
+    }
+    disease_uniprot <- unique(disease_all$target_id[disease_all$disease_id == disease & !is.na(disease_all$target_id)])
+    if (length(disease_uniprot) == 0) {
+      cli::cli_abort(c(
+        "No target associated with {.val {disease}} in {.val targets_disease}.",
+        "i" = "Available disease IDs: {.val {unique(disease_all$disease_id)}}."
+      ))
+    }
+    cli::cli_warn(c(
+      "!" = "{.code disease_genes = \"targets_disease\"}: the disease module is drawn from the compounds' own predicted targets.",
+      "i" = "{.fn targets_disease_filter} only annotates UniProt IDs already in {.val targets_imported}, so this disease set is {.strong circular} -- {.field S} and {.field T} overlap by construction, {.field d_observed} is dragged toward 0, and {.field z_score} is biased negative for reasons unrelated to topology.",
+      "i" = "Run {.fn disease_genes_fetch} / {.fn disease_genes_import} and use the default {.code disease_genes = \"disease_genes\"} for an independent gene set."
     ))
   }
 
@@ -224,6 +274,7 @@ network_proximity <- function(proj, condition = NULL, disease,
         next
       }
 
+      n_overlap <- length(intersect(unique(source_string), unique(target_string)))
       d_observed <- .network_closest_distance(g, source_string, target_string)
       d_random <- vapply(seq_len(n_random), function(j) {
         s_rand <- .network_resample_degree_matched(source_string, node_names, bins, bin_of_node)
@@ -250,7 +301,9 @@ network_proximity <- function(proj, condition = NULL, disease,
 
       cond_rows[[i]] <- data.frame(
         condition = cond, compound_id = cp, disease_id = disease,
+        disease_gene_source = disease_genes,
         n_targets_mapped = length(source_string), n_disease_genes_mapped = length(target_string),
+        n_overlap = n_overlap,
         d_observed = d_observed, d_random_mean = d_random_mean, d_random_sd = d_random_sd,
         z_score = z_score, p_empirical = p_empirical, n_random = length(d_random),
         seed_used = used_seed, stringsAsFactors = FALSE
@@ -408,7 +461,9 @@ network_proximity <- function(proj, condition = NULL, disease,
 .empty_network_proximity_row <- function() {
   data.frame(
     condition = character(0), compound_id = character(0), disease_id = character(0),
+    disease_gene_source = character(0),
     n_targets_mapped = integer(0), n_disease_genes_mapped = integer(0),
+    n_overlap = integer(0),
     d_observed = double(0), d_random_mean = double(0), d_random_sd = double(0),
     z_score = double(0), p_empirical = double(0), n_random = integer(0),
     seed_used = integer(0), p_adjusted = double(0),

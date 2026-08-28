@@ -5,10 +5,20 @@ test_that("network_proximity() requires network_build() to have run first", {
   expect_error(network_proximity(proj, disease = "EFO_0000000"), "network_edges")
 })
 
-test_that("network_proximity() requires targets_disease_filter() to have run", {
+test_that("network_proximity() default path requires a disease_genes slot", {
   testthat::skip_if_not_installed("STRINGdb")
   proj <- .network_stats_test_setup()
-  expect_error(network_proximity(proj, condition = "FLO-ET", disease = "EFO_0000000"), "targets_disease")
+  expect_error(network_proximity(proj, condition = "FLO-ET", disease = "EFO_0000000"), "disease_genes")
+})
+
+test_that("network_proximity(disease_genes = \"targets_disease\") requires targets_disease_filter() to have run", {
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  expect_error(
+    network_proximity(proj, condition = "FLO-ET", disease = "EFO_0000000",
+                      disease_genes = "targets_disease"),
+    "targets_disease"
+  )
 })
 
 test_that("network_proximity() errors on a condition network_build() never built", {
@@ -23,19 +33,17 @@ test_that("network_proximity() errors on a condition network_build() never built
 test_that("network_proximity() errors clearly on an unknown disease_id", {
   testthat::skip_if_not_installed("STRINGdb")
   proj <- .network_stats_test_setup()
-  ## Fabricate a minimal targets_disease table directly (bypassing a live
+  ## Fabricate a minimal disease_genes table directly (bypassing a live
   ## Open Targets call) so this test is self-contained and offline.
-  ct <- unique(patliRResults(proj, "network_edges")[, c("compound_id", "uniprot_id")])
-  fake_disease <- data.frame(
-    compound_id = ct$compound_id[1], target_id = ct$uniprot_id[1],
-    disease_id = "SOME_REAL_DISEASE", association_score = 0.5,
-    stringsAsFactors = FALSE
+  proj <- disease_genes_import(
+    proj,
+    data.frame(uniprot_id = unique(patliRResults(proj, "network_edges")$uniprot_id)[1]),
+    disease_id = "SOME_REAL_DISEASE", disease_name = "x", source = "synthetic"
   )
-  patliRResults(proj, "targets_disease") <- fake_disease
 
   expect_error(
     network_proximity(proj, condition = "FLO-ET", disease = "NOT-A-REAL-DISEASE"),
-    "targets_disease"
+    "disease_genes"
   )
 })
 
@@ -85,7 +93,8 @@ test_that("network_proximity schema carries p_adjusted whether or not any row is
 
   populated <- data.frame(
     condition = "X", compound_id = "C1", disease_id = "D",
-    n_targets_mapped = 1L, n_disease_genes_mapped = 1L,
+    disease_gene_source = "disease_genes",
+    n_targets_mapped = 1L, n_disease_genes_mapped = 1L, n_overlap = 0L,
     d_observed = 1, d_random_mean = 2, d_random_sd = 1,
     z_score = -1, p_empirical = 0.1, n_random = 10L, seed_used = 1L,
     stringsAsFactors = FALSE
@@ -118,6 +127,77 @@ test_that(".network_closest_distance() tolerates duplicate source/target ids", {
     d <- patliR:::.network_closest_distance(g, c("a", "a", "b"), c("d", "d"))
   )
   expect_true(is.numeric(d) && length(d) == 1)
+})
+
+test_that("network_proximity(): a disease_genes set disjoint from targets_imported gives n_overlap == 0 (STRINGdb mocked)", {
+  ## Spec 2.0 test (a): with an independent disease gene set, S and T do
+  ## not overlap by construction, so n_overlap is 0.
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  cond <- "FLO-ET"
+  edges <- patliRResults(proj, "network_edges")
+  cmp_uni <- unique(edges$uniprot_id[edges$condition == cond])
+  disease_uni <- paste0("DIS", seq_len(6))            # disjoint synthetic accessions
+
+  proj <- disease_genes_import(
+    proj, data.frame(uniprot_id = disease_uni),
+    disease_id = "D_TEST", disease_name = "synthetic", source = "synthetic"
+  )
+  fake <- .fake_string_db(c(cmp_uni, disease_uni))
+  testthat::local_mocked_bindings(.network_stringdb = function(...) fake, .package = "patliR")
+
+  proj <- network_proximity(proj, condition = cond, disease = "D_TEST",
+                            n_random = 12, seed = 1)
+  res <- patliRResults(proj, "network_proximity")
+  expect_gt(nrow(res), 0)
+  expect_true(all(res$n_overlap == 0))
+  expect_true(all(res$disease_gene_source == "disease_genes"))
+})
+
+test_that("network_proximity(): d_observed == 0 exactly when S is a subset of T, surfaced in n_overlap (STRINGdb mocked)", {
+  ## Spec 2.0 test (c).
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  cond <- "FLO-ET"
+  edges <- patliRResults(proj, "network_edges")
+  cmp_uni <- unique(edges$uniprot_id[edges$condition == cond])
+
+  ## disease module = every target in the condition => S subset of T for
+  ## every compound.
+  proj <- disease_genes_import(
+    proj, data.frame(uniprot_id = cmp_uni),
+    disease_id = "D_ALL", disease_name = "synthetic", source = "synthetic"
+  )
+  fake <- .fake_string_db(cmp_uni)
+  testthat::local_mocked_bindings(.network_stringdb = function(...) fake, .package = "patliR")
+
+  proj <- network_proximity(proj, condition = cond, disease = "D_ALL",
+                            n_random = 12, seed = 1)
+  res <- patliRResults(proj, "network_proximity")
+  expect_gt(nrow(res), 0)
+  expect_true(all(res$d_observed == 0))
+  expect_equal(res$n_overlap, res$n_targets_mapped)
+})
+
+test_that("network_proximity(disease_genes = \"targets_disease\") raises a warning matching 'circular' (STRINGdb mocked)", {
+  ## Spec 2.0 test (b).
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  cond <- "FLO-ET"
+  edges <- patliRResults(proj, "network_edges")
+  ct <- unique(edges[edges$condition == cond, c("compound_id", "uniprot_id")])
+  patliRResults(proj, "targets_disease") <- data.frame(
+    compound_id = ct$compound_id, target_id = ct$uniprot_id,
+    disease_id = "TD_DIS", association_score = 0.5, stringsAsFactors = FALSE
+  )
+  fake <- .fake_string_db(unique(ct$uniprot_id))
+  testthat::local_mocked_bindings(.network_stringdb = function(...) fake, .package = "patliR")
+
+  expect_warning(
+    network_proximity(proj, condition = cond, disease = "TD_DIS",
+                      disease_genes = "targets_disease", n_random = 12, seed = 1),
+    "circular"
+  )
 })
 
 test_that("network_proximity() end-to-end is not exercised automatically -- needs a real STRING download", {

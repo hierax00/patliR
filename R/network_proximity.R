@@ -85,7 +85,7 @@ NULL
 #'   [patliRResults()] (columns `condition`, `compound_id`, `disease_id`,
 #'   `n_targets_mapped`, `n_disease_genes_mapped`, `d_observed`,
 #'   `d_random_mean`, `d_random_sd`, `z_score`, `p_empirical`,
-#'   `p_adjusted`, `n_random`, `seed_used`), also written to
+#'   `n_random`, `seed_used`, `p_adjusted`), also written to
 #'   `results/network_proximity.csv`. Compounds with zero targets mappable
 #'   to the STRING network for `species` contribute no row (logged instead).
 #'
@@ -172,6 +172,12 @@ network_proximity <- function(proj, condition = NULL, disease,
 
   degree_all <- igraph::degree(g)
   bins <- .network_degree_bins(degree_all)
+  ## Hoisted out of .network_resample_degree_matched() -- it is called
+  ## ~2 * n_random per compound and both of these are invariant across
+  ## every one of those calls (Guney binning depends only on the graph).
+  node_names <- names(degree_all)
+  bin_of_node <- integer(length(degree_all))
+  for (b in seq_along(bins)) bin_of_node[bins[[b]]] <- b
 
   edges_all <- patliRResults(proj, "network_edges")
   rows <- vector("list", length(conditions))
@@ -220,8 +226,8 @@ network_proximity <- function(proj, condition = NULL, disease,
 
       d_observed <- .network_closest_distance(g, source_string, target_string)
       d_random <- vapply(seq_len(n_random), function(j) {
-        s_rand <- .network_resample_degree_matched(source_string, degree_all, bins)
-        t_rand <- .network_resample_degree_matched(target_string, degree_all, bins)
+        s_rand <- .network_resample_degree_matched(source_string, node_names, bins, bin_of_node)
+        t_rand <- .network_resample_degree_matched(target_string, node_names, bins, bin_of_node)
         .network_closest_distance(g, s_rand, t_rand)
       }, numeric(1))
       d_random <- d_random[is.finite(d_random)]
@@ -262,11 +268,23 @@ network_proximity <- function(proj, condition = NULL, disease,
 
   result <- do.call(rbind, rows)
   rownames(result) <- NULL
+  ## p_adjusted is part of the schema even for a zero-row result, so the
+  ## CSV stays column-stable and .network_upsert()'s rbind never faces a
+  ## 12-vs-13 column mismatch on a later zero-row rerun.
+  result$p_adjusted <- NA_real_
   ## BH across every (condition, compound) proximity test in this call
-  if (nrow(result) > 0 && "p_empirical" %in% names(result)) {
+  if (nrow(result) > 0) {
     result$p_adjusted <- stats::p.adjust(result$p_empirical, method = "BH")
   }
-  result <- .network_upsert(proj, "network_proximity", result, c("condition", "disease_id", "compound_id"))
+  ## Every (condition, compound) pair attempted this call is a recomputed
+  ## slot -- pass them explicitly so a compound that now yields no row
+  ## (e.g. it lost its last STRING-mappable target) drops its stale row.
+  touched_keys <- unique(edges_all[edges_all$condition %in% conditions, c("condition", "compound_id"), drop = FALSE])
+  touched_keys$disease_id <- disease
+  result <- .network_upsert(
+    proj, "network_proximity", result,
+    c("condition", "disease_id", "compound_id"), touched_keys = touched_keys
+  )
 
   patliRResults(proj, "network_proximity") <- result
   .write_results_csv(proj, "network_proximity", result)
@@ -303,9 +321,12 @@ network_proximity <- function(proj, condition = NULL, disease,
 #' @return A list of integer vectors (node indices), one per bin.
 #' @keywords internal
 .network_degree_bins <- function(degree_all, min_per_bin = 100) {
-  ord <- order(degree_all)
-  degs_sorted <- degree_all[ord]
-  uniq_degs <- unique(degs_sorted)
+  ## one sorted pass: rle() over the sorted degrees gives every unique
+  ## degree and its multiplicity at once, instead of an O(|V|) rescan
+  ## (`sum(degs_sorted == uniq_degs[i])`) per unique degree.
+  runs <- rle(sort(as.vector(degree_all)))
+  uniq_degs <- runs$values
+  count_per_degree <- runs$lengths
 
   ## walk up the unique degrees, closing a bin once it has >= min_per_bin
   bin_of_degree <- integer(length(uniq_degs))
@@ -313,7 +334,7 @@ network_proximity <- function(proj, condition = NULL, disease,
   count <- 0L
   for (i in seq_along(uniq_degs)) {
     bin_of_degree[i] <- b
-    count <- count + sum(degs_sorted == uniq_degs[i])
+    count <- count + count_per_degree[i]
     if (count >= min_per_bin) { b <- b + 1L; count <- 0L }
   }
   ## a trailing under-full bin is merged into the previous one
@@ -334,13 +355,14 @@ network_proximity <- function(proj, condition = NULL, disease,
 #' independently with replacement (and then `unique()`-ing downstream)
 #' would shrink the random set, inflating its distance variance and
 #' shrinking `|z_score|` in a way that varies with set size.
+#'
+#' `node_names` (`names(igraph::degree(g))`) and `bin_of_node` (the
+#' bin index of every node, aligned to `node_names`) are passed in rather
+#' than rebuilt here: this function is called ~`2 * n_random` times per
+#' compound and both are invariant across every call.
 #' @return Character vector of STRING IDs, length `length(string_ids)`.
 #' @keywords internal
-.network_resample_degree_matched <- function(string_ids, degree_all, bins) {
-  node_names <- names(degree_all)
-  bin_of_node <- integer(length(degree_all))
-  for (b in seq_along(bins)) bin_of_node[bins[[b]]] <- b
-
+.network_resample_degree_matched <- function(string_ids, node_names, bins, bin_of_node) {
   idx <- match(string_ids, node_names)
   by_bin <- split(seq_along(idx), bin_of_node[idx])
 
@@ -389,7 +411,7 @@ network_proximity <- function(proj, condition = NULL, disease,
     n_targets_mapped = integer(0), n_disease_genes_mapped = integer(0),
     d_observed = double(0), d_random_mean = double(0), d_random_sd = double(0),
     z_score = double(0), p_empirical = double(0), n_random = integer(0),
-    seed_used = integer(0),
+    seed_used = integer(0), p_adjusted = double(0),
     stringsAsFactors = FALSE
   )
 }

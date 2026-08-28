@@ -51,7 +51,7 @@ The updated \code{proj}, with a \code{network_proximity} entry in
 \code{\link[=patliRResults]{patliRResults()}} (columns \code{condition}, \code{compound_id}, \code{disease_id},
 \code{n_targets_mapped}, \code{n_disease_genes_mapped}, \code{d_observed},
 \code{d_random_mean}, \code{d_random_sd}, \code{z_score}, \code{p_empirical},
-\code{p_adjusted}, \code{n_random}, \code{seed_used}), also written to
+\code{n_random}, \code{seed_used}, \code{p_adjusted}), also written to
 \code{results/network_proximity.csv}. Compounds with zero targets mappable
 to the STRING network for \code{species} contribute no row (logged instead).
 }

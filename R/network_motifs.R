@@ -114,7 +114,10 @@ network_motifs <- function(proj, condition = NULL, n_cores = 1L, pathway_db = NU
 
   result <- do.call(rbind, rows)
   rownames(result) <- NULL
-  result <- .network_upsert(proj, "network_motifs", result, "condition")
+  result <- .network_upsert(
+    proj, "network_motifs", result, "condition",
+    touched_keys = data.frame(condition = conditions, stringsAsFactors = FALSE)
+  )
 
   patliRResults(proj, "network_motifs") <- result
   .write_results_csv(proj, "network_motifs", result)

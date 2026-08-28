@@ -294,19 +294,60 @@ network_build <- function(proj, condition = NULL,
 #'
 #' @param key_cols Character vector of column names that jointly identify a
 #'   "slot" to replace (e.g. `"condition"`, or `c("condition", "method")`).
+#' @param touched_keys `NULL` (default) or a data frame carrying the
+#'   `key_cols` values the caller just recomputed. When supplied, exactly
+#'   those slots are dropped from the existing table and replaced by
+#'   whatever `new_rows` holds -- **including zero rows**, so a rerun that
+#'   now produces nothing for a condition correctly removes that
+#'   condition's stale rows instead of silently keeping them. When `NULL`,
+#'   the touched slots are derived from `new_rows` itself (the historical
+#'   behaviour, kept for callers not yet migrated): a zero-row `new_rows`
+#'   then touches nothing and the previous table is returned unchanged.
 #' @return `new_rows` with any previously-existing, non-overlapping rows of
 #'   `patliRResults(proj, name)` prepended.
 #' @keywords internal
-.network_upsert <- function(proj, name, new_rows, key_cols) {
+.network_upsert <- function(proj, name, new_rows, key_cols, touched_keys = NULL) {
   existing <- patliRResults(proj, name)
-  if (!is.null(existing) && nrow(existing) > 0 && nrow(new_rows) > 0) {
-    key_new <- do.call(paste, c(new_rows[key_cols], sep = "\r"))
-    key_existing <- do.call(paste, c(existing[key_cols], sep = "\r"))
-    existing <- existing[!key_existing %in% key_new, , drop = FALSE]
-    new_rows <- rbind(existing, new_rows)
-  } else if (!is.null(existing) && nrow(existing) > 0) {
-    new_rows <- existing
+  if (is.null(existing) || nrow(existing) == 0) {
+    rownames(new_rows) <- NULL
+    return(new_rows)
   }
-  rownames(new_rows) <- NULL
-  new_rows
+
+  if (is.null(touched_keys)) {
+    touched <- if (nrow(new_rows) > 0) {
+      unique(do.call(paste, c(new_rows[key_cols], sep = "\r")))
+    } else {
+      character(0)
+    }
+  } else {
+    touched_keys <- as.data.frame(touched_keys, stringsAsFactors = FALSE)
+    missing_key <- setdiff(key_cols, names(touched_keys))
+    if (length(missing_key) > 0) {
+      cli::cli_abort(c(
+        "{.fn .network_upsert}: {.arg touched_keys} is missing key column{?s} {.val {missing_key}}.",
+        "i" = "It must carry every column named in {.arg key_cols}: {.val {key_cols}}."
+      ))
+    }
+    touched <- unique(do.call(paste, c(touched_keys[key_cols], sep = "\r")))
+  }
+
+  key_existing <- do.call(paste, c(existing[key_cols], sep = "\r"))
+  kept <- existing[!key_existing %in% touched, , drop = FALSE]
+
+  if (nrow(new_rows) > 0) {
+    only_new <- setdiff(names(new_rows), names(kept))
+    only_old <- setdiff(names(kept), names(new_rows))
+    if (length(only_new) > 0 || length(only_old) > 0) {
+      cli::cli_abort(c(
+        "{.fn .network_upsert}: the new {.val {name}} rows and the existing table have different columns.",
+        "i" = "Only in the new rows: {.val {only_new}}",
+        "i" = "Only in the existing table: {.val {only_old}}"
+      ))
+    }
+    out <- rbind(kept[, names(new_rows), drop = FALSE], new_rows)
+  } else {
+    out <- kept
+  }
+  rownames(out) <- NULL
+  out
 }

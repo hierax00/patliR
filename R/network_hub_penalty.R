@@ -100,7 +100,10 @@ network_hub_penalty <- function(proj, condition = NULL) {
 
   result <- do.call(rbind, rows)
   rownames(result) <- NULL
-  result <- .network_upsert(proj, "network_hub_penalty", result, "condition")
+  result <- .network_upsert(
+    proj, "network_hub_penalty", result, "condition",
+    touched_keys = data.frame(condition = conditions, stringsAsFactors = FALSE)
+  )
 
   patliRResults(proj, "network_hub_penalty") <- result
   .write_results_csv(proj, "network_hub_penalty", result)

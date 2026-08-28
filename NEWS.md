@@ -1,5 +1,39 @@
 # patliR (development version)
 
+## Network analysis (`network_*` / `plot_*`)
+
+- **`.network_upsert()` no longer keeps stale rows when a rerun produces
+  zero rows for a condition.** It gains a `touched_keys` argument: callers
+  now pass the key values they just recomputed, so a slot that now yields
+  nothing (a proteome filter that matches no target, a condition with no
+  motifs, a compound that lost its last STRING-mappable target, ...) has
+  its previous rows dropped instead of silently surviving. Migrated every
+  `network_*` caller (`network_build` excepted -- it never had the bug):
+  `network_filter_proteome`, `network_motifs`, `network_degeneracy`,
+  `network_synergy`, `network_proximity`, `network_centrality`,
+  `network_hub_penalty`, `network_module_robustness`, `network_bowtie`,
+  `network_pathview`. A pre-`rbind` column-set check now fails with a clear
+  message instead of R's generic "numbers of columns of arguments do not
+  match".
+- **`network_proximity()`**: `p_adjusted` is now part of the results
+  schema even for a zero-row result (declared in the empty-row
+  constructor, assigned `NA_real_` before the BH block), so
+  `results/network_proximity.csv` stays column-stable across reruns.
+- **`network_synergy(pairs = "all")`** no longer errors with `subscript
+  out of bounds` when a compound is absent from `network_proximity()`
+  (e.g. it had no STRING-mappable target); such pairs get `NA` in the
+  proximity-derived columns, as the docs already promised.
+- **`plot_bowtie()`** now colours the `not_in_action_network` component
+  (added to `network_bowtie()` in the previous round) -- previously the
+  sixth, often largest, stratum rendered as an unnamed grey/NA flow.
+- **`plot_robustness()`** caption corrected: `r_index` is bounded above by
+  `(N-1)/(2N) < 0.5` (Schneider et al. 2011), not "close to 1 = robust".
+- **`network_proximity()` performance**: the degree-bin lookup
+  (`bin_of_node`, `node_names`) is hoisted out of
+  `.network_resample_degree_matched()` and computed once per call rather
+  than ~`2 * n_random` times per compound; `.network_degree_bins()`
+  replaces its per-unique-degree rescan with a single `rle()` pass.
+
 ## Reference database (`refdb_*`)
 
 - **`refdb_build()` now resolves ChEMBL identity by a deterministic

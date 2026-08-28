@@ -51,12 +51,14 @@ A \code{ggplot} object or \code{girafe} htmlwidget. If \code{save = TRUE}
 Line plot of \code{largest_component_fraction} vs. \code{n_removed} (the raw
 percolation curve behind each module's \code{r_index}, from
 \code{network_robustness_curve}), one line per module, faceted by
-\code{condition}. \code{r_index} (the curve's area, from \code{network_module_robustness})
-is annotated on each panel -- a module that stays near 1.0 for most of
-the curve (robust to node removal) has \code{r_index} close to 1; one that
-collapses after a few removals (fragile, likely hub-dependent) has
-\code{r_index} close to 0 (Schneider et al. 2011's R-index, cited in
-\code{\link[=network_module_robustness]{network_module_robustness()}}'s own roxygen).
+\code{condition}. \code{r_index} (the mean largest-component fraction over removal
+steps \verb{Q = 1..N}, from \code{network_module_robustness}) is annotated on each
+panel -- a module that stays near 1.0 for most of the curve (robust to
+node removal) approaches the R-index's theoretical maximum of
+\verb{(N-1)/(2N) < 0.5} (reached only if it never fragments until fully
+removed -- \strong{not} 1); one that collapses after a few removals (fragile,
+likely hub-dependent) has \code{r_index} near \code{0} (Schneider et al. 2011's
+R-index, cited in \code{\link[=network_module_robustness]{network_module_robustness()}}'s own roxygen).
 }
 \examples{
 \dontrun{

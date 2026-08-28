@@ -5,11 +5,21 @@
 \title{Replace rows of an existing \code{patliRResults()} table that share a key with
 \code{new_rows}, keeping every other existing row untouched}
 \usage{
-.network_upsert(proj, name, new_rows, key_cols)
+.network_upsert(proj, name, new_rows, key_cols, touched_keys = NULL)
 }
 \arguments{
 \item{key_cols}{Character vector of column names that jointly identify a
 "slot" to replace (e.g. \code{"condition"}, or \code{c("condition", "method")}).}
+
+\item{touched_keys}{\code{NULL} (default) or a data frame carrying the
+\code{key_cols} values the caller just recomputed. When supplied, exactly
+those slots are dropped from the existing table and replaced by
+whatever \code{new_rows} holds -- \strong{including zero rows}, so a rerun that
+now produces nothing for a condition correctly removes that
+condition's stale rows instead of silently keeping them. When \code{NULL},
+the touched slots are derived from \code{new_rows} itself (the historical
+behaviour, kept for callers not yet migrated): a zero-row \code{new_rows}
+then touches nothing and the previous table is returned unchanged.}
 }
 \value{
 \code{new_rows} with any previously-existing, non-overlapping rows of

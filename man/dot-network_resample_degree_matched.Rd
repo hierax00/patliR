@@ -5,7 +5,7 @@
 \title{Replace \code{string_ids} with an equal-size set of \emph{distinct} nodes drawn
 from the same degree bins.}
 \usage{
-.network_resample_degree_matched(string_ids, degree_all, bins)
+.network_resample_degree_matched(string_ids, node_names, bins, bin_of_node)
 }
 \value{
 Character vector of STRING IDs, length \code{length(string_ids)}.
@@ -22,5 +22,10 @@ exactly \code{length(string_ids)} distinct nodes, matching Guney et al.'s
 independently with replacement (and then \code{unique()}-ing downstream)
 would shrink the random set, inflating its distance variance and
 shrinking \verb{|z_score|} in a way that varies with set size.
+
+\code{node_names} (\code{names(igraph::degree(g))}) and \code{bin_of_node} (the
+bin index of every node, aligned to \code{node_names}) are passed in rather
+than rebuilt here: this function is called ~\code{2 * n_random} times per
+compound and both are invariant across every call.
 }
 \keyword{internal}

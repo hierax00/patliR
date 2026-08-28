@@ -200,7 +200,10 @@ network_degeneracy <- function(proj, condition = NULL, pathway_db = NULL) {
 
   result <- do.call(rbind, rows)
   rownames(result) <- NULL
-  result <- .network_upsert(proj, "network_degeneracy", result, "condition")
+  result <- .network_upsert(
+    proj, "network_degeneracy", result, "condition",
+    touched_keys = data.frame(condition = conditions, stringsAsFactors = FALSE)
+  )
 
   patliRResults(proj, "network_degeneracy") <- result
   .write_results_csv(proj, "network_degeneracy", result)

@@ -7,12 +7,14 @@ NULL
 #' Line plot of `largest_component_fraction` vs. `n_removed` (the raw
 #' percolation curve behind each module's `r_index`, from
 #' `network_robustness_curve`), one line per module, faceted by
-#' `condition`. `r_index` (the curve's area, from `network_module_robustness`)
-#' is annotated on each panel -- a module that stays near 1.0 for most of
-#' the curve (robust to node removal) has `r_index` close to 1; one that
-#' collapses after a few removals (fragile, likely hub-dependent) has
-#' `r_index` close to 0 (Schneider et al. 2011's R-index, cited in
-#' [network_module_robustness()]'s own roxygen).
+#' `condition`. `r_index` (the mean largest-component fraction over removal
+#' steps `Q = 1..N`, from `network_module_robustness`) is annotated on each
+#' panel -- a module that stays near 1.0 for most of the curve (robust to
+#' node removal) approaches the R-index's theoretical maximum of
+#' `(N-1)/(2N) < 0.5` (reached only if it never fragments until fully
+#' removed -- **not** 1); one that collapses after a few removals (fragile,
+#' likely hub-dependent) has `r_index` near `0` (Schneider et al. 2011's
+#' R-index, cited in [network_module_robustness()]'s own roxygen).
 #'
 #' @inheritParams network_build
 #' @inheritParams plot_save_params
@@ -98,7 +100,7 @@ plot_robustness <- function(proj, condition = NULL, module_id = NULL,
   p <- p +
     ggplot2::labs(
       title = paste0("Module percolation robustness -- ", scope_label),
-      subtitle = "Fraction of the module remaining in the largest component as nodes are removed one at a time; R = area under the curve (Schneider et al. 2011)",
+      subtitle = "Fraction of the module remaining in the largest component as nodes are removed one at a time; R = mean of that fraction over removal steps, bounded above by (N-1)/(2N) < 0.5 (Schneider et al. 2011)",
       x = "Nodes removed", y = "Largest component fraction"
     ) +
     ggplot2::theme_minimal() +

@@ -99,7 +99,10 @@ network_centrality <- function(proj, condition = NULL,
 
   result <- do.call(rbind, rows)
   rownames(result) <- NULL
-  result <- .network_upsert(proj, "network_centrality", result, "condition")
+  result <- .network_upsert(
+    proj, "network_centrality", result, "condition",
+    touched_keys = data.frame(condition = conditions, stringsAsFactors = FALSE)
+  )
 
   patliRResults(proj, "network_centrality") <- result
   .write_results_csv(proj, "network_centrality", result)

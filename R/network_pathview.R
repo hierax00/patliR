@@ -249,7 +249,10 @@ network_pathview <- function(proj, condition = NULL,
 
   new_rows <- do.call(rbind, rows)
   rownames(new_rows) <- NULL
-  new_rows <- .network_upsert(proj, "kegg_pathview_log", new_rows, c("condition", "pathway_id"))
+  new_rows <- .network_upsert(
+    proj, "kegg_pathview_log", new_rows, c("condition", "pathway_id"),
+    touched_keys = data.frame(condition = cond, pathway_id = enr$ID, stringsAsFactors = FALSE)
+  )
 
   patliRResults(proj, "kegg_pathview_log") <- new_rows
   .write_results_csv(proj, "kegg_pathview_log", new_rows)

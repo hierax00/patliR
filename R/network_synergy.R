@@ -159,9 +159,11 @@ network_synergy <- function(proj, condition = NULL, disease,
       target_jaccard <- length(intersect(ta, tb)) / length(union(ta, tb))
       complementarity <- 1 - target_jaccard
 
-      za <- z_of[[a]]; zb <- z_of[[b]]
-      za <- if (is.null(za)) NA_real_ else za
-      zb <- if (is.null(zb)) NA_real_ else zb
+      ## single-bracket, not `[[`: for a compound absent from
+      ## network_proximity() this yields a named NA rather than throwing
+      ## `subscript out of bounds`, honouring the `pairs = "all"` contract
+      ## that such pairs get NA in the proximity-derived columns.
+      za <- unname(z_of[a]); zb <- unname(z_of[b])
 
       ## Cheng et al. (2019) Complementary Exposure: BOTH members must be
       ## individually proximal to the disease module. `joint_closeness` is
@@ -194,7 +196,28 @@ network_synergy <- function(proj, condition = NULL, disease,
 
   result <- do.call(rbind, rows)
   rownames(result) <- NULL
-  result <- .network_upsert(proj, "network_synergy", result, c("condition", "disease_id", "compound_a", "compound_b"))
+  ## Recomputed slots: every compound pair this (condition, disease) could
+  ## yield -- listed explicitly so a rerun with a smaller `top_n` (or one
+  ## that now produces no pairs at all) drops the pairs it no longer emits.
+  touched_keys <- do.call(rbind, lapply(conditions, function(cond) {
+    cps <- sort(unique(edges_all$compound_id[edges_all$condition == cond]))
+    if (length(cps) < 2) return(NULL)
+    cb <- utils::combn(cps, 2)
+    data.frame(
+      condition = cond, disease_id = disease,
+      compound_a = cb[1, ], compound_b = cb[2, ], stringsAsFactors = FALSE
+    )
+  }))
+  if (is.null(touched_keys)) {
+    touched_keys <- data.frame(
+      condition = character(0), disease_id = character(0),
+      compound_a = character(0), compound_b = character(0), stringsAsFactors = FALSE
+    )
+  }
+  result <- .network_upsert(
+    proj, "network_synergy", result,
+    c("condition", "disease_id", "compound_a", "compound_b"), touched_keys = touched_keys
+  )
 
   patliRResults(proj, "network_synergy") <- result
   .write_results_csv(proj, "network_synergy", result)

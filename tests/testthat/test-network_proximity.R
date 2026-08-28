@@ -60,16 +60,48 @@ test_that(".network_resample_degree_matched() returns an equal-size set of disti
   degree_all <- stats::setNames(sample(1:60, 400, replace = TRUE), paste0("n", 1:400))
   bins <- patliR:::.network_degree_bins(degree_all, min_per_bin = 50)
 
-  input <- names(degree_all)[1:12]
-  out <- patliR:::.network_resample_degree_matched(input, degree_all, bins)
+  node_names <- names(degree_all)
+  bin_of_node <- integer(length(degree_all))
+  for (b in seq_along(bins)) bin_of_node[bins[[b]]] <- b
+
+  input <- node_names[1:12]
+  out <- patliR:::.network_resample_degree_matched(input, node_names, bins, bin_of_node)
   expect_length(out, length(input))
   expect_false(anyDuplicated(out) > 0)
-  expect_true(all(out %in% names(degree_all)))
+  expect_true(all(out %in% node_names))
 
-  bin_of <- integer(length(degree_all))
-  for (b in seq_along(bins)) bin_of[bins[[b]]] <- b
-  names(bin_of) <- names(degree_all)
+  bin_of <- bin_of_node
+  names(bin_of) <- node_names
   expect_equal(unname(bin_of[out]), unname(bin_of[input]))
+})
+
+test_that("network_proximity schema carries p_adjusted whether or not any row is produced (zero-row rerun stability)", {
+  ## Spec 1.8: p_adjusted used to be added only when nrow(result) > 0 and
+  ## the empty-row constructor did not declare it, so a zero-row rerun
+  ## produced a 12-col frame against a 13-col table and .network_upsert()'s
+  ## rbind failed. Both sides must now be 13 cols, same names, same order.
+  empty <- patliR:::.empty_network_proximity_row()
+  expect_true("p_adjusted" %in% names(empty))
+
+  populated <- data.frame(
+    condition = "X", compound_id = "C1", disease_id = "D",
+    n_targets_mapped = 1L, n_disease_genes_mapped = 1L,
+    d_observed = 1, d_random_mean = 2, d_random_sd = 1,
+    z_score = -1, p_empirical = 0.1, n_random = 10L, seed_used = 1L,
+    stringsAsFactors = FALSE
+  )
+  populated$p_adjusted <- NA_real_        # exactly how network_proximity() adds it
+  expect_identical(names(empty), names(populated))
+})
+
+test_that(".network_degree_bins() count-per-degree pass matches a brute-force recount", {
+  set.seed(7)
+  degree_all <- stats::setNames(sample(1:40, 600, replace = TRUE), paste0("n", 1:600))
+  bins <- patliR:::.network_degree_bins(degree_all, min_per_bin = 100)
+  ## every node accounted for exactly once, bins non-empty
+  expect_equal(sort(unlist(bins, use.names = FALSE)), seq_along(degree_all))
+  expect_true(all(lengths(bins) > 0))
+  expect_true(all(utils::head(lengths(bins), -1) >= 100))
 })
 
 test_that(".network_closest_distance() tolerates duplicate source/target ids", {

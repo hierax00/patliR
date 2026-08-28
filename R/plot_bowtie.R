@@ -11,8 +11,9 @@ NULL
 #' Two-axis alluvial of `patliRResults(proj, "network_bowtie")`: left
 #' stratum is `compound_id` (labeled by name), right stratum is
 #' `bowtie_component` (`"core"`/`"in_component"`/`"out_component"`/
-#' `"other"`/`"unmapped"`), flow thickness is the number of that
-#' compound's targets landing in that component for `condition`. Answers
+#' `"not_in_action_network"`/`"other"`/`"unmapped"`), flow thickness is the
+#' number of that compound's targets landing in that component for
+#' `condition`. Answers
 #' "for this extract, which compounds actually reach the core of the
 #' directed action network, versus only its periphery (or don't map at
 #' all)?" at a glance, instead of reading `network_bowtie()`'s row-per-
@@ -89,7 +90,7 @@ plot_bowtie <- function(proj, condition = NULL, top_n_compounds = NULL,
 
   component_colors <- c(
     core = "#c0392b", in_component = "#e67e22", out_component = "#2980b9",
-    other = "grey60", unmapped = "grey85"
+    not_in_action_network = "#8e44ad", other = "grey60", unmapped = "grey85"
   )
 
   p <- ggplot2::ggplot(

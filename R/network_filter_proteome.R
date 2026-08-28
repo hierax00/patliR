@@ -73,7 +73,10 @@ network_filter_proteome <- function(proj, proteome, condition = NULL) {
     )
   )
 
-  result <- .network_upsert(proj, "network_filtered_edges", new_filtered, "condition")
+  result <- .network_upsert(
+    proj, "network_filtered_edges", new_filtered, "condition",
+    touched_keys = data.frame(condition = conditions, stringsAsFactors = FALSE)
+  )
   patliRResults(proj, "network_filtered_edges") <- result
   .write_results_csv(proj, "network_filtered_edges", result)
   .write_log_csv(proj)

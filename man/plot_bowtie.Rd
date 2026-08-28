@@ -49,8 +49,9 @@ family). If \code{save = TRUE} (default), also writes a PNG and logs it to
 Two-axis alluvial of \code{patliRResults(proj, "network_bowtie")}: left
 stratum is \code{compound_id} (labeled by name), right stratum is
 \code{bowtie_component} (\code{"core"}/\code{"in_component"}/\code{"out_component"}/
-\code{"other"}/\code{"unmapped"}), flow thickness is the number of that
-compound's targets landing in that component for \code{condition}. Answers
+\code{"not_in_action_network"}/\code{"other"}/\code{"unmapped"}), flow thickness is the
+number of that compound's targets landing in that component for
+\code{condition}. Answers
 "for this extract, which compounds actually reach the core of the
 directed action network, versus only its periphery (or don't map at
 all)?" at a glance, instead of reading \code{network_bowtie()}'s row-per-

@@ -168,8 +168,15 @@ network_bowtie <- function(proj, condition = NULL, species = 9606, version = "12
 
   result <- do.call(rbind, rows)
   rownames(result) <- NULL
-  result <- .network_upsert(proj, "network_bowtie", result, c("condition", "compound_id", "uniprot_id"))
-  summary_result <- .network_upsert(proj, "network_bowtie_summary", summary_row, c("species", "version"))
+  bowtie_touched <- unique(edges_all[edges_all$condition %in% conditions, c("condition", "compound_id", "uniprot_id"), drop = FALSE])
+  result <- .network_upsert(
+    proj, "network_bowtie", result, c("condition", "compound_id", "uniprot_id"),
+    touched_keys = bowtie_touched
+  )
+  summary_result <- .network_upsert(
+    proj, "network_bowtie_summary", summary_row, c("species", "version"),
+    touched_keys = data.frame(species = species, version = actions_version, stringsAsFactors = FALSE)
+  )
 
   patliRResults(proj, "network_bowtie") <- result
   patliRResults(proj, "network_bowtie_summary") <- summary_result

@@ -163,13 +163,15 @@ network_module_robustness <- function(proj, condition = NULL,
     curve_rows[[cond]] <- do.call(rbind, cond_curve)
   }
 
+  touched_keys <- data.frame(condition = conditions, stringsAsFactors = FALSE)
+
   summary_result <- do.call(rbind, summary_rows)
   rownames(summary_result) <- NULL
-  summary_result <- .network_upsert(proj, "network_module_robustness", summary_result, "condition")
+  summary_result <- .network_upsert(proj, "network_module_robustness", summary_result, "condition", touched_keys = touched_keys)
 
   curve_result <- do.call(rbind, curve_rows)
   rownames(curve_result) <- NULL
-  curve_result <- .network_upsert(proj, "network_robustness_curve", curve_result, "condition")
+  curve_result <- .network_upsert(proj, "network_robustness_curve", curve_result, "condition", touched_keys = touched_keys)
 
   patliRResults(proj, "network_module_robustness") <- summary_result
   patliRResults(proj, "network_robustness_curve") <- curve_result

@@ -66,3 +66,38 @@ test_that("network_synergy() with pairs = 'rank_top' and pairs = 'all' both run 
                result_all$z_score_a < 0 & result_all$z_score_b < 0)
   expect_true(all(result_all$synergy_score[scored] >= 0))
 })
+
+test_that("network_synergy(pairs = 'all') does not error when a compound is absent from network_proximity", {
+  proj <- .network_stats_test_setup()
+  edges_flo_et <- patliRResults(proj, "network_edges")
+  edges_flo_et <- edges_flo_et[edges_flo_et$condition == "FLO-ET", , drop = FALSE]
+  compounds <- unique(edges_flo_et$compound_id)
+  skip_if(length(compounds) < 3, "needs at least 3 compounds in FLO-ET")
+
+  ## Fabricate proximity results for every compound EXCEPT the last one --
+  ## network_proximity() legitimately skips compounds with no
+  ## STRING-mappable target, so `pairs = "all"` must yield NA for such a
+  ## compound's pairs, not `subscript out of bounds` (spec headline #3).
+  scored_compounds <- compounds[-length(compounds)]
+  fake_prox <- data.frame(
+    condition = "FLO-ET", compound_id = scored_compounds, disease_id = "SOME_DISEASE",
+    n_targets_mapped = 1L, n_disease_genes_mapped = 1L, d_observed = 2,
+    d_random_mean = 3, d_random_sd = 1,
+    z_score = seq(-2, 1, length.out = length(scored_compounds)),
+    n_random = 100L, seed_used = 1L, stringsAsFactors = FALSE
+  )
+  patliRResults(proj, "network_proximity") <- fake_prox
+
+  expect_no_error(
+    proj <- network_synergy(proj, condition = "FLO-ET", disease = "SOME_DISEASE", pairs = "all")
+  )
+  res <- patliRResults(proj, "network_synergy")
+  missing_compound <- compounds[length(compounds)]
+  missing_rows <- res[res$compound_a == missing_compound | res$compound_b == missing_compound, , drop = FALSE]
+  expect_true(nrow(missing_rows) > 0)
+  ## the absent compound's own z is NA on every pair it appears in
+  za_is_missing <- ifelse(missing_rows$compound_a == missing_compound, missing_rows$z_score_a, missing_rows$z_score_b)
+  expect_true(all(is.na(za_is_missing)))
+  expect_true(all(!missing_rows$both_proximal))
+  expect_true(all(is.na(missing_rows$synergy_score)))
+})

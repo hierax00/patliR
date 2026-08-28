@@ -118,3 +118,56 @@ test_that(".network_graph() errors clearly for a condition that was never built"
   proj <- network_build(proj, condition = "FLO-ET")
   expect_error(patliR:::.network_graph(proj, "LEA-ET"), "network_build")
 })
+
+test_that(".network_upsert(touched_keys=) drops a recomputed slot even when it now yields zero rows", {
+  proj <- .test_project()
+  patliRResults(proj, "demo_slot") <- data.frame(
+    condition = c("X", "X", "Y"), value = c(1, 2, 3), stringsAsFactors = FALSE
+  )
+
+  ## a rerun for condition X that produced nothing must remove X's old
+  ## rows and leave Y's intact -- headline bug #2 / spec 2.5
+  out <- patliR:::.network_upsert(
+    proj, "demo_slot",
+    new_rows = data.frame(condition = character(0), value = double(0), stringsAsFactors = FALSE),
+    key_cols = "condition",
+    touched_keys = data.frame(condition = "X", stringsAsFactors = FALSE)
+  )
+  expect_equal(nrow(out), 1L)
+  expect_equal(out$condition, "Y")
+})
+
+test_that(".network_upsert() without touched_keys keeps the historical derive-from-new_rows behaviour", {
+  proj <- .test_project()
+  patliRResults(proj, "demo_slot") <- data.frame(
+    condition = c("X", "Y"), value = c(1, 3), stringsAsFactors = FALSE
+  )
+
+  out <- patliR:::.network_upsert(
+    proj, "demo_slot",
+    data.frame(condition = "X", value = 9, stringsAsFactors = FALSE), "condition"
+  )
+  expect_equal(out$value[out$condition == "X"], 9)
+  expect_equal(out$value[out$condition == "Y"], 3)
+
+  ## zero-row new_rows with no touched_keys -> previous table returned unchanged
+  out0 <- patliR:::.network_upsert(
+    proj, "demo_slot",
+    data.frame(condition = character(0), value = double(0), stringsAsFactors = FALSE), "condition"
+  )
+  expect_equal(nrow(out0), 2L)
+})
+
+test_that(".network_upsert() fails loudly, not with R's generic rbind message, on a column-set mismatch", {
+  proj <- .test_project()
+  patliRResults(proj, "demo_slot") <- data.frame(
+    condition = "X", value = 1, stringsAsFactors = FALSE
+  )
+  expect_error(
+    patliR:::.network_upsert(
+      proj, "demo_slot",
+      data.frame(condition = "Y", VALUE = 2, stringsAsFactors = FALSE), "condition"
+    ),
+    "different columns"
+  )
+})

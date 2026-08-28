@@ -104,9 +104,6 @@ guessing.
   `.network_graph()`.
 - **`compounds_similarity()`** — integrate with `plot_chemical_space()` /
   `network_synergy()` (currently standalone).
-- **`adme_import()`** — give it the same `mapping_file` row-order bridge
-  `tox_import()` now has, so its export/import loop closes without relying
-  on cross-toolkit SMILES canonicalization either.
 
 ## Housekeeping
 
@@ -115,5 +112,5 @@ guessing.
 - Reconcile "second run" semantics across families (`network_*` vs.
   `adme_local()` etc.), give `plot_*` consistent logging, and factor out
   the boilerplate repeated across the 16 `plot_*` functions.
-- Audit `\donttest` examples: those needing network should be `\dontrun`,
-  those needing Bioconductor Suggests should be `@examplesIf`.
+- `\donttest` example audit is done (network/plot -> `\dontrun`); a few
+  could still become `@examplesIf` for the Bioconductor-only ones.

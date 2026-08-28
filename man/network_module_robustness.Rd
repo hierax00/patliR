@@ -48,9 +48,18 @@ matching \verb{results/*.csv}.
 \description{
 For each condition's graph (\code{\link[=network_build]{network_build()}}), clusters nodes into
 modules using HDBSCAN (\code{dbscan::hdbscan()}) over the graph's shortest-path
-distance matrix (\code{igraph::distances()}) -- nodes that are topologically
-close (few hops apart) cluster into the same module, regardless of
-whether they are compounds or targets. For each module, runs a
+distance matrix (\code{igraph::distances(g, weights = NA)}) -- nodes that are
+topologically close (few hops apart) cluster into the same module,
+regardless of whether they are compounds or targets.
+
+Density clustering on integer graph distances is a rough proxy for
+community structure (which is really about edge density within vs.
+between groups); on a small bipartite graph with a near-tied distance
+matrix it can collapse toward one cluster or all-noise. A
+modularity-based option (\code{cluster_leiden}, or bipartite modularity) is
+planned via the \verb{clustering=} argument -- see \code{ROADMAP.md}.
+
+For each module, runs a
 \strong{targeted-attack percolation}: repeatedly remove the current
 highest-degree node from that module's induced subgraph (recalculating
 degree after every removal -- the standard "malicious attack" strategy,
@@ -58,9 +67,12 @@ not random failure), tracking what fraction of the module stays in its
 largest connected component at each step. Summarizes that fragmentation
 curve as the \strong{R-index} (Schneider, C.M. et al. 2011, \emph{PNAS} 108(10),
 3838-41; \code{plot_robustness()} visualizes this curve): the mean largest-
-component fraction across all removal steps, from \code{0} (module collapses
-immediately) to \code{1} (stays fully connected -- only possible for a
-single-node module).
+component fraction over removal steps \verb{Q = 1..N}. Higher = more robust;
+\code{0} is immediate collapse. The theoretical maximum is \verb{(N-1)/(2N) < 0.5}
+(Schneider's definition), reached only by a module that never fragments
+until fully removed -- not \code{1}. R-index also depends strongly on module
+size, so it is \strong{not comparable across modules of different \code{n_nodes}}
+(a 1-node module scores \code{0}, a 2-node one \code{0.25}, by arithmetic).
 }
 \section{HDBSCAN "noise" points get their own module}{
 

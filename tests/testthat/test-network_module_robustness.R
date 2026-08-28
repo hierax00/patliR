@@ -12,7 +12,9 @@ test_that("network_module_robustness() produces a well-formed summary table on F
 
   summary_tbl <- patliRResults(proj, "network_module_robustness")
   expect_true(all(c("condition", "module_id", "n_nodes", "r_index", "seed_used") %in% names(summary_tbl)))
-  expect_true(all(summary_tbl$r_index >= 0 & summary_tbl$r_index <= 1))
+  ## Schneider et al. (2011): s(Q) <= (N-Q)/N at every step, so the mean
+  ## over Q = 1..N is bounded above by (N-1)/(2N) < 0.5, not 1.
+  expect_true(all(summary_tbl$r_index >= 0 & summary_tbl$r_index <= 0.5))
 })
 
 test_that(".network_detect_modules() falls back to a single module when the graph is smaller than 2 * min_module_size", {

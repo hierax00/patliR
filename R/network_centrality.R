@@ -26,11 +26,23 @@ NULL
 #' `weight` into a proper distance (e.g. `1 - probability`) first, not pass
 #' the raw column through.
 #'
-#' @section Hub score:
-#' `igraph::hub_score()` is deprecated as of igraph 2.0.3;
-#' `igraph::hits_scores(g, weights = NA)` is the replacement and the code
-#' reads its `$hub` element. Same underlying Kleinberg computation, so
-#' output is numerically unchanged.
+#' @section Hub score is eigenvector centrality here:
+#' The graph is **undirected**, so Kleinberg's hub and authority scores
+#' coincide and both equal the principal eigenvector of the adjacency
+#' matrix -- i.e. `hub_score` is eigenvector centrality, not a directional
+#' "hub vs. authority" distinction (that only exists on a directed graph).
+#' It is kept under the name `hub_score` for continuity with earlier
+#' versions. Implementation note: `igraph::hub_score()` is deprecated as of
+#' igraph 2.0.3; the code uses `igraph::hits_scores(g, weights = NA)$hub`,
+#' numerically the same.
+#'
+#' @section Degree and betweenness are comparable only within `node_type`:
+#' This is a bipartite graph -- a compound's degree ranges over `[0, |T|]`,
+#' a target's over `[0, |C|]`, and `|T|` is usually much larger, so a joint
+#' ranking of the raw `degree` (or `betweenness`) column mostly reflects
+#' which mode a node is in, not its importance. Compare within
+#' `node_type`. A bipartite-aware normalisation (Borgatti & Everett 1997)
+#' is planned (see `ROADMAP.md`).
 #'
 #' @inheritParams network_build
 #' @param measures Character vector, any of `"degree"`, `"betweenness"`,

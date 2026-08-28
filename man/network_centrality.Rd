@@ -52,12 +52,26 @@ wants probability-weighted centrality, it needs to explicitly transform
 the raw column through.
 }
 
-\section{Hub score}{
+\section{Hub score is eigenvector centrality here}{
 
-\code{igraph::hub_score()} is deprecated as of igraph 2.0.3;
-\code{igraph::hits_scores(g, weights = NA)} is the replacement and the code
-reads its \verb{$hub} element. Same underlying Kleinberg computation, so
-output is numerically unchanged.
+The graph is \strong{undirected}, so Kleinberg's hub and authority scores
+coincide and both equal the principal eigenvector of the adjacency
+matrix -- i.e. \code{hub_score} is eigenvector centrality, not a directional
+"hub vs. authority" distinction (that only exists on a directed graph).
+It is kept under the name \code{hub_score} for continuity with earlier
+versions. Implementation note: \code{igraph::hub_score()} is deprecated as of
+igraph 2.0.3; the code uses \code{igraph::hits_scores(g, weights = NA)$hub},
+numerically the same.
+}
+
+\section{Degree and betweenness are comparable only within \code{node_type}}{
+
+This is a bipartite graph -- a compound's degree ranges over \verb{[0, |T|]},
+a target's over \verb{[0, |C|]}, and \verb{|T|} is usually much larger, so a joint
+ranking of the raw \code{degree} (or \code{betweenness}) column mostly reflects
+which mode a node is in, not its importance. Compare within
+\code{node_type}. A bipartite-aware normalisation (Borgatti & Everett 1997)
+is planned (see \code{ROADMAP.md}).
 }
 
 \examples{

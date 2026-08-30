@@ -122,7 +122,12 @@ guessing.
 - Write `vignettes/patliR-intro.Rmd` and `paper.md` (JOSS) before any
   Bioconductor/JOSS submission.
 - Reconcile "second run" semantics across families (`network_*` vs.
-  `adme_local()` etc.), give `plot_*` consistent logging, and factor out
-  the boilerplate repeated across the 16 `plot_*` functions.
+  `adme_local()` etc.) and give `plot_*` consistent logging. The shared
+  boilerplate is now factored out for the seven network `plot_*` functions
+  (`R/plot-helpers.R`: `.plot_require` / `.plot_scope` / `.plot_finish` /
+  `.plot_label_nodes`); the nine non-network `plot_*` functions log
+  differently enough (single-row logs, no `engine`, PDF/HTML output,
+  `.write_log_csv`) that they were left for the logging-reconciliation
+  pass rather than forced onto the same helpers.
 - `\donttest` example audit is done (network/plot -> `\dontrun`); a few
   could still become `@examplesIf` for the Bioconductor-only ones.

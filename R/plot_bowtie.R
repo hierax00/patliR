@@ -1,4 +1,4 @@
-#' @include AllGenerics.R internal.R network_bowtie.R plot_network_layers.R
+#' @include AllGenerics.R internal.R network_bowtie.R plot-helpers.R
 NULL
 
 ## Uses ggalluvial (Suggests): curved flow ribbons between stacked strata
@@ -56,17 +56,10 @@ NULL
 plot_bowtie <- function(proj, condition = NULL, top_n_compounds = NULL,
                          save = TRUE, out_dir = NULL, width = 8, height = 6, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    cli::cli_abort("The {.pkg ggplot2} package is required for {.fn plot_bowtie}.")
-  }
-  if (!requireNamespace("ggalluvial", quietly = TRUE)) {
-    cli::cli_abort(c(
-      "{.fn plot_bowtie} needs the {.pkg ggalluvial} package (CRAN), not installed.",
-      "i" = "{.code install.packages(\"ggalluvial\")} -- pure CRAN, ggplot2-based, no heavy transitive deps."
-    ))
-  }
-  conditions <- .network_resolve_conditions(proj, condition)
-  scope_label <- if (is.null(condition)) "ALL" else paste(conditions, collapse = "+")
+  .plot_require(extra = "ggalluvial")
+  scope <- .plot_scope(proj, condition)
+  conditions <- scope$conditions
+  scope_label <- scope$scope_label
 
   bowtie_all <- patliRResults(proj, "network_bowtie")
   if (is.null(bowtie_all) || nrow(bowtie_all) == 0) {
@@ -76,7 +69,7 @@ plot_bowtie <- function(proj, condition = NULL, top_n_compounds = NULL,
   if (nrow(dat) == 0) {
     cli::cli_abort("No {.val network_bowtie} rows for condition(s) {.val {conditions}}.")
   }
-  dat$compound_label <- .network_layers_labels(proj, conditions, data.frame(name = dat$compound_id, layer = "compound", stringsAsFactors = FALSE))
+  dat$compound_label <- .plot_label_nodes(proj, conditions, dat$compound_id, "compound")
 
   flow <- as.data.frame(table(compound_label = dat$compound_label, bowtie_component = dat$bowtie_component), stringsAsFactors = FALSE)
   flow <- flow[flow$Freq > 0, , drop = FALSE]
@@ -114,17 +107,13 @@ plot_bowtie <- function(proj, condition = NULL, top_n_compounds = NULL,
       axis.text.y = ggplot2::element_blank()
     )
 
-  if (save) {
-    if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
-    if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
-    path <- file.path(out_dir, paste0("bowtie_", scope_label, ".png"))
-    ggplot2::ggsave(path, p, width = width, height = height, dpi = dpi)
-    log_row <- data.frame(condition = scope_label, path = path, stringsAsFactors = FALSE)
-    log_df <- .network_upsert(proj, "bowtie_plot_log", log_row, "condition")
-    patliRResults(proj, "bowtie_plot_log") <- log_df
-    .write_results_csv(proj, "bowtie_plot_log", log_df)
-  }
-
-  if (save) attr(p, "proj") <- proj
-  p
+  .plot_finish(
+    proj, p,
+    name = "bowtie_plot_log",
+    filename = paste0("bowtie_", scope_label, ".png"),
+    log_row = data.frame(condition = scope_label, path = NA_character_, stringsAsFactors = FALSE),
+    key_cols = "condition",
+    engine = NULL, save = save, out_dir = out_dir,
+    width = width, height = height, dpi = dpi
+  )
 }

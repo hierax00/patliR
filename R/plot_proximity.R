@@ -1,4 +1,4 @@
-#' @include AllGenerics.R internal.R network_proximity.R plot_network_layers.R
+#' @include AllGenerics.R internal.R network_proximity.R plot-helpers.R
 NULL
 
 ## plot_proximity() -- a real constraint discovered while designing this,
@@ -75,15 +75,10 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
                             width = 8, height = 6, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
   engine <- match.arg(engine)
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    cli::cli_abort("The {.pkg ggplot2} package is required for {.fn plot_proximity}.")
-  }
-  if (engine == "ggiraph" && !requireNamespace("ggiraph", quietly = TRUE)) {
-    cli::cli_warn("The {.pkg ggiraph} package is not installed; falling back to {.val static}.")
-    engine <- "static"
-  }
-  conditions <- .network_resolve_conditions(proj, condition)
-  scope_label <- if (is.null(condition)) "ALL" else paste(conditions, collapse = "+")
+  engine <- .plot_require(engine)
+  scope <- .plot_scope(proj, condition)
+  conditions <- scope$conditions
+  scope_label <- scope$scope_label
 
   prox_all <- patliRResults(proj, "network_proximity")
   if (is.null(prox_all) || nrow(prox_all) == 0) {
@@ -95,7 +90,7 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
   if (nrow(dat) == 0) {
     cli::cli_abort("No {.val network_proximity} rows with a non-NA z_score for the requested condition(s)/disease.")
   }
-  dat$label <- .network_layers_labels(proj, conditions, data.frame(name = dat$compound_id, layer = "compound", stringsAsFactors = FALSE))
+  dat$label <- .plot_label_nodes(proj, conditions, dat$compound_id, "compound")
   dat <- dat[order(dat$z_score), , drop = FALSE]
   dat$label <- factor(dat$label, levels = unique(dat$label))
   dat$significant <- abs(dat$z_score) >= 1.96
@@ -122,18 +117,13 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
     ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 8, colour = "grey40"))
   if (length(unique(dat$panel)) > 1) p <- p + ggplot2::facet_wrap(~panel, scales = "free_y")
 
-  if (save) {
-    if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
-    if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
-    path <- file.path(out_dir, paste0("proximity_", scope_label, ".png"))
-    ggplot2::ggsave(path, p, width = width, height = height, dpi = dpi)
-    log_row <- data.frame(condition = scope_label, path = path, stringsAsFactors = FALSE)
-    log_df <- .network_upsert(proj, "proximity_plot_log", log_row, "condition")
-    patliRResults(proj, "proximity_plot_log") <- log_df
-    .write_results_csv(proj, "proximity_plot_log", log_df)
-  }
-
-  result <- if (engine == "static") p else ggiraph::girafe(ggobj = p, options = list(ggiraph::opts_tooltip(opacity = 0.9)))
-  if (save) attr(result, "proj") <- proj
-  result
+  .plot_finish(
+    proj, p,
+    name = "proximity_plot_log",
+    filename = paste0("proximity_", scope_label, ".png"),
+    log_row = data.frame(condition = scope_label, path = NA_character_, stringsAsFactors = FALSE),
+    key_cols = "condition",
+    engine = engine, save = save, out_dir = out_dir,
+    width = width, height = height, dpi = dpi
+  )
 }

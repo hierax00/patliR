@@ -1,4 +1,4 @@
-#' @include AllGenerics.R internal.R network_synergy.R plot_network_layers.R
+#' @include AllGenerics.R internal.R network_synergy.R plot-helpers.R
 NULL
 
 #' Volcano-style scatter of `network_synergy()` compound pairs
@@ -62,15 +62,10 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 10,
   stopifnot(is(proj, "PatliRProject"))
   stopifnot(is.numeric(top_n), length(top_n) == 1, top_n >= 0)
   engine <- match.arg(engine)
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    cli::cli_abort("The {.pkg ggplot2} package is required for {.fn plot_synergy}.")
-  }
-  if (engine == "ggiraph" && !requireNamespace("ggiraph", quietly = TRUE)) {
-    cli::cli_warn("The {.pkg ggiraph} package is not installed; falling back to {.val static}.")
-    engine <- "static"
-  }
-  conditions <- .network_resolve_conditions(proj, condition)
-  scope_label <- if (is.null(condition)) "ALL" else paste(conditions, collapse = "+")
+  engine <- .plot_require(engine)
+  scope <- .plot_scope(proj, condition)
+  conditions <- scope$conditions
+  scope_label <- scope$scope_label
 
   syn_all <- patliRResults(proj, "network_synergy")
   if (is.null(syn_all) || nrow(syn_all) == 0) {
@@ -81,8 +76,8 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 10,
   if (nrow(dat) == 0) {
     cli::cli_abort("No {.val network_synergy} rows for the requested condition(s)/disease.")
   }
-  label_a <- .network_layers_labels(proj, conditions, data.frame(name = dat$compound_a, layer = "compound", stringsAsFactors = FALSE))
-  label_b <- .network_layers_labels(proj, conditions, data.frame(name = dat$compound_b, layer = "compound", stringsAsFactors = FALSE))
+  label_a <- .plot_label_nodes(proj, conditions, dat$compound_a, "compound")
+  label_b <- .plot_label_nodes(proj, conditions, dat$compound_b, "compound")
   dat$pair_label <- paste(label_a, "+", label_b)
   dat$panel <- paste(dat$condition, dat$disease_id, sep = " / ")
   dat$tooltip <- sprintf("%s\ncomplementarity %.2f, joint closeness %.2f, synergy %.2f", dat$pair_label, dat$complementarity, dat$joint_closeness, dat$synergy_score)
@@ -110,18 +105,13 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 10,
     ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 8, colour = "grey40"))
   if (length(unique(dat$panel)) > 1) p <- p + ggplot2::facet_wrap(~panel)
 
-  if (save) {
-    if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
-    if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
-    path <- file.path(out_dir, paste0("synergy_", scope_label, ".png"))
-    ggplot2::ggsave(path, p, width = width, height = height, dpi = dpi)
-    log_row <- data.frame(condition = scope_label, path = path, stringsAsFactors = FALSE)
-    log_df <- .network_upsert(proj, "synergy_plot_log", log_row, "condition")
-    patliRResults(proj, "synergy_plot_log") <- log_df
-    .write_results_csv(proj, "synergy_plot_log", log_df)
-  }
-
-  result <- if (engine == "static") p else ggiraph::girafe(ggobj = p, options = list(ggiraph::opts_tooltip(opacity = 0.9)))
-  if (save) attr(result, "proj") <- proj
-  result
+  .plot_finish(
+    proj, p,
+    name = "synergy_plot_log",
+    filename = paste0("synergy_", scope_label, ".png"),
+    log_row = data.frame(condition = scope_label, path = NA_character_, stringsAsFactors = FALSE),
+    key_cols = "condition",
+    engine = engine, save = save, out_dir = out_dir,
+    width = width, height = height, dpi = dpi
+  )
 }

@@ -1,4 +1,4 @@
-#' @include AllGenerics.R internal.R network_module_robustness.R
+#' @include AllGenerics.R internal.R network_module_robustness.R plot-helpers.R
 NULL
 
 #' Percolation curve(s) from `network_module_robustness()`
@@ -55,15 +55,10 @@ plot_robustness <- function(proj, condition = NULL, module_id = NULL,
                              width = 8, height = 6, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
   engine <- match.arg(engine)
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    cli::cli_abort("The {.pkg ggplot2} package is required for {.fn plot_robustness}.")
-  }
-  if (engine == "ggiraph" && !requireNamespace("ggiraph", quietly = TRUE)) {
-    cli::cli_warn("The {.pkg ggiraph} package is not installed; falling back to {.val static}.")
-    engine <- "static"
-  }
-  conditions <- .network_resolve_conditions(proj, condition)
-  scope_label <- if (is.null(condition)) "ALL" else paste(conditions, collapse = "+")
+  engine <- .plot_require(engine)
+  scope <- .plot_scope(proj, condition)
+  conditions <- scope$conditions
+  scope_label <- scope$scope_label
 
   curve_all <- patliRResults(proj, "network_robustness_curve")
   summary_all <- patliRResults(proj, "network_module_robustness")
@@ -106,18 +101,13 @@ plot_robustness <- function(proj, condition = NULL, module_id = NULL,
     ggplot2::theme_minimal() +
     ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 8, colour = "grey40"))
 
-  if (save) {
-    if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
-    if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
-    path <- file.path(out_dir, paste0("robustness_", scope_label, ".png"))
-    ggplot2::ggsave(path, p, width = width, height = height, dpi = dpi)
-    log_row <- data.frame(condition = scope_label, path = path, stringsAsFactors = FALSE)
-    log_df <- .network_upsert(proj, "robustness_plot_log", log_row, "condition")
-    patliRResults(proj, "robustness_plot_log") <- log_df
-    .write_results_csv(proj, "robustness_plot_log", log_df)
-  }
-
-  result <- if (engine == "static") p else ggiraph::girafe(ggobj = p, options = list(ggiraph::opts_tooltip(opacity = 0.9)))
-  if (save) attr(result, "proj") <- proj
-  result
+  .plot_finish(
+    proj, p,
+    name = "robustness_plot_log",
+    filename = paste0("robustness_", scope_label, ".png"),
+    log_row = data.frame(condition = scope_label, path = NA_character_, stringsAsFactors = FALSE),
+    key_cols = "condition",
+    engine = engine, save = save, out_dir = out_dir,
+    width = width, height = height, dpi = dpi
+  )
 }

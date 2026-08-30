@@ -72,6 +72,15 @@
   `.network_resample_degree_matched()` and computed once per call rather
   than ~`2 * n_random` times per compound; `.network_degree_bins()`
   replaces its per-unique-degree rescan with a single `rle()` pass.
+- **Internal**: the boilerplate the seven network `plot_*` functions
+  repeated (ggplot2/engine check, scope label, `ggsave` + log upsert +
+  `girafe` wrap + `attr(result, "proj")` tail, node-label lookup) is
+  factored into `.plot_require()` / `.plot_scope()` / `.plot_finish()` /
+  `.plot_label_nodes()` in `R/plot-helpers.R`. `.plot_label_nodes()` is the
+  former `.network_layers_labels()`, moved out of `plot_network_layers.R`
+  (which `plot_bowtie`/`plot_centrality`/`plot_proximity`/`plot_synergy`
+  `@include`d only to reach it). No change to any figure, filename, log
+  schema or return type.
 
 ## Reference database (`refdb_*`)
 

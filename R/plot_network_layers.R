@@ -1,4 +1,4 @@
-#' @include AllGenerics.R internal.R network_layers.R
+#' @include AllGenerics.R internal.R network_layers.R plot-helpers.R
 NULL
 
 ## Static ggplot2 figure (no ggraph): the layout is computed with
@@ -162,15 +162,10 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
   if (length(unknown_layers) > 0) {
     cli::cli_abort("Unknown {.arg layers} value(s) {.val {unknown_layers}}; must be a subset of {.val {c('compound', 'target', 'pathway', 'disease')}}.")
   }
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    cli::cli_abort("The {.pkg ggplot2} package is required for {.fn plot_network_layers}.")
-  }
-  if (engine == "ggiraph" && !requireNamespace("ggiraph", quietly = TRUE)) {
-    cli::cli_warn("The {.pkg ggiraph} package is not installed; falling back to {.val static}.")
-    engine <- "static"
-  }
-  conditions <- .network_resolve_conditions(proj, condition) # NULL -> every built condition
-  scope_label <- if (is.null(condition)) "ALL" else paste(conditions, collapse = "+")
+  engine <- .plot_require(engine)
+  scope <- .plot_scope(proj, condition) # condition NULL -> every built condition
+  conditions <- scope$conditions
+  scope_label <- scope$scope_label
 
   g <- .network_layered_graph_multi(proj, conditions, pathway_db = pathway_db)
   g <- .network_layers_filter(proj, g, conditions, layers = layers, max_pathways = max_pathways)
@@ -181,29 +176,20 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
   pd <- .network_layers_plot_data(proj, g, conditions, layout = layout, top_hub_n = top_hub_n, seed = seed)
   p <- .network_layers_ggplot(pd, engine = engine, title_suffix = scope_label)
 
-  if (save) {
-    if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
-    if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
-    p_static <- if (engine == "static") p else .network_layers_ggplot(pd, engine = "static", title_suffix = scope_label)
-    path <- file.path(out_dir, paste0("network_layers_", scope_label, ".png"))
-    ggplot2::ggsave(path, p_static, width = width, height = height, dpi = dpi)
-    log_row <- data.frame(
-      condition = scope_label, path = path,
+  .plot_finish(
+    proj, p,
+    name = "network_layers_plot_log",
+    filename = paste0("network_layers_", scope_label, ".png"),
+    log_row = data.frame(
+      condition = scope_label, path = NA_character_,
       n_nodes = igraph::vcount(g), n_edges = igraph::ecount(g),
       stringsAsFactors = FALSE
-    )
-    log_df <- .network_upsert(proj, "network_layers_plot_log", log_row, "condition")
-    patliRResults(proj, "network_layers_plot_log") <- log_df
-    .write_results_csv(proj, "network_layers_plot_log", log_df)
-  }
-
-  result <- if (engine == "static") {
-    p
-  } else {
-    ggiraph::girafe(ggobj = p, options = list(ggiraph::opts_tooltip(opacity = 0.9)))
-  }
-  if (save) attr(result, "proj") <- proj
-  result
+    ),
+    key_cols = "condition",
+    engine = engine, save = save, out_dir = out_dir,
+    width = width, height = height, dpi = dpi,
+    static = if (engine == "static") p else .network_layers_ggplot(pd, engine = "static", title_suffix = scope_label)
+  )
 }
 
 #' Build the directed compound-target-pathway-disease layered graph pooled
@@ -339,7 +325,7 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
     name = vnames, layer = vlayer, degree = degree,
     x = coords[, 1], y = coords[, 2], stringsAsFactors = FALSE
   )
-  nodes$label <- .network_layers_labels(proj, conditions, nodes)
+  nodes$label <- .plot_label_nodes(proj, conditions, nodes$name, nodes$layer)
   hub_cut <- if (nrow(nodes) <= top_hub_n) -Inf else sort(nodes$degree, decreasing = TRUE)[top_hub_n]
   nodes$is_hub <- nodes$degree >= hub_cut & nodes$degree > 0
 
@@ -353,47 +339,6 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
   edges$is_derived <- edges$edge_kind %in% c("compound_pathway_derived", "compound_disease_derived")
 
   list(nodes = nodes, edges = edges)
-}
-
-#' Look up display labels for every node of a (pooled) layered graph
-#' @return Character vector, same length/order as `nodes$name`.
-#' @keywords internal
-.network_layers_labels <- function(proj, conditions, nodes) {
-  label <- nodes$name
-
-  is_compound <- nodes$layer == "compound"
-  if (any(is_compound)) {
-    cmp <- compounds(proj)
-    lookup <- stats::setNames(cmp$name, cmp$id)
-    resolved <- lookup[nodes$name[is_compound]]
-    label[is_compound] <- ifelse(is.na(resolved) | resolved == "", nodes$name[is_compound], resolved)
-  }
-
-  is_target <- nodes$layer == "target"
-  if (any(is_target) && requireNamespace("clusterProfiler", quietly = TRUE) && requireNamespace("org.Hs.eg.db", quietly = TRUE)) {
-    map <- tryCatch(
-      clusterProfiler::bitr(nodes$name[is_target], fromType = "UNIPROT", toType = "SYMBOL", OrgDb = "org.Hs.eg.db", drop = TRUE),
-      error = function(e) NULL
-    )
-    if (!is.null(map) && nrow(map) > 0) {
-      lookup <- stats::setNames(map$SYMBOL, map$UNIPROT)
-      resolved <- lookup[nodes$name[is_target]]
-      label[is_target] <- ifelse(is.na(resolved), nodes$name[is_target], resolved)
-    }
-  }
-
-  is_pathway <- nodes$layer == "pathway"
-  if (any(is_pathway)) {
-    enrichment_all <- patliRResults(proj, "network_enrichment")
-    if (!is.null(enrichment_all)) {
-      enr <- enrichment_all[enrichment_all$condition %in% conditions, , drop = FALSE]
-      lookup <- stats::setNames(enr$Description, enr$ID)
-      resolved <- lookup[nodes$name[is_pathway]]
-      label[is_pathway] <- ifelse(is.na(resolved) | resolved == "", nodes$name[is_pathway], resolved)
-    }
-  }
-
-  label
 }
 
 #' @keywords internal

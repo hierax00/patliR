@@ -1,4 +1,4 @@
-#' @include AllGenerics.R internal.R network_build.R plot_network_layers.R
+#' @include AllGenerics.R internal.R network_build.R plot-helpers.R
 NULL
 
 ## Uses pheatmap::pheatmap() for real hierarchical clustering on both axes.
@@ -78,7 +78,7 @@ plot_heatmap <- function(proj, condition = NULL, what = c("compound_target", "co
     }
     conds <- setdiff(names(bin), "compound_id")
     mat <- as.matrix(bin[, conds, drop = FALSE])
-    rownames(mat) <- .network_layers_labels(proj, conds, data.frame(name = bin$compound_id, layer = "compound", stringsAsFactors = FALSE))
+    rownames(mat) <- .plot_label_nodes(proj, conds, bin$compound_id, "compound")
     storage.mode(mat) <- "double"
     scope_label <- "ALL"
     title <- "Compound x Condition Presence"
@@ -91,8 +91,8 @@ plot_heatmap <- function(proj, condition = NULL, what = c("compound_target", "co
     if (nrow(long) == 0) {
       cli::cli_abort("Nothing to plot for {.arg what} = {.val {what}} in this scope.")
     }
-    long$compound_label <- .network_layers_labels(proj, conditions, data.frame(name = long$compound_id, layer = "compound", stringsAsFactors = FALSE))
-    long$target_label <- .network_layers_labels(proj, conditions, data.frame(name = long$uniprot_id, layer = "target", stringsAsFactors = FALSE))
+    long$compound_label <- .plot_label_nodes(proj, conditions, long$compound_id, "compound")
+    long$target_label <- .plot_label_nodes(proj, conditions, long$uniprot_id, "target")
     mat <- as.matrix(stats::xtabs(weight ~ compound_label + target_label, data = long))
     title <- paste0("Compound-Target Binding Probability -- ", scope_label)
   }

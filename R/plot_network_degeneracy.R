@@ -1,4 +1,4 @@
-#' @include AllGenerics.R internal.R plot_network_layers.R network_degeneracy.R
+#' @include AllGenerics.R internal.R plot-helpers.R plot_network_layers.R network_degeneracy.R
 NULL
 
 ## Draws network_degeneracy()'s compound-compound convergence links on top
@@ -65,15 +65,10 @@ plot_network_degeneracy <- function(proj, condition = NULL, engine = c("static",
   stopifnot(is.numeric(min_degeneracy), length(min_degeneracy) == 1, min_degeneracy >= 0, min_degeneracy <= 1)
   engine <- match.arg(engine)
   layout <- match.arg(layout)
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    cli::cli_abort("The {.pkg ggplot2} package is required for {.fn plot_network_degeneracy}.")
-  }
-  if (engine == "ggiraph" && !requireNamespace("ggiraph", quietly = TRUE)) {
-    cli::cli_warn("The {.pkg ggiraph} package is not installed; falling back to {.val static}.")
-    engine <- "static"
-  }
-  conditions <- .network_resolve_conditions(proj, condition)
-  scope_label <- if (is.null(condition)) "ALL" else paste(conditions, collapse = "+")
+  engine <- .plot_require(engine)
+  scope <- .plot_scope(proj, condition)
+  conditions <- scope$conditions
+  scope_label <- scope$scope_label
 
   degeneracy_all <- patliRResults(proj, "network_degeneracy")
   if (is.null(degeneracy_all) || nrow(degeneracy_all) == 0) {
@@ -94,28 +89,19 @@ plot_network_degeneracy <- function(proj, condition = NULL, engine = c("static",
   deg_edges <- .network_degeneracy_edges(pd$nodes, deg)
   p <- .network_degeneracy_ggplot(pd, deg_edges, engine = engine, title_suffix = scope_label)
 
-  if (save) {
-    if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
-    if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
-    p_static <- if (engine == "static") p else .network_degeneracy_ggplot(pd, deg_edges, engine = "static", title_suffix = scope_label)
-    path <- file.path(out_dir, paste0("network_degeneracy_", scope_label, ".png"))
-    ggplot2::ggsave(path, p_static, width = width, height = height, dpi = dpi)
-    log_row <- data.frame(
-      condition = scope_label, path = path, min_degeneracy = min_degeneracy,
+  .plot_finish(
+    proj, p,
+    name = "network_degeneracy_plot_log",
+    filename = paste0("network_degeneracy_", scope_label, ".png"),
+    log_row = data.frame(
+      condition = scope_label, path = NA_character_, min_degeneracy = min_degeneracy,
       n_links = nrow(deg_edges), stringsAsFactors = FALSE
-    )
-    log_df <- .network_upsert(proj, "network_degeneracy_plot_log", log_row, "condition")
-    patliRResults(proj, "network_degeneracy_plot_log") <- log_df
-    .write_results_csv(proj, "network_degeneracy_plot_log", log_df)
-  }
-
-  result <- if (engine == "static") {
-    p
-  } else {
-    ggiraph::girafe(ggobj = p, options = list(ggiraph::opts_tooltip(opacity = 0.9)))
-  }
-  if (save) attr(result, "proj") <- proj
-  result
+    ),
+    key_cols = "condition",
+    engine = engine, save = save, out_dir = out_dir,
+    width = width, height = height, dpi = dpi,
+    static = if (engine == "static") p else .network_degeneracy_ggplot(pd, deg_edges, engine = "static", title_suffix = scope_label)
+  )
 }
 
 #' Resolve `network_degeneracy()` compound pairs to node coordinates from

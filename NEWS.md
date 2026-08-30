@@ -82,6 +82,47 @@
   `@include`d only to reach it). No change to any figure, filename, log
   schema or return type.
 
+## Phase 1 verification follow-ups (`disease_genes_*` / `network_proximity()`)
+
+- **`disease_genes_fetch(min_score = )` now defaults to `0.4`, not `NULL`.**
+  Open Targets' full associated-target list for a common disease runs to
+  thousands of genes (type 2 diabetes: ~9,900) against a ~17k-node STRING
+  LCC; at that size roughly half of any compound's targets fall inside the
+  disease module by chance and the proximity z-score's dynamic range
+  collapses. `0.4` brings common diseases to a Menche/Guney-scale module
+  (~200-300 genes). `NULL` stays available as "keep everything". The
+  kept/dropped counts and the cutoff are logged as a single summary line.
+- **`disease_genes_import()` gains `map_symbols = FALSE`.** When `TRUE`, a
+  symbol-only `table` is mapped through `org.Hs.eg.db`
+  (`clusterProfiler::bitr()`, `SYMBOL -> UNIPROT`); every multi-mapping and
+  every unmapped symbol is logged, all accessions of a multi-mapping symbol
+  are kept, and `source` records that the mapping was applied. Symbol
+  rejection stays the default (the mapping is many-to-many).
+- **Per-gene logging replaced by summaries.** `disease_genes_no_swissprot`,
+  `disease_genes_below_min_score` and `network_proximity_unmapped` wrote one
+  `log.csv` row per gene (~10k rows per call against a real disease). Each
+  is now a single count line (with the first ~10 IDs inline).
+- **`.network_upsert()` migrates a legacy results CSV instead of aborting.**
+  When `new_rows` has columns the existing table lacks and none the other
+  way (a pure column addition, e.g. a pre-Phase-1 `network_proximity.csv`
+  without `disease_gene_source` / `n_overlap`), the old rows are back-filled
+  with typed `NA` and the upsert proceeds with a one-line `cli_inform`. A
+  column *removal* or a *type conflict* on a shared column still aborts.
+- **`network_proximity()` abort message** on the default path no longer
+  tells the user to check `targets_disease` (it names the `disease_genes`
+  set that was actually in use).
+- **`network_proximity()` null efficiency.** The degree-matched disease-side
+  null is drawn once per `(condition, disease)` and reused across compounds
+  (it was redrawn per compound although `T` is identical); `target_string`
+  and `V(g)$name` are hoisted out of the per-compound loop. Pure speedups.
+- **`.open_targets_graphql()`** now carries a `User-Agent`, a ~3 req/s
+  throttle and exponential-backoff retry on 429/5xx (mirroring
+  `.refdb_get_json()`) -- `disease_genes_fetch()` drives a ~20-request
+  paginated loop against a rate-limiting API.
+- **`plot_proximity()`** warns and drops the circular `targets_disease`
+  rows when a `network_proximity` table mixes both `disease_gene_source`
+  values, so they cannot render as the most significant points.
+
 ## Reference database (`refdb_*`)
 
 - **`refdb_build()` now resolves ChEMBL identity by a deterministic

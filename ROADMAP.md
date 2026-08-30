@@ -20,7 +20,12 @@ guessing.
   Imports a curated disease-gene list into a dedicated `disease_genes`
   slot (not `targets_disease`), alongside `disease_genes_fetch()` which
   queries Open Targets in the disease -> target direction. Both feed
-  `network_proximity(disease_genes = "disease_genes")`.
+  `network_proximity(disease_genes = "disease_genes")`. `disease_genes_fetch()`
+  defaults `min_score = 0.4` (a full Open Targets disease is ~10k genes,
+  which flattens the proximity z-score against a ~17k-node STRING LCC);
+  `disease_genes_import(map_symbols = TRUE)` opts in to `org.Hs.eg.db`
+  symbol mapping. `.open_targets_graphql()` now has retry / throttle /
+  User-Agent, like the refdb fetchers.
 
 ## Reference / natural-product databases
 

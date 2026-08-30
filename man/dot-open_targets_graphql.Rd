@@ -10,6 +10,9 @@
 The \code{data} field of the parsed JSON response (a nested list).
 }
 \description{
-POST one query to the Open Targets Platform GraphQL API (v4, no API key)
+\code{disease_genes_fetch()} fires this ~\code{ceiling(count / 500)} times in a
+paginated loop (20 requests for a large disease) against a rate-limiting
+API, so it carries a User-Agent, a ~3 req/s throttle and exponential
+backoff on 429/5xx -- same treatment as \code{.refdb_get_json()}.
 }
 \keyword{internal}

@@ -126,7 +126,10 @@ each replaced by an equal-size set of \strong{distinct} STRING nodes drawn
 from the same degree bins -- bins built from consecutive degree values,
 each extended until it holds >= 100 nodes (Guney et al.'s Methods), not
 fixed quantiles. The "closest" distance is recomputed on the resampled
-pair. \code{z_score = (d_observed - mean(d_random)) / sd(d_random)}; a
+pair. The disease side of the null is identical for every compound in a
+\verb{(condition, disease)}, so its \code{n_random} resampled sets are drawn once
+and reused across compounds (Guney's reference implementation does the
+same). \code{z_score = (d_observed - mean(d_random)) / sd(d_random)}; a
 strongly negative \code{z_score} means the compound's targets are
 topologically closer to the disease genes than expected by chance given
 their degree. \code{p_empirical} is the left-tail permutation p, and

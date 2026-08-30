@@ -87,6 +87,21 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
   dat <- prox_all[prox_all$condition %in% conditions, , drop = FALSE]
   if (!is.null(disease)) dat <- dat[dat$disease_id %in% disease, , drop = FALSE]
   dat <- dat[!is.na(dat$z_score), , drop = FALSE]
+
+  ## network_proximity() records which disease-gene set each row was built
+  ## from. If a results table mixes the independent "disease_genes" set with
+  ## the legacy circular "targets_disease" set, the circular rows would
+  ## render alongside -- and typically as the most significant points, which
+  ## is exactly what the circularity produces. Drop them, loudly.
+  if ("disease_gene_source" %in% names(dat) &&
+      all(c("disease_genes", "targets_disease") %in% dat$disease_gene_source)) {
+    n_drop <- sum(dat$disease_gene_source == "targets_disease")
+    cli::cli_warn(c(
+      "!" = "{.val network_proximity} mixes both disease-gene sources; dropping {n_drop} circular {.val targets_disease} row{?s} from the plot.",
+      "i" = "Re-run {.fn network_proximity} with the default {.code disease_genes = \"disease_genes\"} to replace them."
+    ))
+    dat <- dat[dat$disease_gene_source != "targets_disease", , drop = FALSE]
+  }
   if (nrow(dat) == 0) {
     cli::cli_abort("No {.val network_proximity} rows with a non-NA z_score for the requested condition(s)/disease.")
   }

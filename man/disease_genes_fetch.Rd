@@ -8,7 +8,7 @@ disease_genes_fetch(
   proj,
   disease,
   source = c("open_targets"),
-  min_score = NULL,
+  min_score = 0.4,
   fetch_mode = c("warn_and_cache", "abort")
 )
 }
@@ -24,12 +24,20 @@ than hardcoded) so a future alternative source raises an informative
 error instead of being silently ignored -- same pattern as
 \code{\link[=targets_disease_filter]{targets_disease_filter()}} and \code{\link[=refdb_build]{refdb_build()}}.}
 
-\item{min_score}{\code{NULL} (default): keep every associated target that maps
-to at least one Swiss-Prot UniProt accession. A numeric threshold in
-\verb{[0, 1]}: additionally drop rows whose \code{association_score} is below it
-(always logged, by UniProt ID and score, so nothing disappears
-silently). The default is \code{NULL} for consistency with
-\code{\link[=targets_disease_filter]{targets_disease_filter()}}.}
+\item{min_score}{\code{0.4} (default): keep associated targets whose Open
+Targets \code{association_score} is at least \code{0.4} (and that map to at least
+one Swiss-Prot UniProt accession). \code{NULL}: keep every Swiss-Prot-mapped
+target, no score cut. A numeric in \verb{[0, 1]}: use that cut instead. The
+kept/dropped counts and the cutoff are always logged (a summary line,
+not one row per gene). Why \code{0.4} rather than \code{NULL}: Open Targets'
+aggregated score is an aggregate across evidence types and its full
+associated-target list is far larger (thousands of genes) than the
+curated tens-to-low-hundreds module Menche et al. (2015) / Guney et al.
+(2016) assume; at that size the \code{\link[=network_proximity]{network_proximity()}} z-score's dynamic
+range collapses (|T| ~ 9000 -> \code{d_observed} ~ 0.5 by chance alone).
+\code{0.4} is a pragmatic knob, not a principled biological cutoff -- users
+tuning the disease definition should adjust it, or pass \code{NULL} and
+filter \code{disease_genes} themselves.}
 
 \item{fetch_mode}{\code{"warn_and_cache"} (default) or \code{"abort"}. See
 \code{.fetch_external()} (internal).}
@@ -40,9 +48,10 @@ The updated \code{proj}, with a \code{disease_genes} entry in
 \code{gene_symbol}, \code{association_score}, \code{source}, \code{fetched_at}), also
 written to \code{results/disease_genes.csv}. Re-fetching one disease
 replaces only that disease's rows (upsert keyed on \code{disease_id}).
-Associated targets with no \code{uniprot_swissprot} protein ID are logged
-(\code{"disease_genes_no_swissprot"}) and excluded; a target with more than
-one Swiss-Prot accession contributes one row per accession.
+Associated targets with no \code{uniprot_swissprot} protein ID are excluded
+and counted in a \code{"disease_genes_no_swissprot"} summary log line; a
+target with more than one Swiss-Prot accession contributes one row per
+accession.
 }
 \description{
 Queries the Open Targets Platform in the \strong{disease -> target} direction
@@ -64,12 +73,23 @@ default; ontology IDs get retired.
 \section{Open Targets score vs. a curated disease-gene list}{
 
 Menche et al. (2015) and Guney et al. (2016) build the disease module
-from curated lists (OMIM + GWAS Catalog). Open Targets' aggregated
-\code{associationScore} (genetic association, known drug, literature, ...) is
-a reasonable substitute but it is a continuous score, not a curated
-membership call, so any \code{min_score} cut is a scientific choice and is
-always logged. \code{disease_genes_import()} is the route for a genuinely
-curated list.
+from curated lists (OMIM + GWAS Catalog) of tens to low hundreds of
+genes. Open Targets' aggregated \code{associationScore} (genetic association,
+known drug, literature, ...) is a reasonable substitute but it is a
+continuous score, not a curated membership call, and its full
+\code{associatedTargets} list for a common disease runs to thousands of genes
+(type 2 diabetes: ~9,900) against a STRING largest-connected-component of
+~17k nodes. A module that big makes \code{\link[=network_proximity]{network_proximity()}}'s \code{d_observed}
+collapse onto ~0.5 by chance (about half of any compound's targets land
+inside \code{T} at random) and the z-score stops discriminating -- so
+\code{min_score} defaults to \code{0.4}, which brings common diseases to ~200-300
+genes. Any cut is a scientific choice and is always logged.
+\code{disease_genes_import()} is the route for a genuinely curated list.
+
+The aggregated score also folds in the \emph{known-drug} evidence channel, so
+a no-threshold module contains the targets of every drug approved for the
+disease -- a second circularity if the compounds under study are
+themselves known drugs (not an issue for plant secondary metabolites).
 }
 
 \examples{

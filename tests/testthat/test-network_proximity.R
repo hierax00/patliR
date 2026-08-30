@@ -179,8 +179,43 @@ test_that("network_proximity(): d_observed == 0 exactly when S is a subset of T,
   expect_equal(res$n_overlap, res$n_targets_mapped)
 })
 
-test_that("network_proximity(disease_genes = \"targets_disease\") raises a warning matching 'circular' (STRINGdb mocked)", {
-  ## Spec 2.0 test (b).
+test_that("network_proximity(): partial overlap gives n_overlap > 0 AND d_observed > 0 (spec 2.0 (c) converse, STRINGdb mocked)", {
+  ## Spec 2.0 test (c), the untested direction: S not a subset of T but
+  ## S ∩ T != empty must give n_overlap > 0 AND d_observed > 0 -- the
+  ## assertion that would catch a future regression reintroducing a d == 0
+  ## special case.
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  cond <- "FLO-ET"
+  edges <- patliRResults(proj, "network_edges")
+  ct <- unique(edges[edges$condition == cond, c("compound_id", "uniprot_id")])
+  by_c <- lapply(split(ct$uniprot_id, ct$compound_id), unique)
+  multi <- names(by_c)[lengths(by_c) >= 2][1]
+  skip_if(is.na(multi), "fixture has no compound with >= 2 distinct targets")
+  shared <- by_c[[multi]][1]
+
+  ## disease module = 1 of `multi`'s targets + 5 disjoint synthetic ones
+  disease_uni <- c(shared, paste0("DIS", seq_len(5)))
+  proj <- disease_genes_import(
+    proj, data.frame(uniprot_id = disease_uni),
+    disease_id = "D_PARTIAL", disease_name = "synthetic", source = "synthetic"
+  )
+  fake <- .fake_string_db(c(unique(ct$uniprot_id), disease_uni))
+  testthat::local_mocked_bindings(.network_stringdb = function(...) fake, .package = "patliR")
+
+  proj <- network_proximity(proj, condition = cond, disease = "D_PARTIAL",
+                            n_random = 12, seed = 1)
+  res <- patliRResults(proj, "network_proximity")
+  row <- res[res$compound_id == multi, ]
+  expect_equal(nrow(row), 1L)
+  expect_gt(row$n_overlap, 0)                       # S ∩ T != empty
+  expect_lt(row$n_overlap, row$n_targets_mapped)    # S not a subset of T
+  expect_gt(row$d_observed, 0)                      # ... so d_observed > 0
+})
+
+test_that("network_proximity(disease_genes = \"targets_disease\") warns 'circular' and stamps the source column (STRINGdb mocked)", {
+  ## Spec 2.0 test (b), plus the gap: the emitted rows must carry
+  ## disease_gene_source == "targets_disease".
   testthat::skip_if_not_installed("STRINGdb")
   proj <- .network_stats_test_setup()
   cond <- "FLO-ET"
@@ -194,10 +229,13 @@ test_that("network_proximity(disease_genes = \"targets_disease\") raises a warni
   testthat::local_mocked_bindings(.network_stringdb = function(...) fake, .package = "patliR")
 
   expect_warning(
-    network_proximity(proj, condition = cond, disease = "TD_DIS",
-                      disease_genes = "targets_disease", n_random = 12, seed = 1),
+    proj <- network_proximity(proj, condition = cond, disease = "TD_DIS",
+                              disease_genes = "targets_disease", n_random = 12, seed = 1),
     "circular"
   )
+  res <- patliRResults(proj, "network_proximity")
+  expect_gt(nrow(res), 0)
+  expect_true(all(res$disease_gene_source == "targets_disease"))
 })
 
 test_that("network_proximity() end-to-end is not exercised automatically -- needs a real STRING download", {

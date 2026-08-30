@@ -337,11 +337,38 @@ network_build <- function(proj, condition = NULL,
   if (nrow(new_rows) > 0) {
     only_new <- setdiff(names(new_rows), names(kept))
     only_old <- setdiff(names(kept), names(new_rows))
-    if (length(only_new) > 0 || length(only_old) > 0) {
+    shared   <- intersect(names(new_rows), names(kept))
+    ## An all-NA column (common when a CSV round-trip reads an empty column
+    ## back as logical) is compatible with anything; the numeric family
+    ## (integer/double) rbinds without loss. Everything else must match.
+    .col_compat <- function(a, b) {
+      if (all(is.na(a)) || all(is.na(b))) return(TRUE)
+      num <- c("integer", "numeric", "double")
+      ca <- class(a)[1]; cb <- class(b)[1]
+      if (ca %in% num && cb %in% num) return(TRUE)
+      identical(ca, cb)
+    }
+    type_conflict <- shared[!vapply(shared, function(cn)
+      .col_compat(kept[[cn]], new_rows[[cn]]), logical(1))]
+
+    ## A pure column *addition* (new schema has columns the old table lacks,
+    ## and nothing the other way, no type change on a shared column) is a
+    ## forward migration: back-fill typed NA on the pre-existing rows and
+    ## proceed, with one summary line. A column *removal* or a *type
+    ## conflict* on a shared column still aborts -- those are not something
+    ## this function can silently reconcile.
+    if (length(only_old) > 0 || length(type_conflict) > 0) {
       cli::cli_abort(c(
-        "{.fn .network_upsert}: the new {.val {name}} rows and the existing table have different columns.",
-        "i" = "Only in the new rows: {.val {only_new}}",
-        "i" = "Only in the existing table: {.val {only_old}}"
+        "{.fn .network_upsert}: the new {.val {name}} rows and the existing table are not reconcilable.",
+        if (length(only_old) > 0) c("i" = "Only in the existing table (column removed): {.val {only_old}}") else NULL,
+        if (length(type_conflict) > 0) c("i" = "Type changed on shared column{?s}: {.val {type_conflict}}") else NULL,
+        "i" = "Delete {.file results/{name}.csv} and re-run the step to rebuild it under the current schema."
+      ))
+    }
+    if (length(only_new) > 0) {
+      for (cn in only_new) kept[[cn]] <- new_rows[[cn]][rep(NA_integer_, nrow(kept))]
+      cli::cli_inform(c(
+        "i" = "{.fn .network_upsert}: {.val {name}} gained column{?s} {.val {only_new}}; back-filled as NA on {nrow(kept)} pre-existing row{?s}."
       ))
     }
     out <- rbind(kept[, names(new_rows), drop = FALSE], new_rows)

@@ -35,12 +35,23 @@ NULL
 #'
 #' @section Open Targets score vs. a curated disease-gene list:
 #' Menche et al. (2015) and Guney et al. (2016) build the disease module
-#' from curated lists (OMIM + GWAS Catalog). Open Targets' aggregated
-#' `associationScore` (genetic association, known drug, literature, ...) is
-#' a reasonable substitute but it is a continuous score, not a curated
-#' membership call, so any `min_score` cut is a scientific choice and is
-#' always logged. `disease_genes_import()` is the route for a genuinely
-#' curated list.
+#' from curated lists (OMIM + GWAS Catalog) of tens to low hundreds of
+#' genes. Open Targets' aggregated `associationScore` (genetic association,
+#' known drug, literature, ...) is a reasonable substitute but it is a
+#' continuous score, not a curated membership call, and its full
+#' `associatedTargets` list for a common disease runs to thousands of genes
+#' (type 2 diabetes: ~9,900) against a STRING largest-connected-component of
+#' ~17k nodes. A module that big makes [network_proximity()]'s `d_observed`
+#' collapse onto ~0.5 by chance (about half of any compound's targets land
+#' inside `T` at random) and the z-score stops discriminating -- so
+#' `min_score` defaults to `0.4`, which brings common diseases to ~200-300
+#' genes. Any cut is a scientific choice and is always logged.
+#' `disease_genes_import()` is the route for a genuinely curated list.
+#'
+#' The aggregated score also folds in the *known-drug* evidence channel, so
+#' a no-threshold module contains the targets of every drug approved for the
+#' disease -- a second circularity if the compounds under study are
+#' themselves known drugs (not an issue for plant secondary metabolites).
 #'
 #' @inheritParams targets_disease_filter
 #' @param disease A disease/phenotype name (e.g. `"Parkinson disease"`) or a
@@ -50,12 +61,20 @@ NULL
 #'   than hardcoded) so a future alternative source raises an informative
 #'   error instead of being silently ignored -- same pattern as
 #'   [targets_disease_filter()] and [refdb_build()].
-#' @param min_score `NULL` (default): keep every associated target that maps
-#'   to at least one Swiss-Prot UniProt accession. A numeric threshold in
-#'   `[0, 1]`: additionally drop rows whose `association_score` is below it
-#'   (always logged, by UniProt ID and score, so nothing disappears
-#'   silently). The default is `NULL` for consistency with
-#'   [targets_disease_filter()].
+#' @param min_score `0.4` (default): keep associated targets whose Open
+#'   Targets `association_score` is at least `0.4` (and that map to at least
+#'   one Swiss-Prot UniProt accession). `NULL`: keep every Swiss-Prot-mapped
+#'   target, no score cut. A numeric in `[0, 1]`: use that cut instead. The
+#'   kept/dropped counts and the cutoff are always logged (a summary line,
+#'   not one row per gene). Why `0.4` rather than `NULL`: Open Targets'
+#'   aggregated score is an aggregate across evidence types and its full
+#'   associated-target list is far larger (thousands of genes) than the
+#'   curated tens-to-low-hundreds module Menche et al. (2015) / Guney et al.
+#'   (2016) assume; at that size the [network_proximity()] z-score's dynamic
+#'   range collapses (|T| ~ 9000 -> `d_observed` ~ 0.5 by chance alone).
+#'   `0.4` is a pragmatic knob, not a principled biological cutoff -- users
+#'   tuning the disease definition should adjust it, or pass `NULL` and
+#'   filter `disease_genes` themselves.
 #' @param fetch_mode `"warn_and_cache"` (default) or `"abort"`. See
 #'   `.fetch_external()` (internal).
 #'
@@ -64,9 +83,10 @@ NULL
 #'   `gene_symbol`, `association_score`, `source`, `fetched_at`), also
 #'   written to `results/disease_genes.csv`. Re-fetching one disease
 #'   replaces only that disease's rows (upsert keyed on `disease_id`).
-#'   Associated targets with no `uniprot_swissprot` protein ID are logged
-#'   (`"disease_genes_no_swissprot"`) and excluded; a target with more than
-#'   one Swiss-Prot accession contributes one row per accession.
+#'   Associated targets with no `uniprot_swissprot` protein ID are excluded
+#'   and counted in a `"disease_genes_no_swissprot"` summary log line; a
+#'   target with more than one Swiss-Prot accession contributes one row per
+#'   accession.
 #'
 #' @examples
 #' \dontrun{
@@ -77,7 +97,7 @@ NULL
 #'
 #' @export
 disease_genes_fetch <- function(proj, disease, source = c("open_targets"),
-                                 min_score = NULL,
+                                 min_score = 0.4,
                                  fetch_mode = c("warn_and_cache", "abort")) {
   stopifnot(is(proj, "PatliRProject"))
   source <- match.arg(source)
@@ -123,11 +143,13 @@ disease_genes_fetch <- function(proj, disease, source = c("open_targets"),
   if (nrow(rows) > 0) {
     no_uniprot <- is.na(rows$uniprot_id)
     if (any(no_uniprot)) {
+      ex <- unique(stats::na.omit(rows$ensembl_id[no_uniprot]))
       proj <- .log_append(
-        proj, step = "disease_genes_fetch", id = rows$ensembl_id[no_uniprot],
+        proj, step = "disease_genes_fetch", id = NA_character_,
         message = paste0(
-          "disease_genes_no_swissprot: Open Targets target '", rows$ensembl_id[no_uniprot],
-          "' (", rows$gene_symbol[no_uniprot], ") has no uniprot_swissprot proteinId; excluded"
+          "disease_genes_no_swissprot: ", sum(no_uniprot), " of ", nrow(rows),
+          " associated target(s) have no uniprot_swissprot proteinId and were excluded",
+          if (length(ex)) paste0(" (e.g. ", paste(utils::head(ex, 10), collapse = ", "), ")") else ""
         )
       )
     }
@@ -149,16 +171,15 @@ disease_genes_fetch <- function(proj, disease, source = c("open_targets"),
 
   if (!is.null(min_score) && nrow(new_rows) > 0) {
     below <- !is.na(new_rows$association_score) & new_rows$association_score < min_score
-    if (any(below)) {
-      proj <- .log_append(
-        proj, step = "disease_genes_fetch", id = new_rows$uniprot_id[below],
-        message = paste0(
-          "disease_genes_below_min_score: association_score ",
-          format(round(new_rows$association_score[below], 4), nsmall = 4),
-          " < min_score ", min_score, "; dropped"
-        )
+    n_below <- sum(below)
+    proj <- .log_append(
+      proj, step = "disease_genes_fetch", id = NA_character_,
+      message = paste0(
+        "disease_genes_below_min_score: min_score = ", min_score, "; kept ",
+        sum(!below), " gene(s), dropped ", n_below,
+        if (n_below) paste0(" (e.g. ", paste(utils::head(new_rows$uniprot_id[below], 10), collapse = ", "), ")") else ""
       )
-    }
+    )
     new_rows <- new_rows[!below, , drop = FALSE]
   }
 
@@ -196,11 +217,15 @@ disease_genes_fetch <- function(proj, disease, source = c("open_targets"),
 #' the package ([adme_import()], [tox_import()], [targets_import()]).
 #'
 #' @section UniProt accessions, not gene symbols:
-#' `table` must carry a column of UniProt accessions. A `gene_symbol` column
-#' is accepted and stored if present, but `disease_genes_import()` does not
-#' map symbols to accessions -- convert them first (UniProt's ID-mapping
-#' tool, or `org.Hs.eg.db`). This keeps the import offline and deterministic
-#' and avoids silently picking one accession per multi-mapping symbol.
+#' By default `table` must carry a column of UniProt accessions. A
+#' `gene_symbol` column is accepted and stored if present, but symbol ->
+#' accession mapping is **off by default**: `SYMBOL -> UNIPROT` in
+#' `org.Hs.eg.db` is many-to-many, and silently picking one accession per
+#' symbol would put a nondeterministic mapping in the middle of the disease
+#' module. Convert the symbols first (UniProt's ID-mapping tool), or pass
+#' `map_symbols = TRUE` to opt in to mapping a symbol-only `table` through
+#' `org.Hs.eg.db` -- every multi-mapping symbol and every failure is logged,
+#' and all accessions of a multi-mapping symbol are kept.
 #'
 #' @inheritParams compounds
 #' @param table A `data.frame`, or a path to a CSV file, with at least a
@@ -218,6 +243,13 @@ disease_genes_fetch <- function(proj, disease, source = c("open_targets"),
 #'   (case/whitespace-insensitively) from the usual spellings
 #'   (`uniprot_id`/`uniprot`/`accession`/...; `gene_symbol`/`symbol`/`gene`;
 #'   `association_score`/`score`).
+#' @param map_symbols `FALSE` (default): a `table` with no UniProt-ID column
+#'   is rejected (see the section below). `TRUE`: if there is no UniProt
+#'   column but there is a gene-symbol column, map it through `org.Hs.eg.db`
+#'   (`SYMBOL -> UNIPROT`, via `clusterProfiler::bitr()`). Every
+#'   multi-mapping symbol and every unmapped symbol is logged; all
+#'   accessions of a multi-mapping symbol are kept; `source` records that
+#'   the mapping was applied. Needs `clusterProfiler` and `org.Hs.eg.db`.
 #'
 #' @return The updated `proj`, with the curated rows upserted into the
 #'   `disease_genes` slot (keyed on `disease_id`, so this replaces any
@@ -242,7 +274,7 @@ disease_genes_fetch <- function(proj, disease, source = c("open_targets"),
 disease_genes_import <- function(proj, table, disease_id, disease_name = NULL,
                                   source = "manual",
                                   uniprot_col = NULL, gene_symbol_col = NULL,
-                                  score_col = NULL) {
+                                  score_col = NULL, map_symbols = FALSE) {
   stopifnot(is(proj, "PatliRProject"))
   if (missing(disease_id) || is.null(disease_id) || !is.character(disease_id) ||
       length(disease_id) != 1 || !nzchar(disease_id)) {
@@ -278,15 +310,53 @@ disease_genes_import <- function(proj, table, disease_id, disease_name = NULL,
   sym_col <- find_col(gene_symbol_col, c("gene_symbol", "symbol", "gene", "approved_symbol"))
   sc_col  <- find_col(score_col, c("association_score", "score"))
 
+  mapped_via_symbols <- FALSE
+  if (is.na(uni_col) && !is.na(sym_col) && isTRUE(map_symbols)) {
+    if (!requireNamespace("clusterProfiler", quietly = TRUE) ||
+        !requireNamespace("org.Hs.eg.db", quietly = TRUE)) {
+      cli::cli_abort(c(
+        "{.code map_symbols = TRUE} needs {.pkg clusterProfiler} and {.pkg org.Hs.eg.db}.",
+        "i" = "Install with {.code BiocManager::install(c(\"clusterProfiler\", \"org.Hs.eg.db\"))}."
+      ))
+    }
+    syms <- unique(trimws(as.character(raw[[sym_col]])))
+    syms <- syms[nzchar(syms) & tolower(syms) != "na"]
+    smap <- tryCatch(
+      clusterProfiler::bitr(syms, fromType = "SYMBOL", toType = "UNIPROT",
+                            OrgDb = "org.Hs.eg.db", drop = TRUE),
+      error = function(e) NULL
+    )
+    if (is.null(smap) || nrow(smap) == 0) {
+      cli::cli_abort("{.code map_symbols = TRUE}: none of the {length(syms)} symbol{?s} in {.arg table} mapped to a UniProt accession via {.pkg org.Hs.eg.db}.")
+    }
+    dup_syms <- unique(smap$SYMBOL[duplicated(smap$SYMBOL)])
+    failed   <- setdiff(syms, smap$SYMBOL)
+    proj <- .log_append(
+      proj, step = "disease_genes_import", id = disease_id,
+      message = paste0(
+        "disease_genes_import_map_symbols: mapped ", length(unique(smap$SYMBOL)), "/",
+        length(syms), " symbol(s) to ", nrow(smap), " UniProt accession(s) via org.Hs.eg.db; ",
+        length(dup_syms), " multi-mapped (all kept)",
+        if (length(dup_syms)) paste0(" (e.g. ", paste(utils::head(dup_syms, 10), collapse = ", "), ")") else "",
+        "; ", length(failed), " unmapped",
+        if (length(failed)) paste0(" (e.g. ", paste(utils::head(failed, 10), collapse = ", "), ")") else ""
+      )
+    )
+    raw <- data.frame(uniprot_id = smap$UNIPROT, gene_symbol = smap$SYMBOL,
+                      stringsAsFactors = FALSE)
+    uni_col <- "uniprot_id"; sym_col <- "gene_symbol"; sc_col <- NA_character_
+    mapped_via_symbols <- TRUE
+  }
+
   if (is.na(uni_col)) {
     cli::cli_abort(c(
       "No UniProt-ID column found in {.arg table}.",
       "i" = "Provide a column of UniProt accessions (e.g. named {.val uniprot_id}), or pass {.arg uniprot_col}.",
       if (!is.na(sym_col)) c(
-        "x" = "A gene-symbol column ({.val {sym_col}}) is present, but {.fn disease_genes_import} does not map symbols to accessions."
+        "x" = "A gene-symbol column ({.val {sym_col}}) is present, but {.fn disease_genes_import} does not map symbols to accessions by default."
       ) else NULL,
       if (!is.na(sym_col)) c(
-        "i" = "Convert the symbols to UniProt accessions first (UniProt ID mapping, or {.pkg org.Hs.eg.db})."
+        "i" = "Convert the symbols to UniProt accessions first (UniProt ID mapping), or pass {.code map_symbols = TRUE} to map them via {.pkg org.Hs.eg.db}."
       ) else NULL
     ))
   }
@@ -305,13 +375,14 @@ disease_genes_import <- function(proj, table, disease_id, disease_name = NULL,
   }
 
   keep <- !missing_uni
+  source_val <- if (mapped_via_symbols) paste0(source, " (symbols mapped via org.Hs.eg.db)") else source
   new_rows <- data.frame(
     disease_id = rep(disease_id, sum(keep)),
     disease_name = rep(disease_name %||% NA_character_, sum(keep)),
     uniprot_id = uniprot_id[keep],
     gene_symbol = gene_symbol[keep],
     association_score = association_score[keep],
-    source = rep(source, sum(keep)),
+    source = rep(source_val, sum(keep)),
     fetched_at = rep(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), sum(keep)),
     stringsAsFactors = FALSE
   )

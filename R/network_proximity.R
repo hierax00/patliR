@@ -64,7 +64,10 @@ NULL
 #' from the same degree bins -- bins built from consecutive degree values,
 #' each extended until it holds >= 100 nodes (Guney et al.'s Methods), not
 #' fixed quantiles. The "closest" distance is recomputed on the resampled
-#' pair. `z_score = (d_observed - mean(d_random)) / sd(d_random)`; a
+#' pair. The disease side of the null is identical for every compound in a
+#' `(condition, disease)`, so its `n_random` resampled sets are drawn once
+#' and reused across compounds (Guney's reference implementation does the
+#' same). `z_score = (d_observed - mean(d_random)) / sd(d_random)`; a
 #' strongly negative `z_score` means the compound's targets are
 #' topologically closer to the disease genes than expected by chance given
 #' their degree. `p_empirical` is the left-tail permutation p, and
@@ -244,26 +247,43 @@ network_proximity <- function(proj, condition = NULL, disease,
     unmapped <- map_df$uniprot_id[is.na(map_df$STRING_id)]
     if (length(unmapped) > 0) {
       proj <- .log_append(
-        proj, step = "network_proximity", id = unmapped,
-        message = "network_proximity_unmapped: no STRING_id found for this UniProt ID in this species; excluded"
+        proj, step = "network_proximity", id = NA_character_,
+        message = paste0(
+          "network_proximity_unmapped: ", length(unmapped), " of ", nrow(map_df),
+          " UniProt ID(s) had no STRING_id for this species and were excluded (e.g. ",
+          paste(utils::head(unmapped, 10), collapse = ", "), ")"
+        )
       )
     }
     uni_to_string <- stats::setNames(map_df$STRING_id, map_df$uniprot_id)
 
     disease_string <- unique(stats::na.omit(uni_to_string[disease_uniprot]))
     if (length(disease_string) == 0) {
+      slot_lab <- if (disease_genes == "disease_genes") "disease_genes" else "targets_disease"
       cli::cli_abort(c(
-        "None of the {.val {disease}} target(s) could be mapped to the STRING network.",
-        "i" = "Check {.arg species} matches the organism of {.val targets_disease}."
+        "None of the {.val {disease}} gene(s) could be mapped to the STRING network.",
+        "i" = "Check {.arg species} matches the organism the {.val {slot_lab}} set was built for."
       ))
+    }
+
+    ## The disease module T -- and therefore the degree-matched disease-side
+    ## null -- is identical for every compound in this (condition, disease),
+    ## so both the T -> STRING/LCC filter and the n_random null draws are
+    ## hoisted out of the per-compound loop (spec 1.8 [SHOULD]).
+    g_names <- igraph::V(g)$name
+    target_string <- disease_string[disease_string %in% g_names]
+    t_rand_list <- if (length(target_string) > 0) {
+      lapply(seq_len(n_random), function(j)
+        .network_resample_degree_matched(target_string, node_names, bins, bin_of_node))
+    } else {
+      vector("list", n_random)
     }
 
     cond_rows <- vector("list", length(compounds))
     for (i in seq_along(compounds)) {
       cp <- compounds[i]
       source_string <- unique(stats::na.omit(uni_to_string[target_sets[[cp]]]))
-      source_string <- source_string[source_string %in% igraph::V(g)$name]
-      target_string <- disease_string[disease_string %in% igraph::V(g)$name]
+      source_string <- source_string[source_string %in% g_names]
 
       if (length(source_string) == 0 || length(target_string) == 0) {
         proj <- .log_append(
@@ -278,8 +298,7 @@ network_proximity <- function(proj, condition = NULL, disease,
       d_observed <- .network_closest_distance(g, source_string, target_string)
       d_random <- vapply(seq_len(n_random), function(j) {
         s_rand <- .network_resample_degree_matched(source_string, node_names, bins, bin_of_node)
-        t_rand <- .network_resample_degree_matched(target_string, node_names, bins, bin_of_node)
-        .network_closest_distance(g, s_rand, t_rand)
+        .network_closest_distance(g, s_rand, t_rand_list[[j]])
       }, numeric(1))
       d_random <- d_random[is.finite(d_random)]
 

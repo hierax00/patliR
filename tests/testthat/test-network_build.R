@@ -158,16 +158,56 @@ test_that(".network_upsert() without touched_keys keeps the historical derive-fr
   expect_equal(nrow(out0), 2L)
 })
 
-test_that(".network_upsert() fails loudly, not with R's generic rbind message, on a column-set mismatch", {
+test_that(".network_upsert() fails loudly, not with R's generic rbind message, on column removal", {
   proj <- .test_project()
   patliRResults(proj, "demo_slot") <- data.frame(
     condition = "X", value = 1, stringsAsFactors = FALSE
   )
+  ## new_rows has VALUE but not value -> `value` was removed -> abort
   expect_error(
     patliR:::.network_upsert(
       proj, "demo_slot",
       data.frame(condition = "Y", VALUE = 2, stringsAsFactors = FALSE), "condition"
     ),
-    "different columns"
+    "column removed|not reconcilable"
   )
+})
+
+test_that(".network_upsert() aborts on a type conflict on a shared column", {
+  proj <- .test_project()
+  patliRResults(proj, "demo_slot") <- data.frame(
+    condition = "X", value = 1L, stringsAsFactors = FALSE
+  )
+  expect_error(
+    patliR:::.network_upsert(
+      proj, "demo_slot",
+      data.frame(condition = "Y", value = "two", stringsAsFactors = FALSE), "condition"
+    ),
+    "[Tt]ype changed|not reconcilable"
+  )
+})
+
+test_that(".network_upsert() back-fills a purely-added column as NA on pre-existing rows (S1: legacy CSV migration)", {
+  proj <- .test_project()
+  ## a pre-Phase-1 table with no `disease_gene_source` / `n_overlap`
+  patliRResults(proj, "demo_slot") <- data.frame(
+    condition = c("X", "Y"), z = c(-1.2, 0.3), stringsAsFactors = FALSE
+  )
+  new_rows <- data.frame(
+    condition = "X", z = -2.0,
+    disease_gene_source = "disease_genes", n_overlap = 0L,
+    stringsAsFactors = FALSE
+  )
+  expect_message(
+    out <- patliR:::.network_upsert(proj, "demo_slot", new_rows, "condition",
+                                    touched_keys = data.frame(condition = "X")),
+    "back-filled"
+  )
+  expect_setequal(names(out), names(new_rows))
+  ## Y's old row survives, with NA in the new columns; X is the recomputed row
+  y <- out[out$condition == "Y", ]
+  expect_equal(nrow(y), 1L)
+  expect_true(is.na(y$disease_gene_source) && is.na(y$n_overlap))
+  expect_equal(out$z[out$condition == "X"], -2.0)
+  expect_type(out$n_overlap, "integer")
 })

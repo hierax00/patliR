@@ -156,6 +156,60 @@ test_that("disease_genes_fetch() re-fetch replaces only that disease's rows (Gra
   expect_equal(sum(dg$disease_id == "EFO_AAA"), 1L)                         # not duplicated
 })
 
+test_that(".open_targets_disease_targets() paginates a partial final page, each row once (GraphQL mocked)", {
+  ## Test gap: the fetch mocks only ever return "page 0 -> rows, page >= 1
+  ## -> empty", never a partial final page (the real shape: T2D page 19
+  ## returns 407 of 500). count 7 / page_size 5 exercises the
+  ## `n_seen >= count` arithmetic and the "no wasted extra request" path.
+  all_targets <- lapply(1:7, function(k) list(
+    score = k / 10,
+    target = list(
+      id = paste0("ENSG", k), approvedSymbol = paste0("G", k),
+      proteinIds = list(list(id = sprintf("P%05d", k), source = "uniprot_swissprot"))
+    )
+  ))
+  seen <- new.env(parent = emptyenv()); seen$idx <- integer(0)
+  fake_graphql <- function(query_string, variables = list()) {
+    i <- as.integer(variables$index); size <- as.integer(variables$size)
+    seen$idx <- c(seen$idx, i)
+    start <- i * size + 1L
+    rows <- if (start > 7L) list() else all_targets[start:min(start + size - 1L, 7L)]
+    list(disease = list(id = variables$efoId, name = "d",
+                        associatedTargets = list(count = 7L, rows = rows)))
+  }
+  testthat::local_mocked_bindings(.open_targets_graphql = fake_graphql, .package = "patliR")
+
+  out <- patliR:::.open_targets_disease_targets("EFO_PAGED", page_size = 5L)
+  expect_equal(nrow(out$rows), 7L)
+  expect_setequal(out$rows$uniprot_id, sprintf("P%05d", 1:7))
+  expect_false(anyDuplicated(out$rows$uniprot_id) > 0)
+  expect_equal(seen$idx, c(0L, 1L))   # exactly two requests: full page + partial page
+})
+
+test_that("disease_genes_import(map_symbols = TRUE) maps a symbol-only table via org.Hs.eg.db", {
+  testthat::skip_if_not_installed("clusterProfiler")
+  testthat::skip_if_not_installed("org.Hs.eg.db")
+  proj <- .test_project()
+  proj <- disease_genes_import(
+    proj, data.frame(symbol = c("SNCA", "APP", "MAPT")),
+    disease_id = "MONDO_0005180", source = "curated", map_symbols = TRUE
+  )
+  dg <- patliRResults(proj, "disease_genes")
+  expect_gt(nrow(dg), 0)
+  expect_true(all(grepl("^[A-Z0-9]+$", dg$uniprot_id)))
+  expect_true(all(dg$gene_symbol %in% c("SNCA", "APP", "MAPT")))
+  expect_true(all(grepl("org.Hs.eg.db", dg$source)))
+  expect_true(any(grepl("disease_genes_import_map_symbols", projectLog(proj)$message)))
+})
+
+test_that("disease_genes_import(map_symbols = FALSE) still rejects a symbol-only table", {
+  proj <- .test_project()
+  expect_error(
+    disease_genes_import(proj, data.frame(symbol = c("SNCA", "APP")), disease_id = "D1"),
+    "UniProt"
+  )
+})
+
 test_that("disease_genes_fetch() validates its arguments", {
   proj <- .test_project()
   expect_error(disease_genes_fetch(proj), "disease")

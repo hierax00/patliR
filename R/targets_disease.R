@@ -216,6 +216,11 @@ targets_disease_filter <- function(proj, disease, source = c("open_targets"),
 
 #' POST one query to the Open Targets Platform GraphQL API (v4, no API key)
 #'
+#' `disease_genes_fetch()` fires this ~`ceiling(count / 500)` times in a
+#' paginated loop (20 requests for a large disease) against a rate-limiting
+#' API, so it carries a User-Agent, a ~3 req/s throttle and exponential
+#' backoff on 429/5xx -- same treatment as `.refdb_get_json()`.
+#'
 #' @return The `data` field of the parsed JSON response (a nested list).
 #' @keywords internal
 .open_targets_graphql <- function(query_string, variables = list()) {
@@ -223,6 +228,13 @@ targets_disease_filter <- function(proj, disease, source = c("open_targets"),
     stop("the 'httr2' package is required to query Open Targets.")
   }
   req <- httr2::request("https://api.platform.opentargets.org/api/v4/graphql")
+  req <- httr2::req_user_agent(req, paste0("patliR/", .patliR_version()))
+  req <- httr2::req_throttle(req, capacity = 3, fill_time_s = 1)
+  req <- httr2::req_retry(
+    req, max_tries = 4,
+    is_transient = function(resp) httr2::resp_status(resp) %in% c(429, 500, 502, 503, 504),
+    backoff = function(tries) 2^tries
+  )
   req <- httr2::req_body_json(req, list(query = query_string, variables = variables))
   resp <- httr2::req_perform(req)
   body <- httr2::resp_body_json(resp)

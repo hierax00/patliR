@@ -12,7 +12,8 @@ disease_genes_import(
   source = "manual",
   uniprot_col = NULL,
   gene_symbol_col = NULL,
-  score_col = NULL
+  score_col = NULL,
+  map_symbols = FALSE
 )
 }
 \arguments{
@@ -37,6 +38,14 @@ names in \code{table}. When \code{NULL} (default) they are auto-detected
 (case/whitespace-insensitively) from the usual spellings
 (\code{uniprot_id}/\code{uniprot}/\code{accession}/...; \code{gene_symbol}/\code{symbol}/\code{gene};
 \code{association_score}/\code{score}).}
+
+\item{map_symbols}{\code{FALSE} (default): a \code{table} with no UniProt-ID column
+is rejected (see the section below). \code{TRUE}: if there is no UniProt
+column but there is a gene-symbol column, map it through \code{org.Hs.eg.db}
+(\code{SYMBOL -> UNIPROT}, via \code{clusterProfiler::bitr()}). Every
+multi-mapping symbol and every unmapped symbol is logged; all
+accessions of a multi-mapping symbol are kept; \code{source} records that
+the mapping was applied. Needs \code{clusterProfiler} and \code{org.Hs.eg.db}.}
 }
 \value{
 The updated \code{proj}, with the curated rows upserted into the
@@ -56,11 +65,15 @@ the package (\code{\link[=adme_import]{adme_import()}}, \code{\link[=tox_import]
 }
 \section{UniProt accessions, not gene symbols}{
 
-\code{table} must carry a column of UniProt accessions. A \code{gene_symbol} column
-is accepted and stored if present, but \code{disease_genes_import()} does not
-map symbols to accessions -- convert them first (UniProt's ID-mapping
-tool, or \code{org.Hs.eg.db}). This keeps the import offline and deterministic
-and avoids silently picking one accession per multi-mapping symbol.
+By default \code{table} must carry a column of UniProt accessions. A
+\code{gene_symbol} column is accepted and stored if present, but symbol ->
+accession mapping is \strong{off by default}: \code{SYMBOL -> UNIPROT} in
+\code{org.Hs.eg.db} is many-to-many, and silently picking one accession per
+symbol would put a nondeterministic mapping in the middle of the disease
+module. Convert the symbols first (UniProt's ID-mapping tool), or pass
+\code{map_symbols = TRUE} to opt in to mapping a symbol-only \code{table} through
+\code{org.Hs.eg.db} -- every multi-mapping symbol and every failure is logged,
+and all accessions of a multi-mapping symbol are kept.
 }
 
 \examples{

@@ -7,7 +7,7 @@
 plot_centrality(
   proj,
   condition = NULL,
-  measure = c("degree", "betweenness", "hub_score"),
+  measure = c("degree", "betweenness", "hub_score", "degree_norm", "betweenness_norm"),
   node_type = c("both", "compound", "target"),
   top_n = 20,
   engine = c("static", "ggiraph"),
@@ -26,11 +26,17 @@ of \code{\link[=binarizedMatrix]{binarizedMatrix()}}), or \code{NULL} (default) 
 condition. Rebuilding a subset leaves previously-built conditions
 untouched in \code{patliRResults(proj, "network_edges")}.}
 
-\item{measure}{Single measure to plot: \code{"degree"} (default),
-\code{"betweenness"}, or \code{"hub_score"} -- must already be a column of
-\code{patliRResults(proj, "network_centrality")}, i.e. requested in the
-\code{measures} argument of the \code{\link[=network_centrality]{network_centrality()}} call that produced
-it.}
+\item{measure}{Single measure to plot: \code{"degree"}, \code{"betweenness"},
+\code{"hub_score"}, or the bipartite-normalised \code{"degree_norm"} /
+\code{"betweenness_norm"} -- must already be a column of
+\code{patliRResults(proj, "network_centrality")}, i.e. requested (and, for
+the \verb{_norm} variants, \code{normalize = TRUE}) in the \code{\link[=network_centrality]{network_centrality()}}
+call that produced it. When \code{measure} is not supplied \strong{and}
+\code{node_type = "both"}, it defaults to \code{"degree_norm"} (raw \code{degree} is
+not comparable between compounds and targets; Borgatti & Everett
+1997), falling back to \code{"degree"} with a warning if the normalised
+column is absent (a result from before normalisation). Otherwise the
+default is \code{"degree"}.}
 
 \item{node_type}{\code{"both"} (default), \code{"compound"}, or \code{"target"} --
 restrict to one side of the bipartite graph.}

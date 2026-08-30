@@ -98,8 +98,6 @@ guessing.
   (`cluster_leiden`, or bipartite modularity) via the `clustering=` arg.
 - **`network_degeneracy()`** — swap `pathway_jaccard` for GO semantic
   similarity (GOSemSim, already a dependency); add a permutation null.
-- **`network_centrality()`** — bipartite-aware normalisation so `degree` /
-  `betweenness` are comparable across `node_type` (Borgatti & Everett 1997).
 - **`bias_audit()` categorical enrichment** — the half of the original
   design with no code: MeSH / Disease Ontology enrichment vs. a
   STRING/DrugBank/reference background. Needs a confirmed category source.

@@ -41,6 +41,35 @@
   constructor, so `results/network_proximity.csv` stays column-stable
   across zero-row reruns.
 
+- **`network_centrality()` gains bipartite-aware normalisation
+  (`normalize = TRUE`, the default).** For whichever `measures` were
+  requested it adds `degree_norm` (degree over the opposite mode's size)
+  and `betweenness_norm` (betweenness over the mode-specific maximum
+  betweenness of a bipartite graph of these mode sizes), both in `[0, 1]`
+  and comparable between compounds and targets of the same condition
+  (Borgatti & Everett 1997, *Social Networks* 19:243; `B_max` cross-checked
+  against NetworkX's `bipartite.betweenness_centrality` -- no factor-of-two
+  applied, `igraph::betweenness()` already counts each unordered pair
+  once). It also adds `hub_score_component` (HITS hub recomputed per
+  connected component, rescaled to `max = 1` within each -- fixes the
+  disconnected-graph case where every node outside the largest component
+  got `hub_score` ~ 0) with a `component_id` label, and the per-condition
+  constants `n_compounds` / `n_targets`. Edge cases: an empty mode gives
+  `_norm = NA` (never `NaN`/`0`); `B_max == 0` (a mode of size 1) gives
+  `NA` with a log line. `normalize = FALSE` reproduces the previous raw
+  column set exactly. All new columns are declared in the empty-row
+  constructor, so `results/network_centrality.csv` stays column-stable
+  across zero-row reruns; `.network_upsert()` back-fills them on a project
+  whose CSV predates this change. `_norm` values are **not** comparable
+  across conditions of different size (documented like the R-index).
+- **`plot_centrality()`**: `measure` accepts `"degree_norm"` /
+  `"betweenness_norm"`; when `measure` is not supplied and
+  `node_type = "both"` it now defaults to `"degree_norm"` (with a
+  `cli_inform` naming the reason), falling back to `"degree"` with a
+  warning on results produced before normalisation. The value axis states
+  the normaliser (e.g. `/ |T| = 412`). Two nodes that resolve to the same
+  gene symbol no longer collapse into one bar -- the accession is appended
+  on collision.
 - **`.network_upsert()` no longer keeps stale rows when a rerun produces
   zero rows for a condition.** It gains a `touched_keys` argument: callers
   now pass the key values they just recomputed, so a slot that now yields

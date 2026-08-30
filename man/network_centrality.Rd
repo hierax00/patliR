@@ -7,7 +7,8 @@
 network_centrality(
   proj,
   condition = NULL,
-  measures = c("degree", "betweenness", "hub_score")
+  measures = c("degree", "betweenness", "hub_score"),
+  normalize = TRUE
 )
 }
 \arguments{
@@ -20,12 +21,21 @@ untouched in \code{patliRResults(proj, "network_edges")}.}
 
 \item{measures}{Character vector, any of \code{"degree"}, \code{"betweenness"},
 \code{"hub_score"} (default: all three).}
+
+\item{normalize}{Logical (default \code{TRUE}). When \code{TRUE}, adds the
+bipartite-aware \verb{_norm} columns for whichever \code{measures} were
+requested, plus \code{hub_score_component} / \code{component_id} (if
+\code{"hub_score"} was requested) and the \code{n_compounds} / \code{n_targets}
+constants. When \code{FALSE}, the output is exactly the raw columns.}
 }
 \value{
 The updated \code{proj}, with a \code{network_centrality} entry in
 \code{\link[=patliRResults]{patliRResults()}} (columns \code{condition}, \code{node_id}, \code{node_type}
-(\code{"compound"}/\code{"target"}), plus one column per requested measure), also
-written to \code{results/network_centrality.csv}.
+(\code{"compound"}/\code{"target"}), one column per requested measure, and -- when
+\code{normalize = TRUE} -- \code{degree_norm} / \code{betweenness_norm} /
+\code{hub_score_component} / \code{component_id} for the requested measures plus
+\code{n_compounds} / \code{n_targets}), also written to
+\code{results/network_centrality.csv}.
 }
 \description{
 Computes classic node-level centrality measures over each condition's
@@ -62,16 +72,56 @@ It is kept under the name \code{hub_score} for continuity with earlier
 versions. Implementation note: \code{igraph::hub_score()} is deprecated as of
 igraph 2.0.3; the code uses \code{igraph::hits_scores(g, weights = NA)$hub},
 numerically the same.
+
+On a \strong{disconnected} graph the principal eigenvector of the whole
+adjacency matrix concentrates on the component with the largest spectral
+radius, so every node in every other component gets \code{hub_score} ~ 0
+regardless of how central it is \emph{within its own component}. When
+\code{normalize = TRUE} an additional \code{hub_score_component} column is
+computed by running the HITS eigenvector \strong{per connected component} and
+rescaling each to \code{max = 1} inside that component; \code{component_id}
+records which component each node is in. Use \code{hub_score} for a
+whole-graph ranking, \code{hub_score_component} to compare nodes across
+components of different size.
 }
 
-\section{Degree and betweenness are comparable only within \code{node_type}}{
+\section{Bipartite-aware normalisation (\code{normalize = TRUE}, the default)}{
 
-This is a bipartite graph -- a compound's degree ranges over \verb{[0, |T|]},
-a target's over \verb{[0, |C|]}, and \verb{|T|} is usually much larger, so a joint
-ranking of the raw \code{degree} (or \code{betweenness}) column mostly reflects
-which mode a node is in, not its importance. Compare within
-\code{node_type}. A bipartite-aware normalisation (Borgatti & Everett 1997)
-is planned (see \code{ROADMAP.md}).
+This is a two-mode (bipartite) graph -- a compound's degree ranges over
+\verb{[0, |T|]}, a target's over \verb{[0, |C|]}, and \verb{|T|} is usually much larger,
+so a joint ranking of the raw \code{degree} (or \code{betweenness}) column mostly
+reflects which mode a node is in, not its importance. \code{normalize = TRUE}
+adds mode-aware \verb{_norm} siblings that all land in \verb{[0, 1]} and \emph{are}
+comparable across \code{node_type}, following Borgatti & Everett (1997):
+\itemize{
+\item \code{degree_norm} = \verb{degree(v) / |T|} for a compound, \verb{degree(v) / |C|}
+for a target -- the opposite mode's size is the structural maximum.
+\item \code{betweenness_norm} = \code{betweenness(v) / B_max}, with \code{B_max} the
+mode-specific maximum betweenness of a bipartite graph of these mode
+sizes (Borgatti & Everett 1997; cross-checked against NetworkX's
+\code{bipartite.betweenness_centrality}). \code{igraph::betweenness()} on an
+undirected graph already counts each unordered pair once, so no
+factor-of-two correction is applied to the raw score.
+}
+
+The raw \code{degree} / \code{betweenness} / \code{hub_score} columns are always kept.
+Two per-condition constants, \code{n_compounds} and \code{n_targets}, are added so
+the normalisation is self-documenting in the CSV.
+
+\code{normalize = FALSE} reproduces the pre-normalisation output exactly
+(\code{condition}, \code{node_id}, \code{node_type}, plus one column per requested
+measure) -- an escape hatch for code that does \code{names(result)} checks.
+}
+
+\section{Comparable across \code{node_type}, not across conditions}{
+
+\verb{|C|} and \verb{|T|} are per-condition constants, so a \verb{_norm} value is
+comparable between a compound and a target \emph{of the same condition} but
+\strong{not} between two conditions of different size -- exactly as the
+R-index of \code{\link[=network_module_robustness]{network_module_robustness()}} is not comparable across
+modules of different size. A disconnected graph makes \code{betweenness_norm}
+a slight \emph{under}-estimate (cross-component pairs contribute no paths,
+while \code{B_max} assumes connectivity).
 }
 
 \examples{
@@ -96,4 +146,12 @@ proj <- network_centrality(proj)
 patliRResults(proj, "network_centrality")
 }
 
+}
+\references{
+Borgatti SP, Everett MG (1997). "Network analysis of 2-mode data."
+\emph{Social Networks} 19(3):243-269.
+\doi{10.1016/S0378-8733(96)00301-2}
+
+Freeman LC (1978). "Centrality in social networks: conceptual
+clarification." \emph{Social Networks} 1(3):215-239.
 }

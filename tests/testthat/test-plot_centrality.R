@@ -17,6 +17,32 @@ test_that("plot_centrality() errors clearly on a measure not present in network_
   expect_error(plot_centrality(proj, condition = "FLO-ET", measure = "betweenness", save = FALSE), "betweenness")
 })
 
+test_that("plot_centrality() defaults to degree_norm when node_type = 'both', informing why", {
+  testthat::skip_if_not_installed("ggplot2")
+
+  proj <- .network_stats_test_setup()
+  proj <- network_centrality(proj)
+  expect_message(
+    p <- plot_centrality(proj, condition = "FLO-ET", save = FALSE),
+    "degree_norm"
+  )
+  expect_true("degree_norm" %in% names(p$data))
+  expect_match(as.character(p$labels$y), "\\|T\\|")
+})
+
+test_that("plot_centrality() falls back to raw degree with a warning on a pre-normalisation result", {
+  testthat::skip_if_not_installed("ggplot2")
+
+  proj <- .network_stats_test_setup()
+  proj <- network_centrality(proj, normalize = FALSE)
+  expect_warning(
+    p <- plot_centrality(proj, condition = "FLO-ET", save = FALSE),
+    "is absent"
+  )
+  expect_false("degree_norm" %in% names(p$data))
+  expect_identical(as.character(p$labels$y), "degree")
+})
+
 test_that("plot_centrality() saves a PNG and logs it", {
   testthat::skip_if_not_installed("ggplot2")
 

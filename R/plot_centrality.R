@@ -12,11 +12,17 @@ NULL
 #'
 #' @inheritParams network_build
 #' @inheritParams plot_save_params
-#' @param measure Single measure to plot: `"degree"` (default),
-#'   `"betweenness"`, or `"hub_score"` -- must already be a column of
-#'   `patliRResults(proj, "network_centrality")`, i.e. requested in the
-#'   `measures` argument of the [network_centrality()] call that produced
-#'   it.
+#' @param measure Single measure to plot: `"degree"`, `"betweenness"`,
+#'   `"hub_score"`, or the bipartite-normalised `"degree_norm"` /
+#'   `"betweenness_norm"` -- must already be a column of
+#'   `patliRResults(proj, "network_centrality")`, i.e. requested (and, for
+#'   the `_norm` variants, `normalize = TRUE`) in the [network_centrality()]
+#'   call that produced it. When `measure` is not supplied **and**
+#'   `node_type = "both"`, it defaults to `"degree_norm"` (raw `degree` is
+#'   not comparable between compounds and targets; Borgatti & Everett
+#'   1997), falling back to `"degree"` with a warning if the normalised
+#'   column is absent (a result from before normalisation). Otherwise the
+#'   default is `"degree"`.
 #' @param node_type `"both"` (default), `"compound"`, or `"target"` --
 #'   restrict to one side of the bipartite graph.
 #' @param top_n Integer, default `20`. Only the `top_n` highest-`measure`
@@ -53,11 +59,14 @@ NULL
 #' }
 #'
 #' @export
-plot_centrality <- function(proj, condition = NULL, measure = c("degree", "betweenness", "hub_score"),
+plot_centrality <- function(proj, condition = NULL,
+                             measure = c("degree", "betweenness", "hub_score",
+                                         "degree_norm", "betweenness_norm"),
                              node_type = c("both", "compound", "target"), top_n = 20,
                              engine = c("static", "ggiraph"), save = TRUE, out_dir = NULL,
                              width = 8, height = 6, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
+  measure_supplied <- !missing(measure)
   measure <- match.arg(measure)
   node_type <- match.arg(node_type)
   engine <- match.arg(engine)
@@ -71,8 +80,22 @@ plot_centrality <- function(proj, condition = NULL, measure = c("degree", "betwe
   if (is.null(cent) || nrow(cent) == 0) {
     cli::cli_abort(c("No {.val network_centrality} entry in {.arg proj}.", "i" = "Run {.fn network_centrality} first."))
   }
+  if (!measure_supplied && node_type == "both") {
+    if ("degree_norm" %in% names(cent)) {
+      measure <- "degree_norm"
+      cli::cli_inform(c(
+        "i" = "Defaulting {.arg measure} to {.val degree_norm}: with {.arg node_type} = {.val both}, raw {.val degree} is not comparable between compounds and targets (Borgatti & Everett 1997)."
+      ))
+    } else {
+      measure <- "degree"
+      cli::cli_warn(c(
+        "!" = "{.arg node_type} is {.val both} but {.val degree_norm} is absent (result predates bipartite normalisation); using raw {.val degree}, which is not comparable across node types.",
+        "i" = "Re-run {.fn network_centrality} with {.code normalize = TRUE}."
+      ))
+    }
+  }
   if (!measure %in% names(cent)) {
-    cli::cli_abort("Column {.val {measure}} not found in {.val network_centrality} -- was it requested in the {.arg measures} of {.fn network_centrality}?")
+    cli::cli_abort("Column {.val {measure}} not found in {.val network_centrality} -- was it requested in the {.arg measures} (and {.code normalize = TRUE}) of {.fn network_centrality}?")
   }
   dat <- cent[cent$condition %in% conditions, , drop = FALSE]
   if (node_type != "both") dat <- dat[dat$node_type == node_type, , drop = FALSE]
@@ -82,8 +105,19 @@ plot_centrality <- function(proj, condition = NULL, measure = c("degree", "betwe
   dat$label <- .plot_label_nodes(proj, conditions, dat$node_id, dat$node_type)
   dat <- dat[order(dat$condition, -dat[[measure]]), , drop = FALSE]
   dat <- do.call(rbind, lapply(split(dat, dat$condition), utils::head, top_n))
+  ## Two different nodes can resolve to the same gene symbol; without this
+  ## they collapse into a single bar under factor(). Append the accession
+  ## on collision (spec 2.3 / 3.3).
+  ids_per_label <- tapply(dat$node_id, dat$label, function(x) length(unique(x)))
+  collide <- names(ids_per_label)[ids_per_label > 1L]
+  if (length(collide)) {
+    hit <- dat$label %in% collide
+    dat$label[hit] <- paste0(dat$label[hit], " (", dat$node_id[hit], ")")
+  }
   dat$label <- factor(dat$label, levels = unique(dat$label[order(dat[[measure]])]))
   dat$tooltip <- sprintf("%s (%s)\n%s: %.3g", dat$label, dat$node_type, measure, dat[[measure]])
+
+  y_lab <- .plot_centrality_ylab(measure, node_type, dat)
 
   p <- ggplot2::ggplot(dat, ggplot2::aes(x = .data$label, y = .data[[measure]], fill = .data$node_type))
   p <- if (engine == "ggiraph" && requireNamespace("ggiraph", quietly = TRUE)) {
@@ -96,7 +130,7 @@ plot_centrality <- function(proj, condition = NULL, measure = c("degree", "betwe
     ggplot2::scale_fill_manual(values = c(compound = "#e67e22", target = "#2980b9"), name = "Node type") +
     ggplot2::labs(
       title = paste0("Top ", top_n, " nodes by ", measure, " -- ", scope_label),
-      x = NULL, y = measure
+      x = NULL, y = y_lab
     ) +
     ggplot2::theme_minimal() +
     ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"))
@@ -111,4 +145,36 @@ plot_centrality <- function(proj, condition = NULL, measure = c("degree", "betwe
     engine = engine, save = save, out_dir = out_dir,
     width = width, height = height, dpi = dpi
   )
+}
+
+#' Axis label for `plot_centrality()`, stating the bipartite normaliser
+#'
+#' @description
+#' For `"degree_norm"` / `"betweenness_norm"` the value axis carries a
+#' subtitle naming what the raw score was divided by (Borgatti & Everett
+#' 1997); raw measures keep the bare measure name.
+#'
+#' @param measure The resolved measure string.
+#' @param node_type `"both"` / `"compound"` / `"target"`.
+#' @param dat The plotting frame (needs `n_compounds` / `n_targets` for the
+#'   `_norm` variants).
+#' @return A single string for `ggplot2::labs(y = )`.
+#' @keywords internal
+.plot_centrality_ylab <- function(measure, node_type, dat) {
+  collapse_num <- function(x) paste(sort(unique(x[!is.na(x)])), collapse = "/")
+  if (measure == "degree_norm") {
+    nt <- if ("n_targets"   %in% names(dat)) collapse_num(dat$n_targets)   else "|T|"
+    nc <- if ("n_compounds" %in% names(dat)) collapse_num(dat$n_compounds) else "|C|"
+    sub <- switch(
+      node_type,
+      compound = paste0("/ |T| = ", nt),
+      target   = paste0("/ |C| = ", nc),
+      both     = paste0("compound / |T| = ", nt, ", target / |C| = ", nc)
+    )
+    return(paste0("degree_norm  (", sub, ")"))
+  }
+  if (measure == "betweenness_norm") {
+    return("betweenness_norm  (/ B_max, Borgatti & Everett 1997)")
+  }
+  measure
 }

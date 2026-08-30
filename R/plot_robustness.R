@@ -71,32 +71,63 @@ plot_robustness <- function(proj, condition = NULL, module_id = NULL,
     cli::cli_abort("No {.val network_robustness_curve} rows for condition(s) {.val {conditions}}{if (!is.null(module_id)) paste0(' / module_id ', toString(module_id)) else ''}.")
   }
   curve$panel <- paste(curve$condition, curve$module_id, sep = " / ")
+  ## removal_strategy / largest_component_sd landed in patliR 0.2.0 -- an
+  ## older network_robustness_curve.csv predates them.
+  if (is.null(curve$removal_strategy)) curve$removal_strategy <- "targeted"
+  if (is.null(curve$largest_component_sd)) curve$largest_component_sd <- NA_real_
+  ## Fraction removed, not raw count, so different-size modules are
+  ## comparable across the facet grid (Schneider et al. 2011 Fig. 1).
+  n_by_panel <- stats::aggregate(n_removed ~ panel, data = curve, FUN = max)
+  curve$frac_removed <- curve$n_removed / n_by_panel$n_removed[match(curve$panel, n_by_panel$panel)]
+  curve$ribbon_lo <- pmax(0, curve$largest_component_fraction - curve$largest_component_sd)
+  curve$ribbon_hi <- pmin(1, curve$largest_component_fraction + curve$largest_component_sd)
 
   ann <- NULL
   if (!is.null(summary_all) && nrow(summary_all) > 0) {
     ann <- summary_all[summary_all$condition %in% conditions & (is.null(module_id) | summary_all$module_id %in% module_id), , drop = FALSE]
     ann$panel <- paste(ann$condition, ann$module_id, sep = " / ")
-    ann$label <- sprintf("R = %.3f", ann$r_index)
+    r_random <- if (is.null(ann$r_index_random)) NA_real_ else ann$r_index_random
+    ann$label <- ifelse(
+      is.na(r_random),
+      sprintf("R = %.3f", ann$r_index),
+      sprintf("R_targ = %.3f  R_rand = %.3f  (diff %+.3f)", ann$r_index, r_random, r_random - ann$r_index)
+    )
   }
 
-  p <- ggplot2::ggplot(curve, ggplot2::aes(x = .data$n_removed, y = .data$largest_component_fraction))
-  p <- if (engine == "ggiraph" && requireNamespace("ggiraph", quietly = TRUE)) {
-    p + ggiraph::geom_line_interactive(ggplot2::aes(tooltip = .data$panel, data_id = .data$panel), colour = "#2980b9", linewidth = 0.8)
-  } else {
-    p + ggplot2::geom_line(colour = "#2980b9", linewidth = 0.8)
+  strategy_cols <- c(targeted = "#2980b9", random = "#c0392b")
+  has_random <- any(curve$removal_strategy == "random")
+
+  p <- ggplot2::ggplot(curve, ggplot2::aes(
+    x = .data$frac_removed, y = .data$largest_component_fraction,
+    colour = .data$removal_strategy, linetype = .data$removal_strategy,
+    group = .data$removal_strategy
+  ))
+  if (has_random) {
+    p <- p + ggplot2::geom_ribbon(
+      data = curve[curve$removal_strategy == "random", , drop = FALSE],
+      ggplot2::aes(ymin = .data$ribbon_lo, ymax = .data$ribbon_hi),
+      fill = "#c0392b", alpha = 0.15, colour = NA, inherit.aes = TRUE
+    )
   }
-  p <- p + ggplot2::geom_point(size = 1, colour = "#2980b9") + ggplot2::facet_wrap(~panel, scales = "free_x")
+  p <- if (engine == "ggiraph" && requireNamespace("ggiraph", quietly = TRUE)) {
+    p + ggiraph::geom_line_interactive(ggplot2::aes(tooltip = .data$panel, data_id = .data$panel), linewidth = 0.8)
+  } else {
+    p + ggplot2::geom_line(linewidth = 0.8)
+  }
+  p <- p + ggplot2::geom_point(size = 1) + ggplot2::facet_wrap(~panel) +
+    ggplot2::scale_colour_manual(values = strategy_cols, name = "Removal") +
+    ggplot2::scale_linetype_manual(values = c(targeted = "solid", random = "dashed"), name = "Removal")
   if (!is.null(ann) && nrow(ann) > 0) {
     p <- p + ggplot2::geom_text(
       data = ann, ggplot2::aes(x = Inf, y = Inf, label = .data$label),
-      hjust = 1.1, vjust = 1.5, size = 3.2, colour = "grey30", inherit.aes = FALSE
+      hjust = 1.05, vjust = 1.5, size = 3, colour = "grey30", inherit.aes = FALSE
     )
   }
   p <- p +
     ggplot2::labs(
       title = paste0("Module percolation robustness -- ", scope_label),
-      subtitle = "Fraction of the module remaining in the largest component as nodes are removed one at a time; R = mean of that fraction over removal steps, bounded above by (N-1)/(2N) < 0.5 (Schneider et al. 2011)",
-      x = "Nodes removed", y = "Largest component fraction"
+      subtitle = "Fraction of the module in its largest component as nodes are removed (x = fraction removed); R = mean over removal steps, bounded above by (N-1)/(2N) < 0.5 and not comparable across module sizes (Schneider et al. 2011)",
+      x = "Fraction of module removed", y = "Largest component fraction"
     ) +
     ggplot2::theme_minimal() +
     ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 8, colour = "grey40"))

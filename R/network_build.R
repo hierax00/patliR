@@ -206,6 +206,47 @@ network_build <- function(proj, condition = NULL,
   )
 }
 
+#' Node "mode" labels for a bipartite compound-target graph
+#'
+#' @description
+#' The shared accessor for the compound/target split every mode-aware
+#' `network_*` function needs, so the `as.logical(V(g)$type)` idiom is not
+#' re-derived (slightly differently each time) in
+#' `.network_centrality_one()`, `network_hub_penalty()`,
+#' `network_module_robustness()`, etc. `V(g)$type == FALSE` is a compound,
+#' `TRUE` is a target -- the convention `.network_build_igraph()` sets.
+#' @return `character` vector, one entry per vertex in `V(g)` order, each
+#'   `"compound"` or `"target"` (`NA` for a vertex whose `type` is `NA`).
+#' @keywords internal
+.network_node_types <- function(g) {
+  ty <- as.logical(igraph::V(g)$type)
+  ifelse(is.na(ty), NA_character_, ifelse(ty, "target", "compound"))
+}
+
+#' Is `g` a genuine two-mode (bipartite) graph, per `network_build()`'s own
+#' construction contract?
+#'
+#' @description
+#' Checks that every vertex carries a non-`NA` `type` and that **no edge
+#' connects two vertices of the same mode**. This is deliberately *not*
+#' `igraph::bipartite_mapping()`: that function (a) throws on a named graph
+#' with a non-bipartite structure instead of returning `FALSE`, (b) reports
+#' `TRUE` for any 2-colourable graph -- including the tri/quadripartite
+#' `.network_layered_graph()` (compounds and pathways share a colour) and
+#' any tree -- and (c) ignores an existing `V(g)$type`, computing its own
+#' 2-colouring, while `as_biadjacency_matrix()` trusts `V(g)$type` blindly.
+#' The check here matches what the bipartite modularity path actually
+#' requires: that `as_biadjacency_matrix(g)` is a faithful representation.
+#' @return `logical(1)`.
+#' @keywords internal
+.network_is_bipartite <- function(g) {
+  if (!"type" %in% igraph::vertex_attr_names(g)) return(FALSE)
+  ty <- as.logical(igraph::V(g)$type)
+  if (anyNA(ty)) return(FALSE)
+  el <- igraph::as_edgelist(g, names = FALSE)
+  nrow(el) == 0L || all(ty[el[, 1]] != ty[el[, 2]])
+}
+
 #' Path to the cached igraph object for one project condition
 #' @keywords internal
 .network_cache_path <- function(proj, condition) {
@@ -367,9 +408,11 @@ network_build <- function(proj, condition = NULL,
     }
     if (length(only_new) > 0) {
       for (cn in only_new) kept[[cn]] <- new_rows[[cn]][rep(NA_integer_, nrow(kept))]
-      cli::cli_inform(c(
-        "i" = "{.fn .network_upsert}: {.val {name}} gained column{?s} {.val {only_new}}; back-filled as NA on {nrow(kept)} pre-existing row{?s}."
-      ))
+      if (nrow(kept) > 0) {
+        cli::cli_inform(c(
+          "i" = "{.fn .network_upsert}: {.val {name}} gained column{?s} {.val {only_new}}; back-filled as NA on {nrow(kept)} pre-existing row{?s}."
+        ))
+      }
     }
     out <- rbind(kept[, names(new_rows), drop = FALSE], new_rows)
   } else {

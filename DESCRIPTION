@@ -1,7 +1,7 @@
 Package: patliR
 Type: Package
 Title: Reproducible Network Pharmacology Analysis for Natural Product Extracts
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: person(given = "Edgard Uriel", family = "López Chablé",
     email = "uriel.chable18@gmail.com", role = c("aut", "cre"))
 Description: A field-to-report pipeline for network pharmacology analysis of
@@ -49,6 +49,7 @@ Suggests:
     org.Hs.eg.db,
     reactome.db,
     dbscan,
+    bipartite,
     STRINGdb,
     ggalluvial,
     ggVennDiagram,

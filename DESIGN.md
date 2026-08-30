@@ -95,6 +95,22 @@ reimplemented in plain `ggplot2` instead of taken as dependencies. Each
 network analysis gets its own view rather than one generic `plot_network()`
 — compound-target-pathway graphs saturate visually too fast for that.
 
+## Analysis `Suggests`: reimplement layout, depend for algorithms
+
+The "reimplement it" rule above is about *layout* geometry. It does not
+extend to non-trivial *algorithms*. `network_module_robustness(clustering
+= "bipartite")` depends on `bipartite` (a `Suggests`) for Barber's `Q_B`
+maximisation — an NP-hard optimisation with a decade of algorithmic
+literature (Barber 2007; Beckett 2016), not a geometry anyone should
+hand-roll. It is guarded by the standard `requireNamespace()` +
+`cli_abort` pattern and is needed only for the non-default `clustering`
+value. One real cost to note: `bipartite`'s `Depends:` attaches `sna` and
+`vegan` to the search path, and `sna` masks `igraph`'s `degree()` /
+`betweenness()` / `closeness()` for the rest of the session — an argument
+for keeping `"bipartite"` a deliberate opt-in, never the default.
+`dbscan` (for `clustering = "hdbscan"`) is a `Suggests` on the same
+footing.
+
 ## Explicitly out of scope
 
 - Parsing raw GC-MS instrument output (`prep_gcms()`) — that is

@@ -2,14 +2,19 @@
 % Please edit documentation in R/network_module_robustness.R
 \name{network_module_robustness}
 \alias{network_module_robustness}
-\title{Detect network modules and measure each module's robustness to targeted
-node removal}
+\title{Detect network modules and measure each module's robustness to node
+removal}
 \usage{
 network_module_robustness(
   proj,
   condition = NULL,
-  clustering = c("hdbscan"),
+  clustering = c("leiden", "bipartite", "hdbscan"),
+  attack = c("targeted", "random", "both"),
+  resolution = 1,
+  n_iterations = 5L,
   min_module_size = 2,
+  min_component_size = 3L,
+  n_random = 20L,
   seed = NULL
 )
 }
@@ -21,77 +26,143 @@ of \code{\link[=binarizedMatrix]{binarizedMatrix()}}), or \code{NULL} (default) 
 condition. Rebuilding a subset leaves previously-built conditions
 untouched in \code{patliRResults(proj, "network_edges")}.}
 
-\item{clustering}{Only \code{"hdbscan"} is implemented.}
+\item{clustering}{\code{"leiden"} (default), \code{"bipartite"}, or \code{"hdbscan"} --
+see "Clustering backends" above. \strong{The default changed from
+\code{"hdbscan"} in patliR 0.2.0}; the module partitions, and therefore
+every \code{r_index}, will differ from earlier versions.}
 
-\item{min_module_size}{Minimum HDBSCAN cluster size (\code{dbscan::hdbscan()}'s
-\code{minPts}, which has no built-in default -- exposed here rather than
-silently hardcoded). Default \code{2}.}
+\item{attack}{\code{"targeted"} (default), \code{"random"}, or \code{"both"} -- see
+"Percolation attack" above.}
 
-\item{seed}{Integer seed for tie-breaking when multiple nodes share the
-current maximum degree during the attack sequence (\code{sample()} picks
-among ties) -- always set, exposed, and logged, even though the tie-
-breaking step is a small part of an otherwise deterministic algorithm,
-for exact reproducibility. \code{NULL} (default) draws and logs a fresh
-seed.}
+\item{resolution}{Leiden resolution (Reichardt-Bornholdt gamma,
+internally rescaled by \code{1 / sum(vertex_weights)}; \emph{not} a CPM density
+threshold). Higher = more, smaller modules. Default \code{1}. Ignored unless
+\code{clustering = "leiden"}.}
+
+\item{n_iterations}{Leiden iterations (Traag et al. 2019 recommend
+iterating to stability; igraph's own default is only \code{2}). Default \code{5}.
+Ignored unless \code{clustering = "leiden"}.}
+
+\item{min_module_size}{HDBSCAN \code{minPts} (\code{dbscan::hdbscan()} has no
+built-in default). Default \code{2}. Ignored unless \code{clustering = "hdbscan"}.}
+
+\item{min_component_size}{Connected components smaller than this are
+treated as a single module by every backend (the method-agnostic
+fallback). Default \code{3}.}
+
+\item{n_random}{Number of random removal orders averaged for \code{attack = "random"}/\code{"both"}. Default \code{20}. A single random draw inverts the
+targeted-vs-random conclusion for a non-trivial fraction of modules, so
+the baseline is stored as an aggregate, never one replicate.}
+
+\item{seed}{Integer seed covering (independently) the stochastic
+clustering step (Leiden / Beckett label propagation) and the
+percolation tie-break / random orders. Always set, exposed and logged.
+\code{NULL} (default) draws and logs a fresh seed.}
 }
 \value{
-The updated \code{proj}, with two entries in \code{\link[=patliRResults]{patliRResults()}}:
-\code{network_module_robustness} (columns \code{condition}, \code{module_id},
-\code{module_type} (\code{"cluster"}/\code{"noise"} -- see "HDBSCAN 'noise' points get
-their own module" above), \code{n_nodes}, \code{r_index}, \code{seed_used}) and
-\code{network_robustness_curve}
-(columns \code{condition}, \code{module_id}, \code{n_removed},
-\code{largest_component_fraction} -- the raw percolation curve behind each
-\code{r_index}, for \code{plot_robustness()} later). Both written to their
-matching \verb{results/*.csv}.
+The updated \code{proj}, with three entries in \code{\link[=patliRResults]{patliRResults()}}:
+\itemize{
+\item \code{network_module_robustness} -- one row per module: \code{condition},
+\code{module_id}, \code{module_type} (\code{"cluster"}/\code{"noise"}), \code{n_nodes},
+\code{r_index} (targeted), \code{r_index_random}, \code{n_random}, \code{clustering},
+\code{modularity} (Newman \code{Q} for Leiden via \code{igraph::modularity()};
+node-weighted mean of per-component Barber \code{Q_B} for bipartite; \code{NA}
+for hdbscan -- repeated down the condition's rows), \code{resolution},
+\code{method_detail}, \code{seed_used}.
+\item \code{network_robustness_curve} -- the raw percolation curve behind each
+\code{r_index}: \code{condition}, \code{module_id}, \code{n_removed},
+\code{largest_component_fraction}, \code{removal_strategy}
+(\code{"targeted"}/\code{"random"}), \code{largest_component_sd} (\code{NA} for
+targeted), \code{n_replicates} (\code{1} for targeted, \code{n_random} for random).
+\item \code{network_module_membership} -- one row per node: \code{condition},
+\code{node_id}, \code{node_type} (\code{"compound"}/\code{"target"}), \code{module_id},
+\code{module_type}. Required by \code{plot_network_layers(colour_by = "module")}.
+All three written to their matching \verb{results/*.csv}. Rerunning with a
+different \code{clustering} \strong{replaces} the condition's rows (the
+\code{clustering} column records which method produced them); it does not
+accumulate.
+}
 }
 \description{
 For each condition's graph (\code{\link[=network_build]{network_build()}}), clusters nodes into
-modules using HDBSCAN (\code{dbscan::hdbscan()}) over the graph's shortest-path
-distance matrix (\code{igraph::distances(g, weights = NA)}) -- nodes that are
-topologically close (few hops apart) cluster into the same module,
-regardless of whether they are compounds or targets.
-
-Density clustering on integer graph distances is a rough proxy for
-community structure (which is really about edge density within vs.
-between groups); on a small bipartite graph with a near-tied distance
-matrix it can collapse toward one cluster or all-noise. A
-modularity-based option (\code{cluster_leiden}, or bipartite modularity) is
-planned via the \verb{clustering=} argument -- see \code{ROADMAP.md}.
-
-For each module, runs a
-\strong{targeted-attack percolation}: repeatedly remove the current
-highest-degree node from that module's induced subgraph (recalculating
-degree after every removal -- the standard "malicious attack" strategy,
-not random failure), tracking what fraction of the module stays in its
-largest connected component at each step. Summarizes that fragmentation
-curve as the \strong{R-index} (Schneider, C.M. et al. 2011, \emph{PNAS} 108(10),
-3838-41; \code{plot_robustness()} visualizes this curve): the mean largest-
-component fraction over removal steps \verb{Q = 1..N}. Higher = more robust;
-\code{0} is immediate collapse. The theoretical maximum is \verb{(N-1)/(2N) < 0.5}
-(Schneider's definition), reached only by a module that never fragments
-until fully removed -- not \code{1}. R-index also depends strongly on module
-size, so it is \strong{not comparable across modules of different \code{n_nodes}}
-(a 1-node module scores \code{0}, a 2-node one \code{0.25}, by arithmetic).
+modules, then runs a \strong{percolation attack} per module and reports each
+module's \strong{R-index} (Schneider, C.M. et al. 2011, \emph{PNAS} 108(10),
+3838-41): the mean largest-connected-component fraction over removal
+steps \verb{Q = 1..N}. Higher = more robust; \code{0} is immediate collapse. The
+theoretical maximum is \verb{(N-1)/(2N) < 0.5} (Schneider's definition),
+reached only by a module that never fragments until fully removed -- not
+\code{1}. R-index depends strongly on module size, so it is \strong{not comparable
+across modules of different \code{n_nodes}} (a 1-node module scores \code{0}, a
+2-node one \code{0.25}, by arithmetic).
 }
-\section{HDBSCAN "noise" points get their own module}{
+\section{Clustering backends (\verb{clustering=})}{
 
-Points HDBSCAN does not assign to a dense cluster (label \code{0}, "noise")
-are collected into their own module (\code{module_type = "noise"}, vs.
-\code{"cluster"}) rather than dropped, so the covered-node count stays
-correct. Their robustness is computed the same way as any other module.
+\itemize{
+\item \code{"leiden"} (default) -- \code{\link[igraph:cluster_leiden]{igraph::cluster_leiden()}} with
+\code{objective_function = "modularity"}, run per connected component
+(reusing the same component loop as the other backends, so the module
+ID scheme and the \code{sum(n_nodes) == vcount(g)} invariant are shared).
+Makes no bipartiteness assumption and guarantees well-connected
+communities. \code{module_type} is \code{"cluster"} for every Leiden module.
+\item \code{"bipartite"} -- \code{bipartite::computeModules(method = "Beckett")}
+(Beckett 2016's DIRTLPAwb+), maximising Barber (2007)'s bipartite
+modularity \code{Q_B}. Standard (Newman) modularity's null model permits
+compound-compound and target-target edges, which cannot exist in a
+compound-target graph; Barber's null does not. \strong{Only valid on the
+two-mode compound-target graph} -- aborts (via \code{.network_is_bipartite()})
+otherwise. Needs the \code{bipartite} package (\code{Suggests}).
+\item \code{"hdbscan"} -- \code{dbscan::hdbscan()} over \code{igraph::distances(g, weights = NA)}. With \code{minPts = 2} every non-isolated node has core distance 1 and
+the mutual-reachability hierarchy degenerates to the single-linkage
+hierarchy of an integer metric with 3-4 distinct values, so the
+"density" it estimates is near-constant on a bipartite graph. Kept as
+an explicit contrast (it assumes nothing about edge density), not the
+default -- selecting it emits a one-time note. HDBSCAN "noise" nodes
+(label \code{0}) are collected into their own module (\code{module_type = "noise"}) rather than dropped.
+}
+
+Clustering is run \strong{unweighted}. For \code{"leiden"} the \code{weight} edge
+attribute (the import probability) is stripped with
+\code{igraph::delete_edge_attr()} before clustering -- \emph{not} passed as
+\code{weights = NA}, which would leave \code{strength()} silently reading the
+attribute for the modularity null model and, on any \code{NA} probability,
+return every node as its own module with no error. The probabilities are
+also not calibrated across import platforms (a weighted \code{Q_B} would be a
+modularity of prediction confidence, not of pharmacology), and every
+other topological call in \verb{network_*} is unweighted.
+}
+
+\section{Percolation attack (\verb{attack=})}{
+
+\itemize{
+\item \code{"targeted"} (default) -- repeatedly remove the current highest-degree
+node from the module's induced subgraph, recomputing degree after every
+removal (the standard "malicious attack"). Deterministic apart from the
+\code{seed}-controlled tie-break among equal-degree nodes.
+\item \code{"random"} -- \code{n_random} independent uniformly-random removal orders
+(no degree recomputation -- "random failure"). The stored curve is the
+\strong{mean} largest-component fraction across replicates at each step
+(\code{largest_component_sd} its SD); \code{r_index_random} is the mean over
+replicates of each replicate's R-index (equivalently
+\code{mean(mean_curve[-1])}, since the mean is linear). Each replicate draws
+under a derived sub-seed \code{seed + 1000 * module_index + replicate}.
+\item \code{"both"} -- both; \code{plot_robustness()} then draws the two-curve
+percolation figure (Albert, Jeong & Barabasi 2000).
+}
+
+\code{r_index} always holds the targeted value (or \code{NA} if \code{attack = "random"}); \code{r_index_random} holds the random baseline (\code{NA} unless
+\code{attack} includes it). The interpretable quantity is \code{r_index_random - r_index}: a module far below its random baseline is hub-dependent.
 }
 
 \section{Small and disconnected graphs}{
 
-A connected component with fewer than \code{2 * min_module_size} nodes is
-treated as a single module (HDBSCAN is not run on it), logged. Real
-compound-target networks are frequently disconnected;
-\code{igraph::distances()} returns \code{Inf} across components and
-\code{dbscan::hdbscan()} crashes on non-finite input, so
-\code{.network_detect_modules()} splits the graph into connected components
-(\code{igraph::components()}) and clusters within each separately. Module IDs
-(\code{M1}, \code{M2}, ...) are assigned sequentially across all components.
+Real compound-target networks are frequently disconnected;
+\code{igraph::distances()} returns \code{Inf} across components. All three backends
+run \strong{per connected component} (\code{\link[igraph:components]{igraph::components()}}); a component
+with fewer than \code{min_component_size} nodes is treated as a single module
+(no clustering run on it), logged. Module IDs (\code{M1}, \code{M2}, ...) are
+assigned sequentially across components and are a \strong{within-run label
+only} -- \code{M3} in one run is unrelated to \code{M3} under a different \code{seed},
+\code{resolution}, \code{clustering}, or rebuilt graph.
 }
 
 \examples{
@@ -112,8 +183,25 @@ proj <- targets_import_batch(
   platform = "superpred"
 )
 proj <- network_build(proj)
-proj <- network_module_robustness(proj, condition = "FLO-ET")
+proj <- network_module_robustness(proj, condition = "FLO-ET", attack = "both")
 patliRResults(proj, "network_module_robustness")
 }
 
+}
+\references{
+Schneider, C.M., Moreira, A.A., Andrade, J.S., Havlin, S. & Herrmann,
+H.J. (2011) Mitigation of malicious attacks on networks. \emph{PNAS}
+108(10):3838-3841.
+
+Traag, V.A., Waltman, L. & van Eck, N.J. (2019) From Louvain to Leiden:
+guaranteeing well-connected communities. \emph{Sci Rep} 9:5233.
+
+Barber, M.J. (2007) Modularity and community detection in bipartite
+networks. \emph{Phys Rev E} 76:066102.
+
+Beckett, S.J. (2016) Improved community detection in weighted bipartite
+networks. \emph{R Soc Open Sci} 3:140536.
+
+Albert, R., Jeong, H. & Barabasi, A.-L. (2000) Error and attack
+tolerance of complex networks. \emph{Nature} 406:378-382.
 }

@@ -14,13 +14,7 @@ current highest-degree node, track the largest-component fraction}
 \code{r_index} is Schneider et al. (2011), \emph{PNAS} 108(10), 3838-3841's
 robustness index: the mean of \code{s(Q)} (largest-component fraction) over
 removal steps \verb{Q = 1..N} -- \strong{not} including the trivial, pre-removal
-\code{s(0) = 1} state. \code{curve[1] == 1} (the untouched graph) is still kept in
-the returned \code{curve} for plotting (so \code{\link[=plot_robustness]{plot_robustness()}} can draw the
-curve starting from "nothing removed yet"), but must be dropped before
-averaging into \code{r_index} -- averaging it in systematically inflates
-\code{r_index}, worst for the small modules this package's networks typically
-have after HDBSCAN splits a component (a 1-node module would report
-\code{r_index = 0.5} via \code{mean(c(1, 0))}, when Schneider's definition for
-\code{N = 1} is \code{s(1) = 0}).
+\code{s(0) = 1} state. \code{curve[1] == 1} is kept in the returned \code{curve} for
+plotting but must be dropped before averaging.
 }
 \keyword{internal}

@@ -1,5 +1,44 @@
 # patliR (development version)
 
+## `network_module_robustness()` — clustering backends and a random-failure baseline
+
+- **Breaking change to the numbers.** `network_module_robustness()`'s
+  `clustering` argument now defaults to **`"leiden"`** (was `"hdbscan"`).
+  Modules are detected by `igraph::cluster_leiden()` maximising Newman
+  modularity, so every module partition — and therefore every `r_index` —
+  differs from earlier versions. `clustering = "hdbscan"` still works
+  (unchanged output for the same seed) but emits a one-time note that it is
+  a density heuristic on an integer metric; it is not deprecated.
+- **New `clustering = "bipartite"`** — `bipartite::computeModules(method =
+  "Beckett")`, maximising Barber (2007)'s bipartite modularity `Q_B`. Only
+  valid on the genuine two-mode compound–target graph (aborts otherwise).
+  Adds `bipartite` to `Suggests`; note it attaches `sna` and `vegan`, which
+  mask some `igraph` functions for the rest of the session.
+- Clustering is run **unweighted**: for Leiden the `weight` edge attribute
+  is *deleted* before clustering rather than passed as `weights = NA`
+  (which would leave `strength()` reading it for the modularity null model
+  and silently return all-singletons on any `NA` probability).
+- **New `attack = c("targeted", "random", "both")`** (default
+  `"targeted"`). `"random"` averages `n_random` (default 20) uniformly
+  random removal orders; `network_robustness_curve` gains
+  `removal_strategy`, `largest_component_sd`, `n_replicates`. The summary
+  table gains `r_index_random` and `n_random` alongside the unchanged
+  `r_index` (targeted).
+- **New third output slot `network_module_membership`** — one row per node
+  (`condition`, `node_id`, `node_type`, `module_id`, `module_type`),
+  required by `plot_network_layers(colour_by = "module")`.
+- The summary table gains `clustering`, `modularity` (Newman `Q` / mean
+  Barber `Q_B` / `NA`), `resolution`, and `method_detail`. Rerunning with a
+  different `clustering` **replaces** the condition's rows (the `clustering`
+  column records which method produced them); a pre-0.2.0
+  `network_module_robustness.csv` is back-filled with `NA`, not rejected.
+- New arguments: `resolution` (1), `n_iterations` (5), `min_component_size`
+  (3, the method-agnostic single-module fallback threshold), `n_random`
+  (20).
+- `plot_robustness()` now draws both removal strategies (targeted solid,
+  random dashed with an SD ribbon), plots the x axis as *fraction removed*,
+  and annotates `R_targ` / `R_rand` / their difference.
+
 ## Disease gene sets (`disease_genes_*`)
 
 - **New `disease_genes_fetch()`** — fetches a disease's associated gene set

@@ -186,10 +186,21 @@ other `network_*` function reads it.
 **Operation:** *a closed-form re-weighting, no fitting.* With `p` = (compounds hitting this target) / (compounds in the condition), the score is `N · p · log(1/p)`. It is `0` when a target is hit by every compound and **peaks at `p ≈ 0.37`** — it up-weights *intermediate*-specificity targets, and is **not monotone** in selectivity despite the name.
 **Theory:** the shape is `N` times a Shannon surprisal term (TF-IDF-like in spirit, though not TF-IDF). Flagged for revision — see `ROADMAP.md`.
 
-### `network_module_robustness(proj, condition, seed)`
-**Out:** the graph's modules, and an **R-index** of how robust each module is to attack.
-**Operation:** *cluster, then simulate an attack.* (1) Nodes are clustered into modules by HDBSCAN over the graph's shortest-path-distance matrix, per connected component. (2) For each module, its highest-degree node is removed, degrees recomputed, the next removed, and so on; at every step the fraction of the module still in one connected piece is recorded. (3) The **R-index is the mean of that fraction over all removal steps** (Schneider et al. 2011). Higher = more robust; the theoretical maximum is `< 0.5`, not 1, and R-index is **not comparable across modules of different size**. The seed only controls the (rare) stochastic part.
-**Theory:** targeted-attack percolation from network-robustness theory — a module whose largest component collapses after a few hub removals is fragile.
+### `network_module_robustness(proj, condition, clustering, attack, seed)`
+**Out:** the graph's modules, an **R-index** of how robust each module is to node removal, and a per-node module-membership table.
+**Operation:** *cluster, then simulate node removal.*
+*(1) Cluster*, per connected component, by one of three backends:
+- `clustering = "leiden"` (**default since 0.2.0**) — `igraph::cluster_leiden()` maximising **Newman modularity** (`objective_function = "modularity"`, *not* igraph's `"CPM"` default, which returns all singletons on a sparse graph). Valid on any graph; makes no bipartiteness assumption and guarantees well-connected communities (Traag et al. 2019). The reported `modularity` is Newman's `Q`.
+- `clustering = "bipartite"` — `bipartite::computeModules(method = "Beckett")` (Beckett 2016) maximising **Barber's bipartite modularity `Q_B`** (Barber 2007). *Only* valid on the genuine two-mode compound–target graph: Newman's null model allows compound–compound and target–target edges, which cannot exist here, so it over-reports modularity; Barber's null forbids them. Aborts on a non-bipartite graph. The reported `modularity` is `Q_B` (node-weighted mean over components).
+- `clustering = "hdbscan"` — `dbscan::hdbscan()` over the shortest-path-distance matrix. With `minPts = 2` every non-isolated node has core distance 1, so the mutual-reachability hierarchy **degenerates to the single-linkage hierarchy of an integer metric with 3–4 distinct values** — it estimates a near-constant "density" on a bipartite graph. Kept as a no-edge-density-assumption contrast, not the default; `modularity` is `NA`. Selecting it emits a one-time note.
+
+Clustering is run **unweighted** — for Leiden the `weight` edge attribute is *deleted* before clustering (not passed as `weights = NA`, which leaves `strength()` reading it for the null model and silently returns all-singletons on any `NA` probability). The import probabilities are also not calibrated across prediction platforms, and every other topological `network_*` call is unweighted.
+
+*(2) Attack.* `attack = "targeted"` (default) removes the current highest-degree node, recomputes degree, repeats — the "malicious attack". `attack = "random"` averages `n_random` uniformly-random removal orders (no recomputation) — "random failure"; the curve is stored as the replicate mean ± SD. `attack = "both"` runs both, giving the canonical two-curve percolation figure (Albert, Jeong & Barabási 2000).
+
+*(3) R-index* = the **mean largest-component fraction over removal steps `Q = 1..N`** (Schneider et al. 2011). Higher = more robust; theoretical maximum `(N−1)/(2N) < 0.5`, **not** 1; **not comparable across modules of different size**. `r_index` holds the targeted value, `r_index_random` the random baseline; `r_index_random − r_index` is the interpretable quantity (a module far below its random baseline is hub-dependent). The seed independently covers the stochastic clustering step and the percolation tie-break / random orders.
+**Theory:** targeted-attack percolation from network-robustness theory. `clustering` choice: Leiden always; bipartite only on the 2-mode compound–target graph (Barber's null vs Newman's); HDBSCAN degenerates to single linkage on the integer metric.
+**References:** Schneider et al. 2011 *PNAS* 108(10):3838-3841; Traag et al. 2019 *Sci Rep* 9:5233; Barber 2007 *Phys Rev E* 76:066102; Beckett 2016 *R Soc Open Sci* 3:140536; Albert, Jeong & Barabási 2000 *Nature* 406:378-382.
 
 ### `network_motifs(proj, condition)`
 **Out:** every feed-forward triple (compound → target → pathway/disease, with the compound also linked directly).

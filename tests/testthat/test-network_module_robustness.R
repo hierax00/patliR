@@ -1,139 +1,257 @@
+## Two K_{3,3} blocks. `bridge = TRUE` joins them by a single edge (the
+## spec's graph); `bridge = FALSE` leaves them disjoint. Compounds = *c*,
+## targets = *t*.
+.two_k33 <- function(bridge = TRUE) {
+  block <- function(pre) {
+    expand.grid(
+      c = paste0(pre, c("c1", "c2", "c3")),
+      t = paste0(pre, c("t1", "t2", "t3")),
+      stringsAsFactors = FALSE
+    )
+  }
+  el <- rbind(block("A"), block("B"))
+  g <- igraph::graph_from_data_frame(el, directed = FALSE)
+  if (bridge) g <- igraph::add_edges(g, c("At1", "Bc1"))
+  igraph::V(g)$type <- grepl("t[0-9]$", igraph::V(g)$name)
+  igraph::E(g)$weight <- 0.9
+  g
+}
+.two_k33_joined <- function() .two_k33(bridge = TRUE)
+
+.block_of <- function(node_name) substr(node_name, 1, 1)
+.blocks_separated <- function(members) {
+  all(vapply(members, function(m) length(unique(vapply(m, .block_of, character(1)))) == 1L, logical(1)))
+}
+
 test_that("network_module_robustness() requires network_build() to have run first", {
   proj <- .test_project()
   proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
-  testthat::skip_if_not_installed("dbscan")
   expect_error(network_module_robustness(proj), "network_edges")
 })
 
-test_that("network_module_robustness() produces a well-formed summary table on FLO-ET", {
-  testthat::skip_if_not_installed("dbscan")
+test_that("network_module_robustness() produces a well-formed summary table on FLO-ET (default clustering = leiden)", {
   proj <- .network_stats_test_setup()
   proj <- network_module_robustness(proj, condition = "FLO-ET", seed = 42)
 
   summary_tbl <- patliRResults(proj, "network_module_robustness")
-  expect_true(all(c("condition", "module_id", "n_nodes", "r_index", "seed_used") %in% names(summary_tbl)))
-  ## Schneider et al. (2011): s(Q) <= (N-Q)/N at every step, so the mean
-  ## over Q = 1..N is bounded above by (N-1)/(2N) < 0.5, not 1.
+  expect_true(all(c(
+    "condition", "module_id", "module_type", "n_nodes", "r_index", "r_index_random",
+    "n_random", "clustering", "modularity", "resolution", "method_detail", "seed_used"
+  ) %in% names(summary_tbl)))
+  expect_true(all(summary_tbl$clustering == "leiden"))
   expect_true(all(summary_tbl$r_index >= 0 & summary_tbl$r_index <= 0.5))
+  ## attack defaults to "targeted" -> no random baseline
+  expect_true(all(is.na(summary_tbl$r_index_random)))
 })
 
-test_that(".network_detect_modules() falls back to a single module when the graph is smaller than 2 * min_module_size", {
-  testthat::skip_if_not_installed("dbscan")
-  ## FLO-ET's own graph (4 present compounds + 10 targets = 14 nodes, per
-  ## the Q1-thresholded presence rule in prep_binarize()) is comfortably
-  ## above 2 * min_module_size for the default min_module_size = 2, so it
-  ## never actually exercises this fallback -- test the internal function
-  ## directly against a synthetic graph small enough to trigger it, rather
-  ## than relying on a bundled fixture happening to be tiny.
-  tiny_g <- igraph::graph_from_data_frame(
-    data.frame(from = "a", to = "b", stringsAsFactors = FALSE),
-    directed = FALSE
-  )
-  modules <- patliR:::.network_detect_modules(tiny_g, min_module_size = 2)
-  expect_equal(names(modules$members), "M1")
-  expect_setequal(modules$members[["M1"]], c("a", "b"))
-  expect_true(grepl("single module", modules$log_message))
-})
-
-test_that(".network_detect_modules() tags the small-graph fallback module as type 'cluster', not 'noise' (2026-08-14 design change)", {
-  testthat::skip_if_not_installed("dbscan")
-  ## This component is too small to run HDBSCAN at all -- it was never
-  ## classified as noise, so it must not be tagged as such just because it
-  ## shares the "single module" shape with the real all-noise fallback in
-  ## .network_detect_modules_component().
-  tiny_g <- igraph::graph_from_data_frame(
-    data.frame(from = "a", to = "b", stringsAsFactors = FALSE),
-    directed = FALSE
-  )
-  modules <- patliR:::.network_detect_modules(tiny_g, min_module_size = 2)
-  expect_equal(unname(modules$types), "cluster")
-})
-
-test_that("network_module_robustness() tags every module 'cluster'/'noise' and drops no nodes (2026-08-14 design change: noise nodes used to be excluded)", {
-  testthat::skip_if_not_installed("dbscan")
+test_that("network_module_robustness() writes network_module_membership, one row per node", {
   proj <- .network_stats_test_setup()
   proj <- network_module_robustness(proj, condition = "FLO-ET", seed = 42)
   g <- .network_graph(proj, "FLO-ET")
 
-  summary_tbl <- patliRResults(proj, "network_module_robustness")
-  expect_true("module_type" %in% names(summary_tbl))
-  expect_true(all(summary_tbl$module_type %in% c("cluster", "noise")))
-  ## The core of the design change: every node in the condition's graph is
-  ## accounted for by exactly one module's n_nodes, whether or not HDBSCAN
-  ## considered it "noise".
-  expect_equal(sum(summary_tbl$n_nodes), igraph::vcount(g))
+  memb <- patliRResults(proj, "network_module_membership")
+  expect_setequal(names(memb), c("condition", "node_id", "node_type", "module_id", "module_type"))
+  expect_setequal(memb$node_id, igraph::V(g)$name)
+  expect_equal(nrow(memb), igraph::vcount(g))
+  expect_true(all(memb$node_type %in% c("compound", "target")))
+  ## membership module_id must join back to the summary module_id
+  summ <- patliRResults(proj, "network_module_robustness")
+  expect_true(all(memb$module_id %in% summ$module_id))
 })
 
-test_that("network_module_robustness() writes a matching fragmentation curve", {
-  testthat::skip_if_not_installed("dbscan")
+for (cl in c("leiden", "bipartite", "hdbscan")) {
+  test_that(sprintf("clustering = '%s': two disjoint K_{3,3} blocks land in different modules", cl), {
+    if (cl == "bipartite") skip_if_not_installed("bipartite")
+    if (cl == "hdbscan") skip_if_not_installed("dbscan")
+    g <- .two_k33(bridge = FALSE)
+    mods <- patliR:::.network_detect_modules(
+      g, clustering = cl, min_module_size = 2, resolution = 1,
+      n_iterations = 5L, min_component_size = 3L, seed = 1L
+    )
+    all_nodes <- unlist(mods$members, use.names = FALSE)
+    expect_setequal(all_nodes, igraph::V(g)$name)
+    expect_equal(length(all_nodes), length(unique(all_nodes)))
+    expect_true(.blocks_separated(mods$members))
+    expect_gte(length(mods$members), 2L)
+  })
+}
+
+test_that("clustering = 'leiden'/'bipartite': a single bridge edge does not merge two K_{3,3} blocks", {
+  ## hdbscan on integer graph distances degenerates to single linkage and
+  ## cannot resist the bridge here -- documented in the roxygen; only the
+  ## two modularity backends are asserted.
+  g <- .two_k33(bridge = TRUE)
+  ml <- patliR:::.network_detect_modules(g, clustering = "leiden", seed = 1L)
+  expect_true(.blocks_separated(ml$members))
+  expect_gte(length(ml$members), 2L)
+
+  skip_if_not_installed("bipartite")
+  mb <- patliR:::.network_detect_modules(g, clustering = "bipartite", seed = 1L)
+  expect_true(.blocks_separated(mb$members))
+  expect_gte(length(mb$members), 2L)
+})
+
+for (cl in c("leiden", "bipartite", "hdbscan")) {
+  for (atk in c("targeted", "random", "both")) {
+    test_that(sprintf("sum(n_nodes) == vcount(g) and r_index <= 0.5 -- clustering='%s' attack='%s'", cl, atk), {
+      if (cl == "bipartite") skip_if_not_installed("bipartite")
+      if (cl == "hdbscan") skip_if_not_installed("dbscan")
+      proj <- .network_stats_test_setup()
+      proj <- network_module_robustness(
+        proj, condition = "FLO-ET", clustering = cl, attack = atk,
+        n_random = 8L, seed = 42
+      )
+      g <- .network_graph(proj, "FLO-ET")
+      summ <- patliRResults(proj, "network_module_robustness")
+      expect_equal(sum(summ$n_nodes), igraph::vcount(g))
+      expect_true(all(summ$r_index <= 0.5, na.rm = TRUE))
+      expect_true(all(summ$r_index_random <= 0.5, na.rm = TRUE))
+      if (atk == "targeted") expect_true(all(is.na(summ$r_index_random)))
+      if (atk == "random") expect_true(all(is.na(summ$r_index)))
+      if (atk == "both") expect_true(all(!is.na(summ$r_index) & !is.na(summ$r_index_random)))
+    })
+  }
+}
+
+test_that("Leiden with objective_function = 'modularity' escapes the CPM singleton trap", {
+  ## two K4 cliques joined by one edge
+  g <- igraph::make_full_graph(4) + igraph::make_full_graph(4)
+  g <- igraph::set_vertex_attr(g, "name", value = paste0("v", seq_len(8)))
+  g <- igraph::add_edges(g, c("v4", "v5"))
+  mods <- patliR:::.network_detect_modules_leiden(g, resolution = 1, n_iterations = 5L)
+  expect_lt(length(mods$members), igraph::vcount(g))   # NOT all singletons
+  memb <- integer(8)
+  for (k in seq_along(mods$members)) memb[match(mods$members[[k]], paste0("v", 1:8))] <- k
+  expect_gt(igraph::modularity(g, memb, weights = NA), 0.3)
+})
+
+test_that("module2constraints() round-trip survives a zero-sum row/column (empty() bug)", {
+  skip_if_not_installed("bipartite")
+  ## 2 clean blocks + one isolated compound (all-zero row) + isolated target (all-zero col)
+  mat <- rbind(
+    Ac1 = c(At1 = 1, At2 = 1, Bt1 = 0, Bt2 = 0, Zt = 0),
+    Ac2 = c(1, 1, 0, 0, 0),
+    Bc1 = c(0, 0, 1, 1, 0),
+    Bc2 = c(0, 0, 1, 1, 0),
+    Zc  = c(0, 0, 0, 0, 0)
+  )
+  colnames(mat) <- c("At1", "At2", "Bt1", "Bt2", "Zt")
+  bm <- patliR:::.network_bipartite_membership(mat, seed = 7L)
+  m <- bm$membership
+  expect_equal(length(m), nrow(mat) + ncol(mat))
+  ## isolated nodes -> NA
+  expect_true(is.na(m[["Zc"]]))
+  expect_true(is.na(m[["Zt"]]))
+  ## the two real blocks recovered correctly
+  expect_equal(unname(m[["Ac1"]]), unname(m[["Ac2"]]))
+  expect_equal(unname(m[["Bc1"]]), unname(m[["Bc2"]]))
+  expect_false(unname(m[["Ac1"]]) == unname(m[["Bc1"]]))
+  expect_equal(unname(m[["Ac1"]]), unname(m[["At1"]]))
+  expect_equal(unname(m[["Bc1"]]), unname(m[["Bt1"]]))
+})
+
+test_that("same seed -> identical membership, for Leiden and bipartite", {
+  g <- .two_k33_joined()
+  l1 <- patliR:::.network_detect_modules(g, clustering = "leiden", seed = 99L)
+  l2 <- patliR:::.network_detect_modules(g, clustering = "leiden", seed = 99L)
+  expect_identical(l1$members, l2$members)
+
+  skip_if_not_installed("bipartite")
+  b1 <- patliR:::.network_detect_modules(g, clustering = "bipartite", seed = 99L)
+  b2 <- patliR:::.network_detect_modules(g, clustering = "bipartite", seed = 99L)
+  expect_identical(b1$members, b2$members)
+})
+
+test_that("network_module_robustness() does not leak RNG state -- leiden, bipartite, random attack", {
   proj <- .network_stats_test_setup()
-  proj <- network_module_robustness(proj, condition = "FLO-ET", seed = 42)
-
-  summary_tbl <- patliRResults(proj, "network_module_robustness")
-  curve <- patliRResults(proj, "network_robustness_curve")
-  expect_true(all(c("condition", "module_id", "n_removed", "largest_component_fraction") %in% names(curve)))
-
-  for (m in unique(summary_tbl$module_id)) {
-    n_nodes <- summary_tbl$n_nodes[summary_tbl$module_id == m]
-    curve_m <- curve[curve$module_id == m, ]
-    expect_equal(nrow(curve_m), n_nodes + 1)
-    expect_equal(curve_m$largest_component_fraction[curve_m$n_removed == 0], 1)
-    ## r_index is Schneider et al. (2011)'s mean over removal steps
-    ## Q = 1..N only -- the pre-removal Q = 0 row (n_removed == 0,
-    ## fraction == 1, checked above) is kept in the curve for plotting but
-    ## must be excluded from this average (see .network_percolate(),
-    ## internal,).
-    post_removal <- curve_m$largest_component_fraction[curve_m$n_removed > 0]
-    expect_equal(mean(post_removal), summary_tbl$r_index[summary_tbl$module_id == m])
+  for (cl in c("leiden", "bipartite")) {
+    if (cl == "bipartite" && !requireNamespace("bipartite", quietly = TRUE)) next
+    set.seed(999); before <- runif(1)
+    set.seed(999)
+    network_module_robustness(proj, condition = "FLO-ET", clustering = cl,
+                              attack = "both", n_random = 5L, seed = 42)
+    after <- runif(1)
+    expect_equal(before, after)
   }
 })
 
-test_that("network_module_robustness() is reproducible given the same seed", {
-  testthat::skip_if_not_installed("dbscan")
+test_that("clustering = 'hdbscan' reproduces the pre-0.2.0 output given the same seed", {
+  skip_if_not_installed("dbscan")
   proj <- .network_stats_test_setup()
-  proj1 <- network_module_robustness(proj, condition = "FLO-ET", seed = 123)
-  proj2 <- network_module_robustness(proj, condition = "FLO-ET", seed = 123)
+  p1 <- network_module_robustness(proj, condition = "FLO-ET", clustering = "hdbscan", seed = 42)
+  p2 <- network_module_robustness(proj, condition = "FLO-ET", clustering = "hdbscan", seed = 42)
+  s1 <- patliRResults(p1, "network_module_robustness")
+  s2 <- patliRResults(p2, "network_module_robustness")
+  expect_equal(s1$r_index, s2$r_index)
+  expect_equal(s1$module_id, s2$module_id)
+  expect_equal(s1$n_nodes, s2$n_nodes)
+  ## frozen against patliR 2a27dde (pre-0.2.0): FLO-ET / seed 42 / hdbscan
+  expect_equal(s1$module_id, c("M1", "M2", "M3"))
+  expect_equal(s1$module_type, c("cluster", "cluster", "noise"))
+  expect_equal(s1$n_nodes, c(4L, 2L, 8L))
+  expect_equal(round(s1$r_index, 6), c(0.187500, 0.250000, 0.109375))
+  ## the historical module_id / n_nodes scheme is unchanged: modules cover
+  ## every node, exactly once
+  g <- .network_graph(p1, "FLO-ET")
+  expect_equal(sum(s1$n_nodes), igraph::vcount(g))
+  expect_true(all(is.na(s1$modularity)))
+})
 
-  expect_equal(
-    patliRResults(proj1, "network_module_robustness")$r_index,
-    patliRResults(proj2, "network_module_robustness")$r_index
+test_that("attack = 'random' curve sits above the targeted curve on average (Schneider contrast)", {
+  proj <- .network_stats_test_setup()
+  proj <- network_module_robustness(
+    proj, condition = "FLO-ET", clustering = "leiden", attack = "both",
+    n_random = 20L, seed = 42
+  )
+  summ <- patliRResults(proj, "network_module_robustness")
+  ## random failure fragments a module slower than a hub-targeted attack
+  expect_gt(mean(summ$r_index_random), mean(summ$r_index))
+})
+
+test_that(".network_is_bipartite(): TRUE on a compound-target graph, FALSE within-mode, no throw on named non-bipartite", {
+  proj <- .network_stats_test_setup()
+  g <- .network_graph(proj, "FLO-ET")
+  expect_true(patliR:::.network_is_bipartite(g))
+
+  ## add a compound-compound edge -> no longer bipartite
+  cmp <- igraph::V(g)$name[!as.logical(igraph::V(g)$type)][1:2]
+  g_bad <- igraph::add_edges(g, cmp)
+  expect_false(patliR:::.network_is_bipartite(g_bad))
+
+  ## a named, clearly non-bipartite graph (triangle) must return, not throw
+  tri <- igraph::graph_from_data_frame(
+    data.frame(from = c("a", "b", "c"), to = c("b", "c", "a")), directed = FALSE
+  )
+  expect_silent(res <- patliR:::.network_is_bipartite(tri))
+  expect_false(res)
+})
+
+test_that("clustering = 'bipartite' aborts on a non-bipartite graph before touching the bipartite package", {
+  skip_if_not_installed("bipartite")
+  proj <- .network_stats_test_setup()
+  g <- .network_graph(proj, "FLO-ET")
+  cmp <- igraph::V(g)$name[!as.logical(igraph::V(g)$type)][1:2]
+  g_bad <- igraph::add_edges(g, cmp)
+  saveRDS(g_bad, patliR:::.network_cache_path(proj, "FLO-ET"))
+  expect_error(
+    network_module_robustness(proj, condition = "FLO-ET", clustering = "bipartite", seed = 1),
+    "two-mode"
   )
 })
 
-test_that("network_module_robustness() does not leak its RNG state into the caller's session", {
-  testthat::skip_if_not_installed("dbscan")
-  proj <- .network_stats_test_setup()
-
-  set.seed(999)
-  before <- runif(1)
-
-  set.seed(999)
-  proj <- network_module_robustness(proj, condition = "FLO-ET", seed = 42)
-  after <- runif(1)
-
-  expect_equal(before, after)
+test_that(".network_detect_modules() falls back to a single module below min_component_size", {
+  tiny_g <- igraph::graph_from_data_frame(
+    data.frame(from = "a", to = "b", stringsAsFactors = FALSE), directed = FALSE
+  )
+  modules <- patliR:::.network_detect_modules(tiny_g, clustering = "hdbscan", min_module_size = 2)
+  expect_equal(names(modules$members), "M1")
+  expect_setequal(modules$members[["M1"]], c("a", "b"))
+  expect_true(grepl("single module", modules$log_message))
+  expect_equal(unname(modules$types), "cluster")
 })
 
-test_that("network_module_robustness() rejects min_module_size < 2", {
-  testthat::skip_if_not_installed("dbscan")
-  proj <- .network_stats_test_setup()
-  expect_error(network_module_robustness(proj, condition = "FLO-ET", min_module_size = 1))
-})
-
-test_that(".network_detect_modules() clusters disconnected graphs per connected component instead of crashing (regression: real EFLO-S 'Index out of bounds' crash, 2026-08-11)", {
-  testthat::skip_if_not_installed("dbscan")
-  ## Root cause: igraph::distances() returns
-  ## Inf for node pairs in different connected components, and
-  ## dbscan::hdbscan() has no validation against non-finite input -- fed a
-  ## whole-graph distance matrix with Inf entries, it crashed with an
-  ## unhelpful C++-level "Index out of bounds" error instead of erroring
-  ## cleanly. This is expected on real, large compound-target networks
-  ## (a target reachable only through absent compounds, an isolated
-  ## compound-target pair, etc.) but never occurs on patliR's small, fully
-  ## connected bundled example data, which is why devtools::test() never
-  ## caught it. A synthetic two-component graph (one component large
-  ## enough to run HDBSCAN, one too small and falling back to a single
-  ## module) reproduces the same code path without needing real data.
+test_that(".network_detect_modules() clusters disconnected graphs per connected component", {
+  skip_if_not_installed("dbscan")
   disconnected_edges <- data.frame(
     from = c("a", "b", "c", "d", "e", "f", "x"),
     to   = c("b", "c", "d", "e", "f", "a", "y"),
@@ -142,31 +260,86 @@ test_that(".network_detect_modules() clusters disconnected graphs per connected 
   g <- igraph::graph_from_data_frame(disconnected_edges, directed = FALSE)
   expect_equal(igraph::components(g)$no, 2)
 
-  modules <- patliR:::.network_detect_modules(g, min_module_size = 2)
+  modules <- patliR:::.network_detect_modules(g, clustering = "hdbscan", min_module_size = 2)
   all_nodes <- unlist(modules$members, use.names = FALSE)
-
   expect_setequal(all_nodes, igraph::V(g)$name)
   expect_equal(length(all_nodes), length(unique(all_nodes)))
   expect_true(grepl("2 connected component", modules$log_message))
   expect_true(grepl("component with 2 node", modules$log_message))
 })
 
-test_that("network_module_robustness() runs end to end on a disconnected graph without crashing (regression)", {
-  testthat::skip_if_not_installed("dbscan")
+test_that("network_module_robustness() writes a matching fragmentation curve (targeted)", {
   proj <- .network_stats_test_setup()
-  g <- .network_graph(proj, "FLO-ET")
+  proj <- network_module_robustness(proj, condition = "FLO-ET", clustering = "leiden", seed = 42)
 
-  ## Force the same condition into a two-component state by stripping the
-  ## cached graph and re-caching a disconnected copy directly, mirroring
-  ## what a real, sparser condition (fewer shared compound-target edges)
-  ## produces -- add one isolated compound-target pair not connected to
-  ## the rest of the graph.
-  disconnected_g <- igraph::add_vertices(g, 2, name = c("__iso_c", "__iso_t"))
-  disconnected_g <- igraph::add_edges(disconnected_g, c("__iso_c", "__iso_t"))
-  expect_gt(igraph::components(disconnected_g)$no, 1)
+  summary_tbl <- patliRResults(proj, "network_module_robustness")
+  curve <- patliRResults(proj, "network_robustness_curve")
+  expect_true(all(c(
+    "condition", "module_id", "n_removed", "largest_component_fraction",
+    "removal_strategy", "largest_component_sd", "n_replicates"
+  ) %in% names(curve)))
 
-  modules <- patliR:::.network_detect_modules(disconnected_g, min_module_size = 2)
-  all_nodes <- unlist(modules$members, use.names = FALSE)
-  expect_setequal(all_nodes, igraph::V(disconnected_g)$name)
-  expect_equal(length(all_nodes), length(unique(all_nodes)))
+  for (m in unique(summary_tbl$module_id)) {
+    n_nodes <- summary_tbl$n_nodes[summary_tbl$module_id == m]
+    curve_m <- curve[curve$module_id == m & curve$removal_strategy == "targeted", ]
+    expect_equal(nrow(curve_m), n_nodes + 1)
+    expect_equal(curve_m$largest_component_fraction[curve_m$n_removed == 0], 1)
+    post_removal <- curve_m$largest_component_fraction[curve_m$n_removed > 0]
+    expect_equal(mean(post_removal), summary_tbl$r_index[summary_tbl$module_id == m])
+  }
+})
+
+test_that("network_module_robustness() is reproducible given the same seed", {
+  proj <- .network_stats_test_setup()
+  proj1 <- network_module_robustness(proj, condition = "FLO-ET", seed = 123)
+  proj2 <- network_module_robustness(proj, condition = "FLO-ET", seed = 123)
+  expect_equal(
+    patliRResults(proj1, "network_module_robustness")$r_index,
+    patliRResults(proj2, "network_module_robustness")$r_index
+  )
+})
+
+test_that("network_module_robustness() rejects min_module_size < 2", {
+  proj <- .network_stats_test_setup()
+  expect_error(network_module_robustness(proj, condition = "FLO-ET", min_module_size = 1))
+})
+
+test_that("a legacy network_module_robustness.csv (pre-0.2.0 schema) is backfilled, not aborted", {
+  proj <- .network_stats_test_setup()
+  ## simulate an old-schema results bag + CSV
+  old <- data.frame(
+    condition = "FLO-ET", module_id = "M1", module_type = "cluster",
+    n_nodes = 14L, r_index = 0.2, seed_used = 1L, stringsAsFactors = FALSE
+  )
+  patliRResults(proj, "network_module_robustness") <- old
+  dir.create(file.path(projectDir(proj), "results"), showWarnings = FALSE, recursive = TRUE)
+  utils::write.csv(old, file.path(projectDir(proj), "results", "network_module_robustness.csv"), row.names = FALSE)
+
+  expect_no_error(
+    proj <- network_module_robustness(proj, condition = "LEA-ET", clustering = "leiden", seed = 1)
+  )
+  s <- patliRResults(proj, "network_module_robustness")
+  expect_true(all(c("clustering", "modularity", "resolution", "method_detail", "r_index_random") %in% names(s)))
+  ## the untouched legacy FLO-ET row is kept, backfilled NA on the new cols
+  flo <- s[s$condition == "FLO-ET", ]
+  expect_equal(nrow(flo), 1L)
+  expect_true(is.na(flo$clustering))
+})
+
+test_that("a mixed project (one < 2-node condition + one normal) does not fail the rbind, all clusterings", {
+  for (cl in c("leiden", "bipartite", "hdbscan")) {
+    if (cl == "bipartite" && !requireNamespace("bipartite", quietly = TRUE)) next
+    if (cl == "hdbscan" && !requireNamespace("dbscan", quietly = TRUE)) next
+    proj <- .network_stats_test_setup()
+    ## force one condition's cached graph to a single node
+    one_node <- igraph::make_empty_graph(n = 1, directed = FALSE)
+    one_node <- igraph::set_vertex_attr(one_node, "name", value = "solo")
+    one_node <- igraph::set_vertex_attr(one_node, "type", value = FALSE)
+    saveRDS(one_node, patliR:::.network_cache_path(proj, "LEA-AQ"))
+    expect_no_error(
+      proj <- network_module_robustness(proj, clustering = cl, seed = 1)
+    )
+    s <- patliRResults(proj, "network_module_robustness")
+    expect_true("FLO-ET" %in% s$condition)
+  }
 })

@@ -2,24 +2,29 @@
 % Please edit documentation in R/network_module_robustness.R
 \name{.network_detect_modules}
 \alias{.network_detect_modules}
-\title{Cluster a graph's nodes into modules via HDBSCAN over shortest-path
-distances, run separately per connected component (cross-component node
-pairs have infinite graph distance and are never meaningfully
-clusterable together -- see "Disconnected graphs are clustered per
-connected component" above), falling back to "one module = whole
-component" when a component is too small}
+\title{Cluster a graph's nodes into modules, run separately per connected
+component (cross-component node pairs are never meaningfully clusterable
+together), falling back to "one module = whole component" when a
+component has fewer than \code{min_component_size} nodes}
 \usage{
-.network_detect_modules(g, min_module_size)
+.network_detect_modules(
+  g,
+  clustering,
+  min_module_size = 2,
+  resolution = 1,
+  n_iterations = 5L,
+  min_component_size = 3L,
+  seed = NULL
+)
 }
 \value{
-\verb{list(members = named list of character vectors of node names, types = character vector, same length/order as }members\verb{, each }"cluster"\code{or}"noise"\verb{ -- see "HDBSCAN 'noise' points get their own module" above, log_message = character scalar)}.
+\verb{list(members = named list of character vectors of node names, types = character vector same length/order as }members\verb{, log_message = character scalar, warn_message = character scalar or NULL, modularity = numeric scalar (Newman Q / mean Barber Q_B / NA), method_detail = character scalar)}.
 }
 \description{
-Cluster a graph's nodes into modules via HDBSCAN over shortest-path
-distances, run separately per connected component (cross-component node
-pairs have infinite graph distance and are never meaningfully
-clusterable together -- see "Disconnected graphs are clustered per
-connected component" above), falling back to "one module = whole
-component" when a component is too small
+Dispatches to one of three per-component backends (\code{"leiden"},
+\code{"bipartite"}, \code{"hdbscan"}). The stochastic clustering step is wrapped in
+\code{.with_seed(seed)} here -- independently of the per-module
+\code{.with_seed(seed)} inside \code{.network_percolate()}, so \code{clustering = "hdbscan"} (which uses no RNG) still reproduces its historical output
+bit-for-bit.
 }
 \keyword{internal}

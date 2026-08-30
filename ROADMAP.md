@@ -93,9 +93,6 @@ guessing.
   consumes is now fixed upstream (`network_proximity(disease_genes =
   "disease_genes")`), so the `s_AB` work is no longer blocked by a fake
   disease module.
-- **`network_module_robustness()` clustering** — HDBSCAN on integer graph
-  distances degenerates to single-linkage; add modularity-based options
-  (`cluster_leiden`, or bipartite modularity) via the `clustering=` arg.
 - **`network_degeneracy()`** — swap `pathway_jaccard` for GO semantic
   similarity (GOSemSim, already a dependency); add a permutation null.
 - **`bias_audit()` categorical enrichment** — the half of the original

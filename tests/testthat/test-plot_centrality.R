@@ -30,16 +30,17 @@ test_that("plot_centrality() defaults to degree_norm when node_type = 'both', in
   expect_match(as.character(p$labels$y), "\\|T\\|")
 })
 
-test_that("plot_centrality() falls back to raw degree with a warning on a pre-normalisation result", {
+test_that("plot_centrality() falls back to raw degree with a warning when degree_norm has no values (normalize = FALSE)", {
   testthat::skip_if_not_installed("ggplot2")
 
   proj <- .network_stats_test_setup()
   proj <- network_centrality(proj, normalize = FALSE)
   expect_warning(
     p <- plot_centrality(proj, condition = "FLO-ET", save = FALSE),
-    "is absent"
+    "normalize = FALSE"
   )
-  expect_false("degree_norm" %in% names(p$data))
+  ## the degree_norm column exists but is all NA, so the plot uses raw degree
+  expect_true(all(is.na(p$data$degree_norm)))
   expect_identical(as.character(p$labels$y), "degree")
 })
 

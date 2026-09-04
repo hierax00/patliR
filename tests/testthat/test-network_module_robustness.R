@@ -239,6 +239,64 @@ test_that("clustering = 'bipartite' aborts on a non-bipartite graph before touch
   )
 })
 
+test_that("clustering = 'bipartite' runs end-to-end on a star (1xk) component (B1)", {
+  skip_if_not_installed("bipartite")
+  proj <- .network_stats_test_setup()
+  g <- .network_graph(proj, "FLO-ET")
+  ## add an isolated compound with two targets nothing else touches: a 1x2
+  ## star component. bipartite::computeModules() errors on a 1-row/1-col
+  ## biadjacency matrix, so this used to abort the whole run.
+  g2 <- igraph::add_vertices(
+    g, 3, attr = list(name = c("Cstar", "TstarA", "TstarB"), type = c(FALSE, TRUE, TRUE))
+  )
+  g2 <- igraph::add_edges(g2, c("Cstar", "TstarA", "Cstar", "TstarB"))
+  saveRDS(g2, patliR:::.network_cache_path(proj, "FLO-ET"))
+
+  for (cl in c("leiden", "bipartite", "hdbscan")) {
+    if (cl == "hdbscan") skip_if_not_installed("dbscan")
+    expect_no_error(
+      p <- network_module_robustness(proj, condition = "FLO-ET", clustering = cl, seed = 1)
+    )
+    s <- patliRResults(p, "network_module_robustness")
+    expect_equal(sum(s$n_nodes), igraph::vcount(g2))
+  }
+})
+
+test_that("clustering = 'leiden' with an NA edge weight does not collapse to all-singletons", {
+  ## behaviour is correct via delete_edge_attr; this pins it (Phase G item 18)
+  g <- .two_k33(bridge = TRUE)
+  igraph::E(g)$weight[1] <- NA
+  mods <- patliR:::.network_detect_modules(g, clustering = "leiden", seed = 1L)
+  expect_lt(length(mods$members), igraph::vcount(g))
+  expect_true(.blocks_separated(mods$members))
+})
+
+test_that("a near-.Machine$integer.max seed does not overflow the random sub-seed (S2)", {
+  proj <- .network_stats_test_setup()
+  expect_no_error(
+    network_module_robustness(
+      proj, condition = "FLO-ET", clustering = "leiden", attack = "both",
+      n_random = 4L, seed = .Machine$integer.max - 3L
+    )
+  )
+})
+
+test_that("network_module_robustness() rejects n_random < 2 for a random attack (S3)", {
+  proj <- .network_stats_test_setup()
+  expect_error(
+    network_module_robustness(proj, condition = "FLO-ET", attack = "random", n_random = 1L),
+    "n_random"
+  )
+  expect_error(
+    network_module_robustness(proj, condition = "FLO-ET", attack = "both", n_random = 1L),
+    "n_random"
+  )
+  ## still fine for the default targeted attack
+  expect_no_error(
+    network_module_robustness(proj, condition = "FLO-ET", n_random = 1L, seed = 1)
+  )
+})
+
 test_that(".network_detect_modules() falls back to a single module below min_component_size", {
   tiny_g <- igraph::graph_from_data_frame(
     data.frame(from = "a", to = "b", stringsAsFactors = FALSE), directed = FALSE

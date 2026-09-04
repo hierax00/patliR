@@ -28,24 +28,30 @@ NULL
 #'
 #' @section Hub score is eigenvector centrality here:
 #' The graph is **undirected**, so Kleinberg's hub and authority scores
-#' coincide and both equal the principal eigenvector of the adjacency
-#' matrix -- i.e. `hub_score` is eigenvector centrality, not a directional
-#' "hub vs. authority" distinction (that only exists on a directed graph).
-#' It is kept under the name `hub_score` for continuity with earlier
-#' versions. Implementation note: `igraph::hub_score()` is deprecated as of
-#' igraph 2.0.3; the code uses `igraph::hits_scores(g, weights = NA)$hub`,
-#' numerically the same.
+#' coincide and both equal the principal (Perron) eigenvector of the
+#' adjacency matrix -- i.e. `hub_score` is eigenvector centrality, not a
+#' directional "hub vs. authority" distinction (that only exists on a
+#' directed graph). It is kept under the name `hub_score` for continuity
+#' with earlier versions. Implementation note: `hub_score` is
+#' `igraph::eigen_centrality(g, weights = NA)$vector` (scaled to `max = 1`).
+#' Earlier versions used `igraph::hits_scores(g, weights = NA)$hub`, which
+#' on a two-mode graph has a **degenerate** top eigenspace -- ARPACK then
+#' returns an RNG-seeded arbitrary vector from it, so the column was not
+#' reproducible across runs. The Perron eigenvector is unique on each
+#' connected component, so `eigen_centrality()` is deterministic.
 #'
 #' On a **disconnected** graph the principal eigenvector of the whole
 #' adjacency matrix concentrates on the component with the largest spectral
 #' radius, so every node in every other component gets `hub_score` ~ 0
 #' regardless of how central it is *within its own component*. When
 #' `normalize = TRUE` an additional `hub_score_component` column is
-#' computed by running the HITS eigenvector **per connected component** and
-#' rescaling each to `max = 1` inside that component; `component_id`
-#' records which component each node is in. Use `hub_score` for a
-#' whole-graph ranking, `hub_score_component` to compare nodes across
-#' components of different size.
+#' computed by running `eigen_centrality()` **per connected component**
+#' (each scaled to `max = 1` inside that component); `component_id` records
+#' which component each node is in. Use `hub_score` for a whole-graph
+#' ranking, `hub_score_component` for *within-component relative*
+#' centrality (each component is independently rescaled, so a 2-node
+#' component's top node scores the same `1` as the giant component's). An
+#' isolated node gets `hub_score_component = NA`.
 #'
 #' @section Bipartite-aware normalisation (`normalize = TRUE`, the default):
 #' This is a two-mode (bipartite) graph -- a compound's degree ranges over
@@ -68,9 +74,13 @@ NULL
 #' Two per-condition constants, `n_compounds` and `n_targets`, are added so
 #' the normalisation is self-documenting in the CSV.
 #'
-#' `normalize = FALSE` reproduces the pre-normalisation output exactly
-#' (`condition`, `node_id`, `node_type`, plus one column per requested
-#' measure) -- an escape hatch for code that does `names(result)` checks.
+#' `normalize = FALSE` reproduces the pre-normalisation *values* -- the raw
+#' `degree` / `betweenness` / `hub_score` columns are unchanged and every
+#' `_norm` / `component_id` / `n_compounds` / `n_targets` column is set to
+#' `NA`. The column *set* is deliberately the same as `normalize = TRUE`
+#' (for the requested `measures`), so a `normalize = FALSE` run still
+#' upserts cleanly onto a project whose stored table was produced with
+#' `normalize = TRUE`.
 #'
 #' @section Comparable across `node_type`, not across conditions:
 #' `|C|` and `|T|` are per-condition constants, so a `_norm` value is
@@ -84,18 +94,21 @@ NULL
 #' @inheritParams network_build
 #' @param measures Character vector, any of `"degree"`, `"betweenness"`,
 #'   `"hub_score"` (default: all three).
-#' @param normalize Logical (default `TRUE`). When `TRUE`, adds the
-#'   bipartite-aware `_norm` columns for whichever `measures` were
-#'   requested, plus `hub_score_component` / `component_id` (if
+#' @param normalize Logical (default `TRUE`). Controls whether the
+#'   bipartite-aware columns are *computed*: the `_norm` sibling for each
+#'   requested measure, plus `hub_score_component` / `component_id` (if
 #'   `"hub_score"` was requested) and the `n_compounds` / `n_targets`
-#'   constants. When `FALSE`, the output is exactly the raw columns.
+#'   constants. Those columns are emitted either way -- with `normalize =
+#'   FALSE` they are all `NA` -- so the stored schema does not depend on
+#'   this flag.
 #'
 #' @return The updated `proj`, with a `network_centrality` entry in
 #'   [patliRResults()] (columns `condition`, `node_id`, `node_type`
-#'   (`"compound"`/`"target"`), one column per requested measure, and -- when
-#'   `normalize = TRUE` -- `degree_norm` / `betweenness_norm` /
-#'   `hub_score_component` / `component_id` for the requested measures plus
-#'   `n_compounds` / `n_targets`), also written to
+#'   (`"compound"`/`"target"`), one column per requested measure, plus
+#'   `degree_norm` / `betweenness_norm` / `hub_score_component` /
+#'   `component_id` for the requested measures and the `n_compounds` /
+#'   `n_targets` constants -- computed when `normalize = TRUE`, `NA` when
+#'   `normalize = FALSE`), also written to
 #'   `results/network_centrality.csv`.
 #'
 #' @references
@@ -182,43 +195,76 @@ network_centrality <- function(proj, condition = NULL,
 
   if ("degree" %in% measures) df$degree <- deg
   if ("betweenness" %in% measures) df$betweenness <- btw
-  if ("hub_score" %in% measures) df$hub_score <- igraph::hits_scores(g, weights = NA)$hub
-
-  if (!normalize) return(df)
+  if ("hub_score" %in% measures) df$hub_score <- .network_hub_score_whole(g)
 
   ## --- Borgatti & Everett (1997) bipartite normalisation --------------
+  ## The `_norm` / `component_id` / `n_compounds` / `n_targets` columns are
+  ## *always* emitted for whichever `measures` were requested, so the stored
+  ## schema does not depend on `normalize` and a later `normalize = FALSE`
+  ## run upserts cleanly onto a table produced with `normalize = TRUE`
+  ## (rather than tripping `.network_upsert()`'s column-removal guard).
+  ## `normalize` only controls whether the columns are computed or left NA.
+  nn <- length(node_ids)
+
   if ("degree" %in% measures) {
-    dn <- rep(NA_real_, length(node_ids))
-    if (n_targ > 0) dn[!is_target] <- deg[!is_target] / n_targ   # compound / |T|
-    if (n_comp > 0) dn[is_target]  <- deg[is_target]  / n_comp   # target   / |C|
+    dn <- rep(NA_real_, nn)
+    if (normalize) {
+      if (n_targ > 0) dn[!is_target] <- deg[!is_target] / n_targ   # compound / |T|
+      if (n_comp > 0) dn[is_target]  <- deg[is_target]  / n_comp   # target   / |C|
+    }
     df$degree_norm <- dn
   }
 
   if ("betweenness" %in% measures) {
-    bn     <- rep(NA_real_, length(node_ids))
-    bmax_u <- .network_bipartite_bmax(n_comp, n_targ)   # compound mode
-    bmax_v <- .network_bipartite_bmax(n_targ, n_comp)   # target mode
-    if (isTRUE(is.finite(bmax_u)) && bmax_u > 0) bn[!is_target] <- btw[!is_target] / bmax_u
-    if (isTRUE(is.finite(bmax_v)) && bmax_v > 0) bn[is_target]  <- btw[is_target]  / bmax_v
-    df$betweenness_norm <- bn
-    zero_u <- isTRUE(is.finite(bmax_u)) && bmax_u == 0 && n_comp > 0
-    zero_v <- isTRUE(is.finite(bmax_v)) && bmax_v == 0 && n_targ > 0
-    if (zero_u || zero_v) {
-      cli::cli_inform(c(
-        "i" = "Condition {.val {cond}}: bipartite {.field B_max} is 0 for a mode of size 1; {.field betweenness_norm} is {.val NA} for that mode."
-      ))
+    bn <- rep(NA_real_, nn)
+    if (normalize) {
+      bmax_u <- .network_bipartite_bmax(n_comp, n_targ)   # compound mode
+      bmax_v <- .network_bipartite_bmax(n_targ, n_comp)   # target mode
+      if (isTRUE(is.finite(bmax_u)) && bmax_u > 0) bn[!is_target] <- btw[!is_target] / bmax_u
+      if (isTRUE(is.finite(bmax_v)) && bmax_v > 0) bn[is_target]  <- btw[is_target]  / bmax_v
+      zero_u <- isTRUE(is.finite(bmax_u)) && bmax_u == 0 && n_comp > 0
+      zero_v <- isTRUE(is.finite(bmax_v)) && bmax_v == 0 && n_targ > 0
+      if (zero_u || zero_v) {
+        na_mode <- paste(c(if (zero_u) "compound", if (zero_v) "target"), collapse = " and ")
+        cli::cli_inform(c(
+          "i" = "Condition {.val {cond}}: {.field betweenness_norm} is {.val NA} for the {na_mode} mode -- the opposite mode has size 1, so no node of that mode can lie on a shortest path between two others (Borgatti & Everett {.field B_max} = 0)."
+        ))
+      }
     }
+    df$betweenness_norm <- bn
   }
 
   if ("hub_score" %in% measures) {
-    hc <- .network_hub_score_component(g)
-    df$hub_score_component <- hc$hub
-    df$component_id        <- hc$membership
+    if (normalize) {
+      hc <- .network_hub_score_component(g)
+      df$hub_score_component <- hc$hub
+      df$component_id        <- hc$membership
+    } else {
+      df$hub_score_component <- rep(NA_real_, nn)
+      df$component_id        <- rep(NA_integer_, nn)
+    }
   }
 
-  df$n_compounds <- n_comp
-  df$n_targets   <- n_targ
+  df$n_compounds <- if (normalize) n_comp else NA_integer_
+  df$n_targets   <- if (normalize) n_targ else NA_integer_
   df
+}
+
+#' Whole-graph hub score = Perron eigenvector centrality
+#'
+#' @description
+#' `igraph::eigen_centrality(g, weights = NA)$vector`. The graph is
+#' undirected so this is the principal eigenvector of the adjacency matrix
+#' (Kleinberg's hub and authority scores coincide with it). Replaces
+#' `igraph::hits_scores()$hub`, which on a bipartite graph draws an
+#' RNG-seeded arbitrary vector from a degenerate top eigenspace and so
+#' returned different values on every run. On a disconnected graph the
+#' vector still concentrates on the component with the largest spectral
+#' radius -- use `hub_score_component` for a per-component ranking.
+#' @keywords internal
+.network_hub_score_whole <- function(g) {
+  if (igraph::ecount(g) == 0L) return(rep(NA_real_, igraph::vcount(g)))
+  suppressWarnings(igraph::eigen_centrality(g, weights = NA)$vector)
 }
 
 #' Borgatti & Everett (1997) maximum betweenness for one mode of a
@@ -249,13 +295,19 @@ network_centrality <- function(proj, condition = NULL,
   )
 }
 
-#' HITS hub score recomputed per connected component
+#' Eigenvector (Perron) centrality recomputed per connected component
 #'
 #' @description
 #' Fixes the disconnected-graph pathology of a whole-graph principal
-#' eigenvector: runs `igraph::hits_scores()` on each connected component
-#' and rescales the hub vector to `max = 1` within that component. A
-#' singleton (isolated node) component gets `hub = 1` for its one node.
+#' eigenvector: runs `igraph::eigen_centrality(weights = NA)` on each
+#' connected component (already scaled to `max = 1` within the component by
+#' igraph >= 2.1.1). Perron-Frobenius guarantees a *connected* graph's
+#' adjacency matrix has a simple top eigenvalue with a unique strictly
+#' positive eigenvector, so this is deterministic -- unlike
+#' `igraph::hits_scores()$hub` on a bipartite component, whose top
+#' eigenspace is degenerate and whose returned vector was RNG-seeded. An
+#' isolated node (edgeless component) gets `NA` -- eigenvector centrality is
+#' undefined with no edges.
 #'
 #' @param g An `igraph` object.
 #' @return `list(membership = <integer>, hub = <double>)`, both in `V(g)`
@@ -269,9 +321,13 @@ network_centrality <- function(proj, condition = NULL,
   for (k in seq_len(comp$no)) {
     idx <- which(comp$membership == k)
     sub <- igraph::induced_subgraph(g, idx)
-    h   <- igraph::hits_scores(sub, weights = NA)$hub
-    mx  <- suppressWarnings(max(h))
-    hub[idx] <- if (isTRUE(is.finite(mx)) && mx > 0) h / mx else rep(1, length(idx))
+    if (igraph::ecount(sub) == 0L) {
+      hub[idx] <- NA_real_
+      next
+    }
+    h  <- suppressWarnings(igraph::eigen_centrality(sub, weights = NA)$vector)
+    mx <- suppressWarnings(max(h))
+    hub[idx] <- if (isTRUE(is.finite(mx)) && mx > 0) h / mx else NA_real_
   }
   list(membership = as.integer(comp$membership), hub = hub)
 }

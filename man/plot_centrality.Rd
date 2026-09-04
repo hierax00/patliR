@@ -34,9 +34,10 @@ the \verb{_norm} variants, \code{normalize = TRUE}) in the \code{\link[=network_
 call that produced it. When \code{measure} is not supplied \strong{and}
 \code{node_type = "both"}, it defaults to \code{"degree_norm"} (raw \code{degree} is
 not comparable between compounds and targets; Borgatti & Everett
-1997), falling back to \code{"degree"} with a warning if the normalised
-column is absent (a result from before normalisation). Otherwise the
-default is \code{"degree"}.}
+1997), falling back to \code{"degree"} with a warning if no normalised
+\code{degree_norm} value is available for the conditions in scope (a result
+from before patliR 0.2.0, or one produced with \code{normalize = FALSE}).
+Otherwise the default is \code{"degree"}.}
 
 \item{node_type}{\code{"both"} (default), \code{"compound"}, or \code{"target"} --
 restrict to one side of the bipartite graph.}

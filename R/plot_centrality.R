@@ -20,9 +20,10 @@ NULL
 #'   call that produced it. When `measure` is not supplied **and**
 #'   `node_type = "both"`, it defaults to `"degree_norm"` (raw `degree` is
 #'   not comparable between compounds and targets; Borgatti & Everett
-#'   1997), falling back to `"degree"` with a warning if the normalised
-#'   column is absent (a result from before normalisation). Otherwise the
-#'   default is `"degree"`.
+#'   1997), falling back to `"degree"` with a warning if no normalised
+#'   `degree_norm` value is available for the conditions in scope (a result
+#'   from before patliR 0.2.0, or one produced with `normalize = FALSE`).
+#'   Otherwise the default is `"degree"`.
 #' @param node_type `"both"` (default), `"compound"`, or `"target"` --
 #'   restrict to one side of the bipartite graph.
 #' @param top_n Integer, default `20`. Only the `top_n` highest-`measure`
@@ -81,7 +82,8 @@ plot_centrality <- function(proj, condition = NULL,
     cli::cli_abort(c("No {.val network_centrality} entry in {.arg proj}.", "i" = "Run {.fn network_centrality} first."))
   }
   if (!measure_supplied && node_type == "both") {
-    if ("degree_norm" %in% names(cent)) {
+    in_scope <- cent[cent$condition %in% conditions, , drop = FALSE]
+    if ("degree_norm" %in% names(cent) && any(!is.na(in_scope$degree_norm))) {
       measure <- "degree_norm"
       cli::cli_inform(c(
         "i" = "Defaulting {.arg measure} to {.val degree_norm}: with {.arg node_type} = {.val both}, raw {.val degree} is not comparable between compounds and targets (Borgatti & Everett 1997)."
@@ -89,7 +91,7 @@ plot_centrality <- function(proj, condition = NULL,
     } else {
       measure <- "degree"
       cli::cli_warn(c(
-        "!" = "{.arg node_type} is {.val both} but {.val degree_norm} is absent (result predates bipartite normalisation); using raw {.val degree}, which is not comparable across node types.",
+        "!" = "{.arg node_type} is {.val both} but no bipartite-normalised {.val degree_norm} is available (this result predates patliR 0.2.0, or was produced with {.code normalize = FALSE}); using raw {.val degree}, which is not comparable across node types.",
         "i" = "Re-run {.fn network_centrality} with {.code normalize = TRUE}."
       ))
     }

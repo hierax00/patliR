@@ -6,27 +6,36 @@
   `clustering` argument now defaults to **`"leiden"`** (was `"hdbscan"`).
   Modules are detected by `igraph::cluster_leiden()` maximising Newman
   modularity, so every module partition — and therefore every `r_index` —
-  differs from earlier versions. `clustering = "hdbscan"` still works
-  (unchanged output for the same seed) but emits a one-time note that it is
-  a density heuristic on an integer metric; it is not deprecated.
+  differs from earlier versions. `clustering = "hdbscan"` still works and
+  emits a one-time note that it is a density heuristic on an integer
+  metric; it is not deprecated. Its module partitions and every `r_index`
+  are unchanged for the same seed, but `module_type` on a 3-node component
+  now reflects the backend's own verdict (`"noise"` rather than the old
+  method-agnostic `"cluster"`): the single-module fallback threshold moved
+  from `< 4` nodes to `< min_component_size` (default 3), so a 3-node
+  component is now clustered rather than passed through.
 - **New `clustering = "bipartite"`** — `bipartite::computeModules(method =
   "Beckett")`, maximising Barber (2007)'s bipartite modularity `Q_B`. Only
   valid on the genuine two-mode compound–target graph (aborts otherwise).
-  Adds `bipartite` to `Suggests`; note it attaches `sna` and `vegan`, which
-  mask some `igraph` functions for the rest of the session.
+  A star / single-mode component within the graph falls back to a single
+  module (`computeModules()` errors on a `1×k` biadjacency matrix). Adds
+  `bipartite` to `Suggests` — loaded namespace-only, so it does **not**
+  attach `sna`/`vegan` or mask any `igraph` function.
 - Clustering is run **unweighted**: for Leiden the `weight` edge attribute
   is *deleted* before clustering rather than passed as `weights = NA`
   (which would leave `strength()` reading it for the modularity null model
   and silently return all-singletons on any `NA` probability).
 - **New `attack = c("targeted", "random", "both")`** (default
-  `"targeted"`). `"random"` averages `n_random` (default 20) uniformly
-  random removal orders; `network_robustness_curve` gains
+  `"targeted"`). `"random"` averages `n_random` (default 20; **must be
+  `>= 2`** when `attack` includes `"random"`) uniformly random removal
+  orders under overflow-safe
+  per-`(module, replicate)` sub-seeds; `network_robustness_curve` gains
   `removal_strategy`, `largest_component_sd`, `n_replicates`. The summary
   table gains `r_index_random` and `n_random` alongside the unchanged
   `r_index` (targeted).
 - **New third output slot `network_module_membership`** — one row per node
-  (`condition`, `node_id`, `node_type`, `module_id`, `module_type`),
-  required by `plot_network_layers(colour_by = "module")`.
+  (`condition`, `node_id`, `node_type`, `module_id`, `module_type`), to be
+  consumed by a future `plot_network_layers()` module-colour mode.
 - The summary table gains `clustering`, `modularity` (Newman `Q` / mean
   Barber `Q_B` / `NA`), `resolution`, and `method_detail`. Rerunning with a
   different `clustering` **replaces** the condition's rows (the `clustering`
@@ -89,23 +98,38 @@
   (Borgatti & Everett 1997, *Social Networks* 19:243; `B_max` cross-checked
   against NetworkX's `bipartite.betweenness_centrality` -- no factor-of-two
   applied, `igraph::betweenness()` already counts each unordered pair
-  once). It also adds `hub_score_component` (HITS hub recomputed per
-  connected component, rescaled to `max = 1` within each -- fixes the
+  once). It also adds `hub_score_component` (eigenvector centrality
+  recomputed per connected component, each scaled to `max = 1` -- fixes the
   disconnected-graph case where every node outside the largest component
   got `hub_score` ~ 0) with a `component_id` label, and the per-condition
   constants `n_compounds` / `n_targets`. Edge cases: an empty mode gives
   `_norm = NA` (never `NaN`/`0`); `B_max == 0` (a mode of size 1) gives
-  `NA` with a log line. `normalize = FALSE` reproduces the previous raw
-  column set exactly. All new columns are declared in the empty-row
-  constructor, so `results/network_centrality.csv` stays column-stable
-  across zero-row reruns; `.network_upsert()` back-fills them on a project
-  whose CSV predates this change. `_norm` values are **not** comparable
-  across conditions of different size (documented like the R-index).
+  `NA` with a log line; an isolated node gives `hub_score_component = NA`.
+  `normalize = FALSE` now emits the **same columns** as `normalize = TRUE`
+  (the `_norm` / `component_id` / count columns just come out `NA`), so it
+  no longer aborts `.network_upsert()` when run against a project that
+  already holds a normalised table. All columns are declared in the
+  empty-row constructor, so `results/network_centrality.csv` stays
+  column-stable across zero-row reruns; `.network_upsert()` back-fills them
+  on a project whose CSV predates this change. `_norm` values are **not**
+  comparable across conditions of different size (documented like the
+  R-index).
+- **`hub_score` is now `igraph::eigen_centrality()`, not
+  `igraph::hits_scores()$hub`.** On a two-mode graph the HITS hub is the
+  principal eigenvector of a matrix with a degenerate top eigenspace, from
+  which ARPACK returns an RNG-seeded arbitrary vector -- so `hub_score` (and
+  the new `hub_score_component`) took different values on every run,
+  breaking the pure-function contract. The Perron eigenvector is unique on
+  each connected component, so `eigen_centrality()` is deterministic; on
+  an undirected graph it is exactly the quantity the roxygen already
+  claimed `hub_score` to be.
 - **`plot_centrality()`**: `measure` accepts `"degree_norm"` /
   `"betweenness_norm"`; when `measure` is not supplied and
   `node_type = "both"` it now defaults to `"degree_norm"` (with a
   `cli_inform` naming the reason), falling back to `"degree"` with a
-  warning on results produced before normalisation. The value axis states
+  warning when no `degree_norm` value is available for the conditions in
+  scope (a pre-0.2.0 result, or one built with `normalize = FALSE`). The
+  value axis states
   the normaliser (e.g. `/ |T| = 412`). Two nodes that resolve to the same
   gene symbol no longer collapse into one bar -- the accession is appended
   on collision.

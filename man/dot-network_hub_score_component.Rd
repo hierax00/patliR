@@ -2,7 +2,7 @@
 % Please edit documentation in R/network_centrality.R
 \name{.network_hub_score_component}
 \alias{.network_hub_score_component}
-\title{HITS hub score recomputed per connected component}
+\title{Eigenvector (Perron) centrality recomputed per connected component}
 \usage{
 .network_hub_score_component(g)
 }
@@ -15,8 +15,14 @@ order.
 }
 \description{
 Fixes the disconnected-graph pathology of a whole-graph principal
-eigenvector: runs \code{igraph::hits_scores()} on each connected component
-and rescales the hub vector to \code{max = 1} within that component. A
-singleton (isolated node) component gets \code{hub = 1} for its one node.
+eigenvector: runs \code{igraph::eigen_centrality(weights = NA)} on each
+connected component (already scaled to \code{max = 1} within the component by
+igraph >= 2.1.1). Perron-Frobenius guarantees a \emph{connected} graph's
+adjacency matrix has a simple top eigenvalue with a unique strictly
+positive eigenvector, so this is deterministic -- unlike
+\code{igraph::hits_scores()$hub} on a bipartite component, whose top
+eigenspace is degenerate and whose returned vector was RNG-seeded. An
+isolated node (edgeless component) gets \code{NA} -- eigenvector centrality is
+undefined with no edges.
 }
 \keyword{internal}

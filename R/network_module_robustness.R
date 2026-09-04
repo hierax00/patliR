@@ -76,7 +76,9 @@ NULL
 #'   (`largest_component_sd` its SD); `r_index_random` is the mean over
 #'   replicates of each replicate's R-index (equivalently
 #'   `mean(mean_curve[-1])`, since the mean is linear). Each replicate draws
-#'   under a derived sub-seed `seed + 1000 * module_index + replicate`.
+#'   under a derived sub-seed combining `seed`, the module index and the
+#'   replicate index (computed overflow-safe, so a near-`.Machine$integer.max`
+#'   seed does not wrap to `NA`).
 #' * `"both"` -- both; `plot_robustness()` then draws the two-curve
 #'   percolation figure (Albert, Jeong & Barabasi 2000).
 #'
@@ -116,9 +118,10 @@ NULL
 #'   treated as a single module by every backend (the method-agnostic
 #'   fallback). Default `3`.
 #' @param n_random Number of random removal orders averaged for `attack =
-#'   "random"`/`"both"`. Default `20`. A single random draw inverts the
-#'   targeted-vs-random conclusion for a non-trivial fraction of modules, so
-#'   the baseline is stored as an aggregate, never one replicate.
+#'   "random"`/`"both"`. Default `20`; **must be `>= 2`** for those attacks
+#'   (a single draw has no SD and is not a baseline -- it inverts the
+#'   targeted-vs-random conclusion for a non-trivial fraction of modules),
+#'   so the baseline is always stored as an aggregate, never one replicate.
 #' @param seed Integer seed covering (independently) the stochastic
 #'   clustering step (Leiden / Beckett label propagation) and the
 #'   percolation tie-break / random orders. Always set, exposed and logged.
@@ -139,8 +142,8 @@ NULL
 #'     targeted), `n_replicates` (`1` for targeted, `n_random` for random).
 #'   * `network_module_membership` -- one row per node: `condition`,
 #'     `node_id`, `node_type` (`"compound"`/`"target"`), `module_id`,
-#'     `module_type`. Required by `plot_network_layers(colour_by =
-#'     "module")`.
+#'     `module_type`. To be consumed by a future `plot_network_layers()`
+#'     module-colour mode (spec 3.2).
 #'   All three written to their matching `results/*.csv`. Rerunning with a
 #'   different `clustering` **replaces** the condition's rows (the
 #'   `clustering` column records which method produced them); it does not
@@ -202,6 +205,12 @@ network_module_robustness <- function(proj, condition = NULL,
   stopifnot(is.numeric(n_random), length(n_random) == 1, n_random >= 1)
   n_iterations <- as.integer(n_iterations)
   n_random <- as.integer(n_random)
+  if (attack %in% c("random", "both") && n_random < 2L) {
+    cli::cli_abort(c(
+      "{.arg n_random} must be >= 2 when {.arg attack} includes {.val random}.",
+      "i" = "A single random removal order is not a baseline -- its per-step SD is undefined ({.field largest_component_sd} would be all {.val NA}). The default is 20."
+    ))
+  }
 
   if (clustering == "hdbscan") {
     cli::cli_inform(c(
@@ -222,7 +231,7 @@ network_module_robustness <- function(proj, condition = NULL,
   if (clustering == "bipartite" && !requireNamespace("bipartite", quietly = TRUE)) {
     cli::cli_abort(c(
       "{.fn network_module_robustness} with {.arg clustering = \"bipartite\"} needs the {.pkg bipartite} package (CRAN), not installed.",
-      "i" = "{.code install.packages(\"bipartite\")} -- pure CRAN, but it attaches {.pkg sna} and {.pkg vegan}, which mask some {.pkg igraph} functions for the rest of the session."
+      "i" = "{.code install.packages(\"bipartite\")} -- pure CRAN, no Bioconductor/Java involved. patliR only ever loads its namespace ({.fn requireNamespace}), which does not attach anything."
     ))
   }
 
@@ -300,7 +309,7 @@ network_module_robustness <- function(proj, condition = NULL,
         )
       }
       if (attack %in% c("random", "both")) {
-        perc_r <- .network_percolate_random(sub_g, seed = seed + 1000L * i, n_random = n_random)
+        perc_r <- .network_percolate_random(sub_g, seed = .derive_seed(seed, 1000 * i), n_random = n_random)
         r_index_random <- perc_r$r_index
         strat_curves$random <- data.frame(
           n_removed = seq_along(perc_r$curve) - 1L,
@@ -518,12 +527,18 @@ network_module_robustness <- function(proj, condition = NULL,
   node_names <- igraph::V(g)$name
   mat <- igraph::as_biadjacency_matrix(g, sparse = FALSE)
 
-  if (nrow(mat) == 0L || ncol(mat) == 0L) {
+  ## bipartite::computeModules() errors on any biadjacency matrix with a
+  ## dimension < 2 (a star / single-mode component), not only a zero
+  ## dimension -- the intermediate web degrades to a vector and the
+  ## moduleWeb S4 slot assignment refuses it. A star has no bipartite
+  ## module structure anyway, so fall back to a single module and log.
+  if (nrow(mat) < 2L || ncol(mat) < 2L) {
     return(list(
       members = stats::setNames(list(node_names), "M1"), types = "cluster",
       log_message = paste0(
-        "component with only one mode present (", nrow(mat), " compound(s), ", ncol(mat),
-        " target(s)); treated as a single module instead of running bipartite modularity"
+        "component with ", nrow(mat), " compound(s) and ", ncol(mat),
+        " target(s) (a star / single-mode component); treated as a single module ",
+        "instead of running bipartite modularity"
       ),
       warn_message = NULL, qb = NA_real_
     ))
@@ -699,10 +714,12 @@ network_module_robustness <- function(proj, condition = NULL,
 #' failure. A single random draw has enough variance to invert the
 #' comparison for a non-trivial fraction of modules, so the stored curve is
 #' the mean over `n_random` replicates and `curve_sd` its per-step SD. Each
-#' replicate `r` draws its order under `.with_seed(seed + r)` (the caller
-#' passes `seed + 1000 * module_index`, so replicates are also distinct
-#' across modules). `r_index` is `mean(mean_curve[-1])`, which by linearity
-#' equals the mean over replicates of each replicate's Schneider R-index.
+#' replicate `r` draws its order under `.with_seed(.derive_seed(seed, r))`
+#' (the caller passes a per-module-distinct `seed`, so replicates are also
+#' distinct across modules; `.derive_seed()` keeps the arithmetic clear of
+#' integer overflow). `r_index` is `mean(mean_curve[-1])`, which by
+#' linearity equals the mean over replicates of each replicate's Schneider
+#' R-index.
 #' @return `list(curve, curve_sd, r_index, n_replicates)`.
 #' @keywords internal
 .network_percolate_random <- function(g, seed, n_random) {
@@ -715,7 +732,7 @@ network_module_robustness <- function(proj, condition = NULL,
   rep_curves <- matrix(NA_real_, nrow = n_random, ncol = n + 1)
 
   for (r in seq_len(n_random)) {
-    draw_seed <- .with_seed(seed + r)
+    draw_seed <- .with_seed(.derive_seed(seed, r))
     removal_order <- sample(node_names)
     draw_seed()
 
@@ -737,6 +754,20 @@ network_module_robustness <- function(proj, condition = NULL,
   mean_curve <- colMeans(rep_curves)
   sd_curve <- apply(rep_curves, 2, stats::sd)
   list(curve = mean_curve, curve_sd = sd_curve, r_index = mean(mean_curve[-1]), n_replicates = n_random)
+}
+
+#' Combine a base seed with an integer offset without integer overflow
+#'
+#' @description
+#' `base + offset` is plain integer arithmetic in R and overflows to `NA`
+#' (then `set.seed(NA)` errors) when `base` is near `.Machine$integer.max`
+#' -- which `sample.int(.Machine$integer.max, 1)` can draw for the default
+#' seed. The addition is done in double and wrapped back into valid
+#' integer range, so a given top-level `seed` still maps deterministically
+#' to the same per-replicate sub-seeds.
+#' @keywords internal
+.derive_seed <- function(base, offset) {
+  as.integer((as.double(base) + as.double(offset)) %% .Machine$integer.max)
 }
 
 #' Temporarily set the RNG seed, returning a closure that restores the

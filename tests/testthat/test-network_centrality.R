@@ -119,7 +119,7 @@ test_that("B_max is NA for an empty opposite mode; degree_norm is NA (not NaN/0)
   expect_false(is.nan(df$degree_norm))
 })
 
-test_that("hub_score_component is 1 for at least one node in every connected component", {
+test_that("hub_score_component: max 1 within each edge-bearing component, NA for an isolated node", {
   ## three disjoint compound-target edges + one isolated compound = 4 components
   g <- .bip_graph(
     c("C1", "C2", "C3", "C4"), c("T1", "T2", "T3"),
@@ -127,15 +127,69 @@ test_that("hub_score_component is 1 for at least one node in every connected com
   )
   df <- patliR:::.network_centrality_one(g, "x", "hub_score", TRUE)
   expect_equal(length(unique(df$component_id)), 4L)
-  comp_max <- tapply(df$hub_score_component, df$component_id, max)
+  ## isolated compound C4 -> NA (eigenvector centrality is undefined with no edges)
+  expect_true(is.na(df$hub_score_component[df$node_id == "C4"]))
+  non_iso <- df[df$node_id != "C4", ]
+  comp_max <- tapply(non_iso$hub_score_component, non_iso$component_id, max)
   expect_true(all(abs(comp_max - 1) < 1e-9))
 })
 
-test_that("network_centrality(normalize = FALSE) reproduces the pre-normalisation column set exactly", {
+test_that("hub_score / hub_score_component are deterministic across RNG seeds (B1)", {
+  ## igraph::hits_scores()$hub on a bipartite graph drew an RNG-seeded
+  ## arbitrary vector from a degenerate eigenspace, so two runs of the same
+  ## pipeline under different seeds gave hub scores differing by the full
+  ## 0..1 range. eigen_centrality() (Perron vector) is unique per component.
+  proj <- .network_stats_test_setup()
+  set.seed(1L)
+  r1 <- patliRResults(network_centrality(proj, condition = "FLO-ET"), "network_centrality")
+  set.seed(20260903L)
+  r2 <- patliRResults(network_centrality(proj, condition = "FLO-ET"), "network_centrality")
+  ## ARPACK contributes ~1e-15 float noise, never the 0<->1 swing of the bug
+  expect_equal(r1$hub_score, r2$hub_score, tolerance = 1e-8)
+  expect_equal(r1$hub_score_component, r2$hub_score_component, tolerance = 1e-8)
+  expect_identical(round(r1$hub_score, 8), round(r2$hub_score, 8))
+})
+
+test_that("hub_score_component is strictly positive for both modes of a connected bipartite graph (B1 non-degeneracy)", {
+  n <- 3; m <- 4
+  comp <- paste0("C", seq_len(n)); targ <- paste0("T", seq_len(m))
+  g <- .bip_graph(comp, targ, expand.grid(c = comp, t = targ, stringsAsFactors = FALSE))
+  df <- patliR:::.network_centrality_one(g, "x", "hub_score", TRUE)
+  ## the old HITS call put one entire mode at exactly 0 on some seeds
+  expect_true(all(df$hub_score_component > 0))
+})
+
+test_that("network_centrality(normalize = FALSE) keeps the raw values and leaves every normalisation column NA", {
   proj <- .network_stats_test_setup()
   proj <- network_centrality(proj, condition = "FLO-ET", normalize = FALSE)
   result <- patliRResults(proj, "network_centrality")
-  expect_setequal(names(result), c("condition", "node_id", "node_type", "degree", "betweenness", "hub_score"))
+  ## schema does not depend on `normalize`
+  expect_true(all(c(
+    "condition", "node_id", "node_type", "degree", "betweenness", "hub_score",
+    "degree_norm", "betweenness_norm", "hub_score_component", "component_id",
+    "n_compounds", "n_targets"
+  ) %in% names(result)))
+  ## raw columns unchanged
+  expect_true(all(is.finite(result$degree)))
+  ## normalisation columns all NA
+  for (col in c("degree_norm", "betweenness_norm", "hub_score_component",
+                "component_id", "n_compounds", "n_targets")) {
+    expect_true(all(is.na(result[[col]])), info = col)
+  }
+})
+
+test_that("network_centrality(normalize = FALSE) upserts cleanly onto a normalised table (S3)", {
+  proj <- .network_stats_test_setup()
+  proj <- network_centrality(proj)                       # normalize = TRUE, all conditions
+  expect_no_error(
+    proj <- network_centrality(proj, condition = "FLO-ET", normalize = FALSE)
+  )
+  result <- patliRResults(proj, "network_centrality")
+  flo <- result[result$condition == "FLO-ET", ]
+  expect_true(all(is.na(flo$degree_norm)))
+  ## the other conditions keep their normalised values
+  other <- result[result$condition != "FLO-ET", ]
+  expect_true(any(!is.na(other$degree_norm)))
 })
 
 test_that("n_compounds + n_targets == vcount(g) for every condition", {

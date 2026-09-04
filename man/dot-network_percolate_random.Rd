@@ -16,9 +16,11 @@ Schneider et al. (2011) always contrast targeted attack against random
 failure. A single random draw has enough variance to invert the
 comparison for a non-trivial fraction of modules, so the stored curve is
 the mean over \code{n_random} replicates and \code{curve_sd} its per-step SD. Each
-replicate \code{r} draws its order under \code{.with_seed(seed + r)} (the caller
-passes \code{seed + 1000 * module_index}, so replicates are also distinct
-across modules). \code{r_index} is \code{mean(mean_curve[-1])}, which by linearity
-equals the mean over replicates of each replicate's Schneider R-index.
+replicate \code{r} draws its order under \code{.with_seed(.derive_seed(seed, r))}
+(the caller passes a per-module-distinct \code{seed}, so replicates are also
+distinct across modules; \code{.derive_seed()} keeps the arithmetic clear of
+integer overflow). \code{r_index} is \code{mean(mean_curve[-1])}, which by
+linearity equals the mean over replicates of each replicate's Schneider
+R-index.
 }
 \keyword{internal}

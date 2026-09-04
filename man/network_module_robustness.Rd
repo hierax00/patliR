@@ -50,9 +50,10 @@ built-in default). Default \code{2}. Ignored unless \code{clustering = "hdbscan"
 treated as a single module by every backend (the method-agnostic
 fallback). Default \code{3}.}
 
-\item{n_random}{Number of random removal orders averaged for \code{attack = "random"}/\code{"both"}. Default \code{20}. A single random draw inverts the
-targeted-vs-random conclusion for a non-trivial fraction of modules, so
-the baseline is stored as an aggregate, never one replicate.}
+\item{n_random}{Number of random removal orders averaged for \code{attack = "random"}/\code{"both"}. Default \code{20}; \strong{must be \verb{>= 2}} for those attacks
+(a single draw has no SD and is not a baseline -- it inverts the
+targeted-vs-random conclusion for a non-trivial fraction of modules),
+so the baseline is always stored as an aggregate, never one replicate.}
 
 \item{seed}{Integer seed covering (independently) the stochastic
 clustering step (Leiden / Beckett label propagation) and the
@@ -76,7 +77,8 @@ for hdbscan -- repeated down the condition's rows), \code{resolution},
 targeted), \code{n_replicates} (\code{1} for targeted, \code{n_random} for random).
 \item \code{network_module_membership} -- one row per node: \code{condition},
 \code{node_id}, \code{node_type} (\code{"compound"}/\code{"target"}), \code{module_id},
-\code{module_type}. Required by \code{plot_network_layers(colour_by = "module")}.
+\code{module_type}. To be consumed by a future \code{plot_network_layers()}
+module-colour mode (spec 3.2).
 All three written to their matching \verb{results/*.csv}. Rerunning with a
 different \code{clustering} \strong{replaces} the condition's rows (the
 \code{clustering} column records which method produced them); it does not
@@ -144,7 +146,9 @@ removal (the standard "malicious attack"). Deterministic apart from the
 (\code{largest_component_sd} its SD); \code{r_index_random} is the mean over
 replicates of each replicate's R-index (equivalently
 \code{mean(mean_curve[-1])}, since the mean is linear). Each replicate draws
-under a derived sub-seed \code{seed + 1000 * module_index + replicate}.
+under a derived sub-seed combining \code{seed}, the module index and the
+replicate index (computed overflow-safe, so a near-\code{.Machine$integer.max}
+seed does not wrap to \code{NA}).
 \item \code{"both"} -- both; \code{plot_robustness()} then draws the two-curve
 percolation figure (Albert, Jeong & Barabasi 2000).
 }

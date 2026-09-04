@@ -22,19 +22,21 @@ untouched in \code{patliRResults(proj, "network_edges")}.}
 \item{measures}{Character vector, any of \code{"degree"}, \code{"betweenness"},
 \code{"hub_score"} (default: all three).}
 
-\item{normalize}{Logical (default \code{TRUE}). When \code{TRUE}, adds the
-bipartite-aware \verb{_norm} columns for whichever \code{measures} were
-requested, plus \code{hub_score_component} / \code{component_id} (if
+\item{normalize}{Logical (default \code{TRUE}). Controls whether the
+bipartite-aware columns are \emph{computed}: the \verb{_norm} sibling for each
+requested measure, plus \code{hub_score_component} / \code{component_id} (if
 \code{"hub_score"} was requested) and the \code{n_compounds} / \code{n_targets}
-constants. When \code{FALSE}, the output is exactly the raw columns.}
+constants. Those columns are emitted either way -- with \code{normalize = FALSE} they are all \code{NA} -- so the stored schema does not depend on
+this flag.}
 }
 \value{
 The updated \code{proj}, with a \code{network_centrality} entry in
 \code{\link[=patliRResults]{patliRResults()}} (columns \code{condition}, \code{node_id}, \code{node_type}
-(\code{"compound"}/\code{"target"}), one column per requested measure, and -- when
-\code{normalize = TRUE} -- \code{degree_norm} / \code{betweenness_norm} /
-\code{hub_score_component} / \code{component_id} for the requested measures plus
-\code{n_compounds} / \code{n_targets}), also written to
+(\code{"compound"}/\code{"target"}), one column per requested measure, plus
+\code{degree_norm} / \code{betweenness_norm} / \code{hub_score_component} /
+\code{component_id} for the requested measures and the \code{n_compounds} /
+\code{n_targets} constants -- computed when \code{normalize = TRUE}, \code{NA} when
+\code{normalize = FALSE}), also written to
 \code{results/network_centrality.csv}.
 }
 \description{
@@ -65,24 +67,30 @@ the raw column through.
 \section{Hub score is eigenvector centrality here}{
 
 The graph is \strong{undirected}, so Kleinberg's hub and authority scores
-coincide and both equal the principal eigenvector of the adjacency
-matrix -- i.e. \code{hub_score} is eigenvector centrality, not a directional
-"hub vs. authority" distinction (that only exists on a directed graph).
-It is kept under the name \code{hub_score} for continuity with earlier
-versions. Implementation note: \code{igraph::hub_score()} is deprecated as of
-igraph 2.0.3; the code uses \code{igraph::hits_scores(g, weights = NA)$hub},
-numerically the same.
+coincide and both equal the principal (Perron) eigenvector of the
+adjacency matrix -- i.e. \code{hub_score} is eigenvector centrality, not a
+directional "hub vs. authority" distinction (that only exists on a
+directed graph). It is kept under the name \code{hub_score} for continuity
+with earlier versions. Implementation note: \code{hub_score} is
+\code{igraph::eigen_centrality(g, weights = NA)$vector} (scaled to \code{max = 1}).
+Earlier versions used \code{igraph::hits_scores(g, weights = NA)$hub}, which
+on a two-mode graph has a \strong{degenerate} top eigenspace -- ARPACK then
+returns an RNG-seeded arbitrary vector from it, so the column was not
+reproducible across runs. The Perron eigenvector is unique on each
+connected component, so \code{eigen_centrality()} is deterministic.
 
 On a \strong{disconnected} graph the principal eigenvector of the whole
 adjacency matrix concentrates on the component with the largest spectral
 radius, so every node in every other component gets \code{hub_score} ~ 0
 regardless of how central it is \emph{within its own component}. When
 \code{normalize = TRUE} an additional \code{hub_score_component} column is
-computed by running the HITS eigenvector \strong{per connected component} and
-rescaling each to \code{max = 1} inside that component; \code{component_id}
-records which component each node is in. Use \code{hub_score} for a
-whole-graph ranking, \code{hub_score_component} to compare nodes across
-components of different size.
+computed by running \code{eigen_centrality()} \strong{per connected component}
+(each scaled to \code{max = 1} inside that component); \code{component_id} records
+which component each node is in. Use \code{hub_score} for a whole-graph
+ranking, \code{hub_score_component} for \emph{within-component relative}
+centrality (each component is independently rescaled, so a 2-node
+component's top node scores the same \code{1} as the giant component's). An
+isolated node gets \code{hub_score_component = NA}.
 }
 
 \section{Bipartite-aware normalisation (\code{normalize = TRUE}, the default)}{
@@ -108,9 +116,13 @@ The raw \code{degree} / \code{betweenness} / \code{hub_score} columns are always
 Two per-condition constants, \code{n_compounds} and \code{n_targets}, are added so
 the normalisation is self-documenting in the CSV.
 
-\code{normalize = FALSE} reproduces the pre-normalisation output exactly
-(\code{condition}, \code{node_id}, \code{node_type}, plus one column per requested
-measure) -- an escape hatch for code that does \code{names(result)} checks.
+\code{normalize = FALSE} reproduces the pre-normalisation \emph{values} -- the raw
+\code{degree} / \code{betweenness} / \code{hub_score} columns are unchanged and every
+\verb{_norm} / \code{component_id} / \code{n_compounds} / \code{n_targets} column is set to
+\code{NA}. The column \emph{set} is deliberately the same as \code{normalize = TRUE}
+(for the requested \code{measures}), so a \code{normalize = FALSE} run still
+upserts cleanly onto a project whose stored table was produced with
+\code{normalize = TRUE}.
 }
 
 \section{Comparable across \code{node_type}, not across conditions}{

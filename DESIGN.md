@@ -104,12 +104,14 @@ maximisation — an NP-hard optimisation with a decade of algorithmic
 literature (Barber 2007; Beckett 2016), not a geometry anyone should
 hand-roll. It is guarded by the standard `requireNamespace()` +
 `cli_abort` pattern and is needed only for the non-default `clustering`
-value. One real cost to note: `bipartite`'s `Depends:` attaches `sna` and
-`vegan` to the search path, and `sna` masks `igraph`'s `degree()` /
-`betweenness()` / `closeness()` for the rest of the session — an argument
-for keeping `"bipartite"` a deliberate opt-in, never the default.
-`dbscan` (for `clustering = "hdbscan"`) is a `Suggests` on the same
-footing.
+value. patliR loads it namespace-only (`requireNamespace()`) and calls
+every symbol `bipartite::`-qualified, so its `Depends:` (`sna`, `vegan`)
+are **not** attached and nothing masks `igraph` — the earlier note here
+that they were was wrong. (A user who runs `library(bipartite)` in their
+own session would attach them; that is on them, not patliR.) `"bipartite"`
+stays a deliberate opt-in because it is only valid on the genuine two-mode
+graph, not for any masking reason. `dbscan` (for `clustering =
+"hdbscan"`) is a `Suggests` on the same footing.
 
 ## Explicitly out of scope
 

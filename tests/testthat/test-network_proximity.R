@@ -97,9 +97,10 @@ test_that("network_proximity schema carries p_adjusted whether or not any row is
     n_targets_mapped = 1L, n_disease_genes_mapped = 1L, n_overlap = 0L,
     d_observed = 1, d_random_mean = 2, d_random_sd = 1,
     z_score = -1, p_empirical = 0.1, n_random = 10L, seed_used = 1L,
+    species = 9606, string_version = "12.0", score_threshold = 400,
+    n_tests_in_family = NA_integer_, p_adjusted = NA_real_,   # how network_proximity() builds the row
     stringsAsFactors = FALSE
   )
-  populated$p_adjusted <- NA_real_        # exactly how network_proximity() adds it
   expect_identical(names(empty), names(populated))
 })
 
@@ -236,6 +237,62 @@ test_that("network_proximity(disease_genes = \"targets_disease\") warns 'circula
   res <- patliRResults(proj, "network_proximity")
   expect_gt(nrow(res), 0)
   expect_true(all(res$disease_gene_source == "targets_disease"))
+})
+
+test_that("network_proximity() z_score is unchanged after the .network_string_lcc() extraction (behaviour-identical refactor)", {
+  ## Piece 12 factored the LCC-restriction + degree-binning block out of
+  ## network_proximity() into .network_string_lcc(). The graph, the bins
+  ## and therefore every z_score must be byte-identical on the fixture.
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  cond <- "FLO-ET"
+  edges <- patliRResults(proj, "network_edges")
+  cmp_uni <- unique(edges$uniprot_id[edges$condition == cond])
+  disease_uni <- paste0("DIS", seq_len(6))
+  proj <- disease_genes_import(
+    proj, data.frame(uniprot_id = disease_uni),
+    disease_id = "D_PIN", disease_name = "synthetic", source = "synthetic"
+  )
+  fake <- .fake_string_db(c(cmp_uni, disease_uni))
+  testthat::local_mocked_bindings(.network_stringdb = function(...) fake, .package = "patliR")
+
+  proj <- network_proximity(proj, condition = cond, disease = "D_PIN", n_random = 12, seed = 1)
+  res <- patliRResults(proj, "network_proximity")
+  res <- res[order(res$compound_id), ]
+  expect_equal(res$compound_id, c("C0001", "C0002", "C0006", "C0007"))
+  expect_equal(
+    round(res$z_score, 6),
+    c(4.88244, 3.943095, 7.60343, 3.691396),
+    tolerance = 1e-5
+  )
+  expect_true(all(res$n_tests_in_family == nrow(res)))
+  expect_true(all(res$species == 9606 & res$string_version == "12.0" & res$score_threshold == 400))
+})
+
+test_that(".network_upsert() back-fills the new proximity provenance columns on a legacy table (no abort)", {
+  proj <- .network_stats_test_setup()
+  legacy <- data.frame(
+    condition = "X", compound_id = "C1", disease_id = "D",
+    disease_gene_source = "disease_genes",
+    n_targets_mapped = 1L, n_disease_genes_mapped = 1L, n_overlap = 0L,
+    d_observed = 1, d_random_mean = 2, d_random_sd = 1,
+    z_score = -1, p_empirical = 0.1, n_random = 10L, seed_used = 1L, p_adjusted = 0.1,
+    stringsAsFactors = FALSE
+  )
+  patliRResults(proj, "network_proximity") <- legacy
+
+  wide <- patliR:::.empty_network_proximity_row()
+  wide[1, ] <- NA
+  wide$condition <- "Y"; wide$compound_id <- "C2"; wide$disease_id <- "D2"
+  wide$z_score <- -1.5
+
+  expect_no_error(
+    merged <- patliR:::.network_upsert(
+      proj, "network_proximity", wide, c("condition", "disease_id", "compound_id")
+    )
+  )
+  expect_true(all(c("species", "string_version", "score_threshold", "n_tests_in_family") %in% names(merged)))
+  expect_true(all(c("X", "Y") %in% merged$condition))
 })
 
 test_that("network_proximity() end-to-end is not exercised automatically -- needs a real STRING download", {

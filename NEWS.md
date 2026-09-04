@@ -1,5 +1,54 @@
 # patliR (development version)
 
+## `network_synergy()` — real `s_AB` (Menche 2015) + Cheng P1–P6 classification
+
+- **New `separation = c("network", "jaccard")`** (default `"network"`).
+  `"network"` computes the topological separation
+  `s_AB = ⟨d_AB⟩ − (⟨d_AA⟩ + ⟨d_BB⟩)/2` (Menche et al. 2015) between the
+  two compounds' STRING-mapped target sets on the interactome's largest
+  connected component, and classifies every pair into Cheng, Kovács &
+  Barabási (2019)'s `P1`–`P6` (`cheng_class`); `complementary_exposure`
+  is `cheng_class == "P2"`. `"jaccard"` keeps the old set-overlap proxy
+  for users without `STRINGdb` (all `s_AB`/Cheng columns `NA`,
+  `synergy_score` stays on its historical `both_proximal` gate).
+- **New arguments** `alpha` (proximity significance cut for the
+  `proximal_a`/`proximal_b` predicates — patliR's tightening, *not*
+  Cheng's, who use the z-score alone), `species` / `version` /
+  `score_threshold` (must match the `network_proximity()` run — a
+  mismatch now aborts), and `disease_gene_source` (default
+  `"disease_genes"`; consuming the legacy circular `"targets_disease"`
+  rows warns).
+- **No permutation null for `s_AB`.** Cheng et al. explicitly reject a
+  z-score for the drug–drug relationship (≈3 targets per drug → the
+  randomisation is non-Gaussian); `s_AB` is used raw.
+- **Singleton convention.** A STRING-mapped target set of size < 2 gets
+  `⟨d_AA⟩ = 0` (patliR's choice; Menche's `separation.py` returns `nan`)
+  and a `singleton_a` / `singleton_b` flag. This inflates `s_AB` toward
+  `separated = TRUE`; flagged pairs keep a visible `cheng_class` but are
+  excluded from the `synergy_score` scalar.
+- **`cli_warn` when the proximity gate is arithmetically unreachable** —
+  `n_tests_in_family / (n_random + 1) > alpha` means the BH-adjusted
+  proximity p can never clear `alpha` and every pair silently falls into
+  `P5`/`P6`.
+- **Wider output** (pure column addition — `.network_upsert()` migrates a
+  legacy `network_synergy.csv` in place): `n_targets_a`/`_b`,
+  `n_targets_a_mapped`/`_b_mapped`, `singleton_a`/`_b`, `d_aa`, `d_bb`,
+  `d_ab`, `s_ab`, `separated`, `p_adjusted_a`/`_b`, `proximal_a`/`_b`,
+  `cheng_class`, `complementary_exposure`, `separation_method`, `alpha`,
+  `species`, `string_version`, `disease_gene_source`. `target_jaccard` /
+  `complementarity` are unchanged and still computed on the **raw
+  UniProt** sets in both modes.
+- **`network_proximity()`** gains `species`, `string_version`,
+  `score_threshold` and `n_tests_in_family` columns (the STRING
+  interactome and BH family size the run used), so `network_synergy()`
+  can refuse to combine a `z` and an `s_AB` from different interactomes.
+  Also pure column additions.
+- The STRING LCC + degree-binning block is factored into
+  `.network_string_lcc()`, shared by `network_proximity()` and
+  `network_synergy()` so both operate on a byte-identical graph. Only the
+  graph is cached (`cacheDir(proj)/stringdb/lcc_<species>_<version>_<thr>.rds`,
+  safe to delete); `network_proximity()`'s `z_score` is unchanged.
+
 ## `network_module_robustness()` — clustering backends and a random-failure baseline
 
 - **Breaking change to the numbers.** `network_module_robustness()`'s

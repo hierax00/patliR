@@ -112,7 +112,11 @@ NULL
 #'   overlap driving `d_observed` toward 0 is always visible -- it equals
 #'   `n_targets_mapped` exactly when `d_observed == 0`, i.e. `S ⊆ T`),
 #'   `d_observed`, `d_random_mean`, `d_random_sd`, `z_score`, `p_empirical`,
-#'   `n_random`, `seed_used`, `p_adjusted`), also written to
+#'   `n_random`, `seed_used`, `species`, `string_version`, `score_threshold`
+#'   (the STRING interactome this run used -- recorded so [network_synergy()]
+#'   can refuse to combine a `z` from one interactome with an `s_AB` from
+#'   another), `n_tests_in_family` (the Benjamini-Hochberg family size for
+#'   this call), `p_adjusted`), also written to
 #'   `results/network_proximity.csv`. Compounds with zero targets mappable
 #'   to the STRING network for `species` contribute no row (logged instead).
 #'
@@ -205,32 +209,27 @@ network_proximity <- function(proj, condition = NULL, disease,
   on.exit(restore_rng(), add = TRUE)
 
   string_db <- .network_stringdb(proj, species, version, score_threshold)
-  g <- string_db$get_graph()
 
   ## Guney et al. (2016) and Menche et al. (2015) both work on the
   ## interactome's largest connected component -- a target outside it has
   ## no finite distance to the disease module and would otherwise be
   ## silently dropped (biasing d_observed downward) or make min() warn.
-  comp <- igraph::components(g)
-  lcc <- which.max(comp$csize)
-  n_dropped <- sum(comp$membership != lcc)
-  if (n_dropped > 0) {
-    g <- igraph::induced_subgraph(g, which(comp$membership == lcc))
-    proj <- .log_append(
-      proj, step = "network_proximity", id = NA_character_,
-      message = paste0("restricted STRING network to its largest connected component (",
-                        igraph::vcount(g), " nodes; ", n_dropped, " dropped)")
-    )
-  }
-
-  degree_all <- igraph::degree(g)
-  bins <- .network_degree_bins(degree_all)
-  ## Hoisted out of .network_resample_degree_matched() -- it is called
-  ## ~2 * n_random per compound and both of these are invariant across
-  ## every one of those calls (Guney binning depends only on the graph).
+  ## Extracted into .network_string_lcc() so network_synergy() gets a
+  ## byte-identical graph -- s_AB and z must be on the same interactome.
+  lcc <- .network_string_lcc(proj, species, version, score_threshold, string_db = string_db)
+  g <- lcc$graph
+  degree_all <- lcc$degree
+  bins <- lcc$bins
+  ## node_names / bin_of_node are hoisted out of
+  ## .network_resample_degree_matched() -- it is called ~2 * n_random per
+  ## compound and both are invariant across every one of those calls.
   node_names <- names(degree_all)
-  bin_of_node <- integer(length(degree_all))
-  for (b in seq_along(bins)) bin_of_node[bins[[b]]] <- b
+  bin_of_node <- lcc$bin_of_node
+  proj <- .log_append(
+    proj, step = "network_proximity", id = NA_character_,
+    message = paste0("STRING interactome restricted to its largest connected component (",
+                      igraph::vcount(g), " nodes)")
+  )
 
   edges_all <- patliRResults(proj, "network_edges")
   rows <- vector("list", length(conditions))
@@ -325,7 +324,11 @@ network_proximity <- function(proj, condition = NULL, disease,
         n_overlap = n_overlap,
         d_observed = d_observed, d_random_mean = d_random_mean, d_random_sd = d_random_sd,
         z_score = z_score, p_empirical = p_empirical, n_random = length(d_random),
-        seed_used = used_seed, stringsAsFactors = FALSE
+        seed_used = used_seed,
+        species = as.numeric(species), string_version = as.character(version),
+        score_threshold = as.numeric(score_threshold),
+        n_tests_in_family = NA_integer_, p_adjusted = NA_real_,
+        stringsAsFactors = FALSE
       )
     }
 
@@ -340,12 +343,15 @@ network_proximity <- function(proj, condition = NULL, disease,
 
   result <- do.call(rbind, rows)
   rownames(result) <- NULL
-  ## p_adjusted is part of the schema even for a zero-row result, so the
-  ## CSV stays column-stable and .network_upsert()'s rbind never faces a
-  ## 12-vs-13 column mismatch on a later zero-row rerun.
-  result$p_adjusted <- NA_real_
-  ## BH across every (condition, compound) proximity test in this call
+  ## p_adjusted / n_tests_in_family are part of the schema even for a
+  ## zero-row result, so the CSV stays column-stable and .network_upsert()'s
+  ## rbind never faces a column-count mismatch on a later zero-row rerun.
+  ## BH across every (condition, compound) proximity test in this call; the
+  ## family size is recorded so network_synergy() can detect a merged table
+  ## whose rows came from calls of different family sizes and warn when the
+  ## alpha gate is arithmetically unreachable (p_floor * m / k).
   if (nrow(result) > 0) {
+    result$n_tests_in_family <- nrow(result)
     result$p_adjusted <- stats::p.adjust(result$p_empirical, method = "BH")
   }
   ## Every (condition, compound) pair attempted this call is a recomputed
@@ -485,7 +491,68 @@ network_proximity <- function(proj, condition = NULL, disease,
     n_overlap = integer(0),
     d_observed = double(0), d_random_mean = double(0), d_random_sd = double(0),
     z_score = double(0), p_empirical = double(0), n_random = integer(0),
-    seed_used = integer(0), p_adjusted = double(0),
+    seed_used = integer(0),
+    species = double(0), string_version = character(0), score_threshold = double(0),
+    n_tests_in_family = integer(0), p_adjusted = double(0),
     stringsAsFactors = FALSE
   )
+}
+
+#' STRING interactome largest connected component, with its degree bins
+#'
+#' @description
+#' Factored out of [network_proximity()] so that it and [network_synergy()]
+#' operate on a byte-identical graph -- the Menche (2015) separation `s_AB`
+#' and the Guney (2016) proximity `z` are only comparable (Cheng et al.
+#' 2019) when computed on the same interactome, at the same `species`,
+#' `version` and `score_threshold`.
+#'
+#' Guney et al. (2016) and Menche et al. (2015) both restrict the STRING
+#' graph to its largest connected component: a node outside it has no
+#' finite distance to any module and would otherwise bias distances
+#' downward or make `min()` warn.
+#'
+#' @details
+#' Only the graph is cached, under
+#' `cacheDir(proj)/stringdb/lcc_<species>_<version>_<threshold>.rds`. The
+#' degree, the degree bins and the per-node bin index are recomputed from
+#' it on every load -- a future `min_per_bin` parameter would otherwise be
+#' served a stale cached binning. Like `.network_stringdb()`'s downloaded
+#' flat files, this `.rds` is **safe to delete**: STRING's own flat files
+#' under the same directory are the real cache, and deleting the `.rds`
+#' just triggers one recompute of the component decomposition.
+#'
+#' @param string_db Optional pre-constructed `STRINGdb` instance (avoids a
+#'   second `STRINGdb$new()` when the caller already built one); only used
+#'   on a cache miss.
+#' @return `list(graph, degree, bins, bin_of_node)` -- `graph` the LCC
+#'   `igraph`, `degree` its named degree vector, `bins` the list of
+#'   node-index vectors from [.network_degree_bins()], `bin_of_node` the
+#'   bin index of every node aligned to `names(degree)`.
+#' @keywords internal
+.network_string_lcc <- function(proj, species, version, score_threshold, string_db = NULL) {
+  dir <- file.path(cacheDir(proj), "stringdb")
+  if (!dir.exists(dir)) dir.create(dir, recursive = TRUE)
+  cache_rds <- file.path(dir, paste0("lcc_", species, "_", version, "_", score_threshold, ".rds"))
+
+  if (file.exists(cache_rds)) {
+    g <- readRDS(cache_rds)
+  } else {
+    if (is.null(string_db)) string_db <- .network_stringdb(proj, species, version, score_threshold)
+    g0 <- string_db$get_graph()
+    comp <- igraph::components(g0)
+    lcc_id <- which.max(comp$csize)
+    g <- if (sum(comp$membership != lcc_id) > 0) {
+      igraph::induced_subgraph(g0, which(comp$membership == lcc_id))
+    } else {
+      g0
+    }
+    saveRDS(g, cache_rds)
+  }
+
+  degree_all <- igraph::degree(g)
+  bins <- .network_degree_bins(degree_all)
+  bin_of_node <- integer(length(degree_all))
+  for (b in seq_along(bins)) bin_of_node[bins[[b]]] <- b
+  list(graph = g, degree = degree_all, bins = bins, bin_of_node = bin_of_node)
 }

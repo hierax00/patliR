@@ -218,10 +218,22 @@ Clustering is run **unweighted** — for Leiden the `weight` edge attribute is *
 **The circularity that was fixed.** Before this was rewired, `T` came from `targets_disease_filter()`, which only annotates UniProt IDs already in `targets_imported` — so `T` was a subset of the compounds' own predicted targets, `S ∩ T` was large by construction, `d_observed` was dragged to 0 by exact zeros, and `z` went strongly negative for reasons unrelated to topology. `disease_genes = "targets_disease"` still runs that path for backward comparison, but emits a warning naming the circularity and stamps `disease_gene_source = "targets_disease"` on the rows so the CSV records it.
 **Theory:** network-medicine proximity (Guney/Menche/Barabási) — a drug is more likely relevant to a disease if its targets sit near the disease module in the interactome.
 
-### `network_synergy(proj, condition, disease)`
-**Out:** per compound pair: complementarity, both-proximal flag, and a synergy score.
-**Operation:** *combine two already-computed numbers, with a gate.* `complementarity = 1 − target_jaccard`. A pair is scored **only if both compounds are individually disease-proximal** (`z < 0` for each — the Cheng et al. 2019 "Complementary Exposure" conjunction). When scored, `synergy_score = complementarity · (−max(z_a, z_b))` — keyed to the *weaker* member.
-**Theory:** the pattern Cheng et al. (2019) associate with real drug combinations — target modules that are separated but both hit the disease neighbourhood. This is a heuristic proxy for their published `s_AB` criterion (see `ROADMAP.md`).
+### `network_synergy(proj, condition, disease, separation = "network", alpha = 0.05)`
+**Out:** per compound pair: the Menche (2015) topological separation `s_AB`, each compound's disease-proximity predicate, and the Cheng et al. (2019) class `P1`–`P6`.
+**Operation:** *one interactome distance matrix per condition, then a truth table.* On the STRING largest connected component (the same graph `network_proximity()` uses — `.network_string_lcc()`, keyed by `species`/`version`/`score_threshold`, and a mismatch between the two calls aborts), a single `igraph::distances()` over the union of every candidate compound's STRING-mapped targets gives every pair's
+
+  `s_AB = ⟨d_AB⟩ − (⟨d_AA⟩ + ⟨d_BB⟩)/2`
+
+where `⟨d_AA⟩ = |A|⁻¹ Σ_{a∈A} min_{a'≠a} d(a,a')` (closest convention) and `⟨d_AB⟩ = (|A|+|B|)⁻¹ (Σ_a min_b d(a,b) + Σ_b min_a d(b,a))` is the pooled symmetric form (Menche et al. 2015, Eq. 2–3). `s_AB ≥ 0` ⇒ `separated`. No null model is fitted for `s_AB`: Cheng et al. explicitly reject a z-score for the drug–drug relationship because each drug has on average ~3 targets and "the randomization procedure is not producing a Gaussian distribution" — `s_AB` is used raw.
+
+Each compound is `proximal` when `z_score < 0` **and** `p_adjusted < alpha` from `network_proximity()`. `alpha` is **patliR's tightening — Cheng et al. use the z-score alone and state no p-value cut.** The classification is the Cheng Fig. 2 truth table over `(separated, proximal_a, proximal_b)`: `P1` overlapping/both-proximal, **`P2` Complementary Exposure = separated & both-proximal (the only class Cheng associate with efficacy)**, `P3`/`P4` one proximal, `P5`/`P6` neither. `complementary_exposure = (cheng_class == "P2")`.
+
+**Singleton convention.** When a compound's STRING-mapped target set has < 2 members, `⟨d_AA⟩ = 0` (patliR's choice — Menche's `separation.py` returns `nan`) and the row is flagged `singleton_a`/`singleton_b`. This inflates `s_AB`, biasing single-target compounds toward `separated = TRUE` (→ `P2`/`P4`/`P6`); flagged pairs keep a visible `cheng_class` but are dropped from the `synergy_score` scalar.
+
+**BH-family caveat.** `network_proximity()`'s empirical p has a floor of `1/(n_random+1)` and its Benjamini–Hochberg family is per-call; if `n_tests_in_family/(n_random+1) > alpha` the proximity gate is unreachable, every pair falls to `P5`/`P6`, and `network_synergy()` warns.
+
+`separation = "jaccard"` skips STRING entirely: `s_AB` and the Cheng columns are `NA`, `synergy_score` reverts to its historical `both_proximal` gate. `target_jaccard`/`complementarity` are always on the **raw UniProt** sets in both modes; `n_targets_*_mapped` carries the STRING-mapped counts. `synergy_score` (kept as an interim ranking scalar) `= complementarity · (−max(z_a, z_b))`, gated on `complementary_exposure` in network mode.
+**Theory:** Menche et al. (2015) module separation; Cheng, Kovács & Barabási (2019) *Nat Commun* 10:1197 Complementary Exposure.
 
 ### `network_bowtie(proj, condition)`
 **Out:** each target labelled with its position in a bow-tie decomposition of STRING's *directed regulatory* network: `core`, `in_component`, `out_component`, `other` (tendrils), `not_in_action_network`, or `unmapped`.

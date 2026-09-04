@@ -2,15 +2,20 @@
 % Please edit documentation in R/network_synergy.R
 \name{network_synergy}
 \alias{network_synergy}
-\title{Candidate synergistic compound pairs (target complementarity + joint
-disease proximity)}
+\title{Cheng et al. (2019) drug-pair classification (Complementary Exposure)}
 \usage{
 network_synergy(
   proj,
   condition = NULL,
   disease,
   pairs = c("rank_top", "all"),
-  top_n = 10
+  top_n = 10,
+  separation = c("network", "jaccard"),
+  alpha = 0.05,
+  species = 9606,
+  version = "12.0",
+  score_threshold = 400,
+  disease_gene_source = c("disease_genes", "targets_disease")
 )
 }
 \arguments{
@@ -28,68 +33,157 @@ call whose results this function reuses.}
 
 \item{top_n}{Only used when \code{pairs = "rank_top"}: how many top-ranked
 compounds (by \code{z_score}) to form pairs among. Default \code{10}.}
+
+\item{separation}{\code{"network"} (default) for the real Menche (2015)
+\code{s_AB} on the STRING interactome, or \code{"jaccard"} for the set-overlap
+proxy. \code{"network"} aborts if \code{STRINGdb} is not installed.}
+
+\item{alpha}{Proximity significance cut for the \code{proximal_a} /
+\code{proximal_b} predicates (patliR's tightening of Cheng et al., not
+theirs). Default \code{0.05}.}
+
+\item{species}{NCBI taxonomy ID passed to \code{STRINGdb$new()}. Default
+\code{9606} (human).}
+
+\item{version}{STRING database version passed to \code{STRINGdb$new()}.
+Default \code{"12.0"}.}
+
+\item{score_threshold}{Minimum STRING combined confidence score
+(0-1000) for an interaction to be loaded into the graph, passed to
+\code{STRINGdb$new()}. Default \code{400} (STRINGdb's own default -- "medium
+confidence").}
+
+\item{disease_gene_source}{Which \code{\link[=network_proximity]{network_proximity()}} rows to consume:
+\code{"disease_genes"} (default, the independent gene set) or the legacy,
+circular \code{"targets_disease"} (a warning is emitted -- the Cheng
+classification would inherit the Phase-1 circularity).}
 }
 \value{
 The updated \code{proj}, with a \code{network_synergy} entry in
 \code{\link[=patliRResults]{patliRResults()}} (columns \code{condition}, \code{disease_id}, \code{compound_a},
-\code{compound_b}, \code{target_jaccard}, \code{complementarity}, \code{z_score_a},
-\code{z_score_b}, \code{both_proximal}, \code{joint_closeness}, \code{synergy_score},
-\code{pairs_mode}), also written to \code{results/network_synergy.csv}.
+\code{compound_b}, \code{n_targets_a}, \code{n_targets_b}, \code{n_targets_a_mapped},
+\code{n_targets_b_mapped}, \code{target_jaccard}, \code{complementarity},
+\code{singleton_a}, \code{singleton_b}, \code{d_aa}, \code{d_bb}, \code{d_ab}, \code{s_ab},
+\code{separated}, \code{z_score_a}, \code{z_score_b}, \code{p_adjusted_a}, \code{p_adjusted_b},
+\code{proximal_a}, \code{proximal_b}, \code{both_proximal}, \code{cheng_class},
+\code{complementary_exposure}, \code{joint_closeness}, \code{synergy_score},
+\code{separation_method}, \code{alpha}, \code{pairs_mode}, \code{species},
+\code{string_version}, \code{disease_gene_source}), also written to
+\code{results/network_synergy.csv}.
 }
 \description{
-For pairs of compounds present in a condition's network, combines two
-signals into a \code{synergy_score}:
-\itemize{
-\item \strong{Complementarity} (\code{1 - target_jaccard}): how different the two
-compounds' target sets are -- a pair that hits the same targets is
-redundant, not synergistic. (This is \emph{set} overlap, a proxy for the
-network separation \code{s_AB} of Menche et al. 2015 / Cheng et al. 2019 --
-see the caveat below.)
-\item \strong{Both individually proximal}: the pair is scored only when
-\code{z_score_a < 0} \strong{and} \code{z_score_b < 0} (\code{both_proximal}), the
-Complementary Exposure requirement of Cheng et al. (2019, \emph{Nat Commun}
-10:1197) -- both members must independently sit closer than random to
-the disease module. Pairs that fail this get \code{synergy_score = NA}, not
-a misleadingly signed number.
-\item \strong{Joint closeness} (\code{-max(z_score_a, z_score_b)}): keyed to the
-\emph{weaker} member, so a pair is only as strong as its worse compound --
-a conjunction, not an average one very-close compound could carry.
+For pairs of compounds present in a condition's network, computes the
+topological network separation \code{s_AB} of Menche et al. (2015) between the
+two compounds' STRING-mapped target sets and combines it with each
+compound's individual disease proximity (\code{\link[=network_proximity]{network_proximity()}}) to place
+the pair in one of Cheng, Kovacs & Barabasi (2019)'s six classes:\tabular{lllll}{
+   class \tab \code{separated} \tab \code{proximal_a} \tab \code{proximal_b} \tab meaning \cr
+   \code{P1} Overlapping Exposure \tab FALSE \tab TRUE \tab TRUE \tab both hit D, same neighbourhood \cr
+   \code{P2} \strong{Complementary Exposure} \tab TRUE \tab TRUE \tab TRUE \tab both hit D, separate neighbourhoods \cr
+   \code{P3} Indirect Exposure \tab FALSE \tab exactly one \tab  \tab overlapping pair, one hits D \cr
+   \code{P4} Single Exposure \tab TRUE \tab exactly one \tab  \tab separated pair, one hits D \cr
+   \code{P5} Non-Exposure \tab FALSE \tab FALSE \tab FALSE \tab overlapping pair, neither hits D \cr
+   \code{P6} Independent Action \tab TRUE \tab FALSE \tab FALSE \tab everything separated \cr
 }
 
-\code{synergy_score = complementarity * joint_closeness} when \code{both_proximal},
-else \code{NA}.
-}
-\section{This is a heuristic, not Cheng et al. (2019) as published}{
 
-Cheng et al. define Complementary Exposure as a \emph{classification region}
-(\code{s_AB >= 0} and both drugs proximal), using the topological network
-separation \code{s_AB}, not a multiplicative score and not target-set
-Jaccard. \code{1 - target_jaccard} and \code{s_AB} can disagree (disjoint target
-sets can still overlap topologically). A real \code{s_AB} implementation is
-planned (see \code{ROADMAP.md}); until then read \code{both_proximal} +
-\code{complementarity} + the two \code{z_score}s directly, not just the scalar.
+Cheng et al.'s finding is that \strong{only \code{P2} correlates with therapeutic
+efficacy}. \code{complementary_exposure} is the logical \code{cheng_class == "P2"}.
+}
+\section{The separation statistic \code{s_AB} (Menche et al. 2015)}{
+
+On the STRING largest connected component \code{G} with unweighted
+shortest-path hop count \code{d(u,v)}:
+
+\deqn{s_{AB} = \langle d_{AB} \rangle - \tfrac{1}{2}(\langle d_{AA}
+  \rangle + \langle d_{BB} \rangle)}
+
+where the within-set distance uses the "closest" convention
+\eqn{\langle d_{AA} \rangle = |A|^{-1} \sum_{a \in A}
+  \min_{a' \in A, a' \ne a} d(a, a')} and the between-set distance is the
+pooled, symmetric form
+\eqn{\langle d_{AB} \rangle = (|A| + |B|)^{-1} (\sum_{a} \min_{b} d(a,b)
+  + \sum_{b} \min_{a} d(b,a))}. \code{s_AB < 0} means the two target modules
+overlap topologically; \code{s_AB >= 0} (\code{separated = TRUE}) means they are
+separated -- Menche et al.'s own sign convention, verbatim.
+
+No null model is fitted for \code{s_AB} (see the file header for Cheng et
+al.'s small-target-set argument); it is used raw.
+}
+
+\section{Singleton convention (patliR's choice, not Menche's)}{
+
+When a compound's STRING-mapped target set has fewer than 2 members this
+function sets \verb{<d_AA> = 0} and flags the row with \code{singleton_a} /
+\code{singleton_b}. Menche et al.'s reference \code{separation.py} returns \code{nan}
+for an empty min-list; \code{0} is \emph{patliR's} convention, and it is \strong{not
+neutral} -- it makes \code{s_AB} systematically more positive, biasing
+single-target compounds toward \code{separated = TRUE} and therefore toward
+\code{P2}/\code{P4}/\code{P6}. Flagged pairs still appear in the table with their
+\code{cheng_class} visible, but are excluded from the \code{synergy_score} ranking
+scalar (\code{synergy_score = NA} whenever \code{singleton_a} or \code{singleton_b}).
+With predicted plant-metabolite targets, a mapped set of size 1 will not
+be rare.
+}
+
+\section{\code{alpha} is patliR's tightening, not Cheng's}{
+
+Cheng et al. (2019) use the drug-disease proximity z-score and never
+state a p-value cutoff for the "overlaps the disease module" predicate.
+\verb{proximal_x = (z_x < 0 AND p_adjusted_x < alpha)} is a \emph{stricter} patliR
+choice. Because \code{network_proximity()}'s empirical p has a hard floor of
+\code{1 / (n_random + 1)} and its Benjamini-Hochberg family can be large, the
+\code{alpha} gate can be arithmetically unreachable -- if
+\code{n_tests_in_family / (n_random + 1) > alpha} every pair falls into
+\code{P5}/\code{P6} and a warning is emitted, because "no \code{P2} pairs" then means
+nothing. The BH family is per \code{network_proximity()} \strong{call}; if the
+merged results table holds rows from calls with different family sizes
+the classification inherits that incoherence.
+}
+
+\section{\code{separation = "jaccard"}}{
+
+Keeps the cheap set-overlap proxy for users without \code{STRINGdb}.
+\code{d_aa} / \code{d_bb} / \code{d_ab} / \code{s_ab} / \code{separated} / \code{cheng_class} /
+\code{complementary_exposure} / \code{singleton_a} / \code{singleton_b} are all \code{NA},
+\code{separation_method = "jaccard"} records it, and \code{synergy_score} stays
+gated on \code{both_proximal} (its historical gate) rather than
+\code{complementary_exposure}. \code{target_jaccard} / \code{complementarity} are
+computed on the \strong{raw UniProt} target sets in \emph{both} modes (never the
+STRING-mapped subset), so they are comparable across modes;
+\code{n_targets_a_mapped} / \code{n_targets_b_mapped} carry the mapped counts
+separately.
+}
+
+\section{NA policies -- \code{both_proximal} vs \code{proximal_a} / \code{proximal_b}}{
+
+Deliberately different. \code{proximal_x} is three-valued: \code{NA} when \code{z_x} is
+missing, otherwise \code{z_x < 0 & p_adjusted_x < alpha} (falling back
+per-row to \code{z_x < 0} alone, logged, when that row's \code{p_adjusted} is
+\code{NA}). \code{both_proximal} keeps its historical policy of coercing a missing
+\code{z} to \code{FALSE} (not \code{NA}), so a pair with one unscored compound is
+\code{both_proximal = FALSE}, not \code{NA}. \code{cheng_class} is \code{NA} whenever any of
+\code{separated}, \code{proximal_a}, \code{proximal_b} is \code{NA}.
 }
 
 \section{Requires \code{\link[=network_proximity]{network_proximity()}} to have already run for \code{disease}}{
 
-Unlike \code{\link[=network_degeneracy]{network_degeneracy()}} (which only needs \code{\link[=network_build]{network_build()}}), pair
-scoring here needs a per-compound proximity \code{z_score}, so this errors
-clearly if \code{\link[=network_proximity]{network_proximity()}} has not been run yet for the
-\verb{(condition, disease)} combination, rather than silently treating missing
-scores as zero.
+Pair scoring needs a per-compound proximity \code{z_score}, so this errors
+clearly if \code{\link[=network_proximity]{network_proximity()}} has not been run for the
+\verb{(condition, disease)} combination. When \code{separation = "network"} the
+\code{species} / \code{version} / \code{score_threshold} recorded by
+\code{\link[=network_proximity]{network_proximity()}} must match this call's arguments, or \code{s_AB} and
+\code{z} would be on different interactomes -- a mismatch aborts.
 }
 
 \section{\code{pairs = "rank_top"} vs. \code{pairs = "all"}}{
 
 \code{"rank_top"} (default) ranks compounds by their \code{\link[=network_proximity]{network_proximity()}}
-\code{z_score} (most negative = closest to the disease module = best) and
-only forms pairs among the top \code{top_n}, avoiding the combinatorial cost
-of scoring every possible pair -- this is an \strong{interim} stand-in for the
-not-yet-implemented \code{rank_candidates()} (see \code{ROADMAP.md}). \code{"all"}
-scores every compound pair in the condition's network
-regardless of ranking; pairs involving a compound with no
-\code{\link[=network_proximity]{network_proximity()}} score (e.g. it had no targets mappable to STRING)
-get \code{NA} in the proximity-derived columns, not a fabricated score.
+\code{z_score} and only forms pairs among the top \code{top_n} -- an \strong{interim}
+stand-in for the not-yet-implemented \code{rank_candidates()}. \code{"all"} scores
+every compound pair; pairs involving a compound with no
+\code{\link[=network_proximity]{network_proximity()}} score get \code{NA} in the proximity-derived columns,
+not a fabricated score.
 }
 
 \examples{
@@ -110,11 +204,16 @@ proj <- targets_import_batch(
   platform = "superpred"
 )
 proj <- network_build(proj)
-proj <- targets_disease_filter(proj, disease = "type 2 diabetes mellitus")
-disease_id <- unique(patliRResults(proj, "targets_disease")$disease_id)[1]
+proj <- disease_genes_fetch(proj, disease = "type 2 diabetes mellitus")
+disease_id <- unique(patliRResults(proj, "disease_genes")$disease_id)[1]
 proj <- network_proximity(proj, condition = "FLO-ET", disease = disease_id)
 proj <- network_synergy(proj, condition = "FLO-ET", disease = disease_id)
 patliRResults(proj, "network_synergy")
 }
 
+}
+\references{
+Cheng, Kovacs & Barabasi (2019), \emph{Nat Commun} 10:1197,
+\doi{10.1038/s41467-019-09186-x}. Menche et al. (2015), \emph{Science}
+347(6224):1257601, \doi{10.1126/science.1257601}.
 }

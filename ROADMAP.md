@@ -86,13 +86,12 @@ guessing.
   (peaks at `d = N/e`), so a moderately promiscuous target can outrank a
   selective one. Decide whether "intermediate-specificity emphasis" is
   actually wanted or switch to a monotone selectivity weight.
-- **`network_synergy()`** — replace `1 - Jaccard(targets)` with a real
+- ~~**`network_synergy()`** — replace `1 - Jaccard(targets)` with a real
   network separation `s_AB` (Menche et al. 2015) and report Cheng et al.
-  (2019)'s Complementary Exposure classification, not just the scalar.
-  Note: the disease-module circularity that biased every `z_score` this
-  consumes is now fixed upstream (`network_proximity(disease_genes =
-  "disease_genes")`), so the `s_AB` work is no longer blocked by a fake
-  disease module.
+  (2019)'s Complementary Exposure classification.~~ **Done (0.2.0,
+  Phase 3 piece 12):** `separation = "network"` computes `s_AB` on the
+  shared STRING LCC (`.network_string_lcc()`) and emits the `P1`–`P6`
+  `cheng_class`; `separation = "jaccard"` keeps the set-overlap proxy.
 - **`network_degeneracy()`** — swap `pathway_jaccard` for GO semantic
   similarity (GOSemSim, already a dependency); add a permutation null.
 - **`bias_audit()` categorical enrichment** — the half of the original

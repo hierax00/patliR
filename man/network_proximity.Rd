@@ -66,7 +66,11 @@ The updated \code{proj}, with a \code{network_proximity} entry in
 overlap driving \code{d_observed} toward 0 is always visible -- it equals
 \code{n_targets_mapped} exactly when \code{d_observed == 0}, i.e. \verb{S ⊆ T}),
 \code{d_observed}, \code{d_random_mean}, \code{d_random_sd}, \code{z_score}, \code{p_empirical},
-\code{n_random}, \code{seed_used}, \code{p_adjusted}), also written to
+\code{n_random}, \code{seed_used}, \code{species}, \code{string_version}, \code{score_threshold}
+(the STRING interactome this run used -- recorded so \code{\link[=network_synergy]{network_synergy()}}
+can refuse to combine a \code{z} from one interactome with an \code{s_AB} from
+another), \code{n_tests_in_family} (the Benjamini-Hochberg family size for
+this call), \code{p_adjusted}), also written to
 \code{results/network_proximity.csv}. Compounds with zero targets mappable
 to the STRING network for \code{species} contribute no row (logged instead).
 }

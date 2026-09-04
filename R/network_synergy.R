@@ -218,7 +218,13 @@ network_synergy <- function(proj, condition = NULL, disease,
   ## "disease_genes" and a legacy "targets_disease" run for the same
   ## disease does not produce a duplicated z_of name (which setNames() +
   ## z_of[a] would silently resolve to the first match).
+  ## `provenance_known` is FALSE for a pre-Phase-1 network_proximity table
+  ## (no `disease_gene_source` column, or all-NA after a `.network_upsert()`
+  ## back-fill). In that case we cannot subset on it, and the synergy output
+  ## must record `disease_gene_source = NA` rather than fabricate a value.
   have_dgs <- "disease_gene_source" %in% names(proximity_all)
+  provenance_known <- have_dgs &&
+    any(!is.na(proximity_all$disease_gene_source))
   if (have_dgs) {
     present_sources <- unique(stats::na.omit(proximity_all$disease_gene_source))
     if (length(present_sources) > 1) {
@@ -231,10 +237,17 @@ network_synergy <- function(proj, condition = NULL, disease,
       !is.na(proximity_all$disease_gene_source) &
         proximity_all$disease_gene_source == disease_gene_source, , drop = FALSE]
   }
-  if (disease_gene_source == "targets_disease" && nrow(proximity_all) > 0) {
+  effective_dgs <- if (provenance_known) disease_gene_source else NA_character_
+  if (provenance_known && disease_gene_source == "targets_disease" &&
+        nrow(proximity_all) > 0) {
     cli::cli_warn(c(
       "!" = "{.code disease_gene_source = \"targets_disease\"}: the Cheng classification inherits the Phase-1 circularity.",
       "i" = "{.fn targets_disease_filter} only annotates UniProt IDs already predicted as targets, so the {.field z_score} the {.field proximal_*} predicates consume is biased negative for reasons unrelated to topology."
+    ))
+  } else if (!provenance_known) {
+    cli::cli_warn(c(
+      "!" = "The {.val network_proximity} rows predate the {.field disease_gene_source} column.",
+      "i" = "Cannot verify the disease module was independent of the compounds' predicted targets; the Phase-1 circularity may apply. {.field disease_gene_source} is recorded as {.val NA}."
     ))
   }
 
@@ -269,12 +282,12 @@ network_synergy <- function(proj, condition = NULL, disease,
       if (all(c("species", "string_version", "score_threshold") %in% names(prox))) {
         ps <- unique(prox$species); pv <- unique(as.character(prox$string_version))
         pt <- unique(prox$score_threshold)
-        ## version match is round-trip tolerant: utils::read.csv() reads a
-        ## "12.0" string_version back as numeric on patliR_load().
-        ver_ok <- identical(pv, as.character(version)) ||
-          isTRUE(all.equal(suppressWarnings(as.numeric(pv)), suppressWarnings(as.numeric(version))))
+        ## `string_version` is character by contract on both sides
+        ## (`.patliR_results_colclasses` pins it through the CSV round-trip),
+        ## so a direct string compare is exact; `species` / `score_threshold`
+        ## are genuine numbers.
         mism <- !isTRUE(all.equal(as.numeric(ps), as.numeric(species))) ||
-          !ver_ok ||
+          !identical(pv, as.character(version)) ||
           !isTRUE(all.equal(as.numeric(pt), as.numeric(score_threshold)))
         if (length(ps) > 1 || length(pv) > 1 || length(pt) > 1 || mism) {
           cli::cli_abort(c(
@@ -295,6 +308,13 @@ network_synergy <- function(proj, condition = NULL, disease,
     ## unreachable-alpha guard: the smallest achievable BH-adjusted p is
     ## about p_floor * m, p_floor = 1 / (n_random + 1), m the family size.
     m_family <- if ("n_tests_in_family" %in% names(prox)) {
+      fam <- unique(stats::na.omit(prox$n_tests_in_family))
+      if (length(fam) > 1) {
+        cli::cli_warn(c(
+          "!" = "The {.val network_proximity} rows for condition {.val {cond}} were assembled from calls with different BH family sizes ({.val {fam}}).",
+          "i" = "{.field p_adjusted} is then not a coherent FDR threshold across the pair set; the {.arg alpha} gate uses the largest family."
+        ))
+      }
       suppressWarnings(max(prox$n_tests_in_family, na.rm = TRUE))
     } else {
       NA_real_
@@ -444,7 +464,7 @@ network_synergy <- function(proj, condition = NULL, disease,
         joint_closeness = joint_closeness, synergy_score = synergy_score,
         separation_method = separation, alpha = alpha, pairs_mode = pairs,
         species = as.numeric(species), string_version = as.character(version),
-        disease_gene_source = disease_gene_source,
+        disease_gene_source = effective_dgs,
         stringsAsFactors = FALSE
       )
     }
@@ -572,8 +592,10 @@ network_synergy <- function(proj, condition = NULL, disease,
   } else {
     D[ids, ids, drop = FALSE]
   }
+  ## catch Inf *and* NaN before the diagonal is blanked (the diagonal of a
+  ## real distance matrix is 0, so it survives the finiteness test).
+  if (any(!is.finite(d))) return(NA_real_)
   diag(d) <- NA_real_
-  if (any(is.infinite(d))) return(NA_real_)
   row_min <- apply(d, 1, function(r) if (all(is.na(r))) NA_real_ else min(r, na.rm = TRUE))
   if (anyNA(row_min)) return(NA_real_)
   mean(row_min)

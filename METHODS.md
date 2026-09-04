@@ -232,6 +232,8 @@ Each compound is `proximal` when `z_score < 0` **and** `p_adjusted < alpha` from
 
 **BH-family caveat.** `network_proximity()`'s empirical p has a floor of `1/(n_random+1)` and its Benjamini–Hochberg family is per-call; if `n_tests_in_family/(n_random+1) > alpha` the proximity gate is unreachable, every pair falls to `P5`/`P6`, and `network_synergy()` warns.
 
+**Interactome scope.** patliR's STRING graph at `score_threshold = 400` includes text-mining and co-expression edges, whereas Cheng et al. (2019) built their interactome from physical/experimental interactions only. So the absolute `s_AB` values and the `P1`–`P6` boundary here are **not numerically comparable** to Cheng's published figures; the classification is meaningful for *relative* ranking within one patliR run, not as a cross-study effect size. Raise `score_threshold` (e.g. to 700) for a higher-confidence, sparser graph closer to Cheng's.
+
 `separation = "jaccard"` skips STRING entirely: `s_AB` and the Cheng columns are `NA`, `synergy_score` reverts to its historical `both_proximal` gate. `target_jaccard`/`complementarity` are always on the **raw UniProt** sets in both modes; `n_targets_*_mapped` carries the STRING-mapped counts. `synergy_score` (kept as an interim ranking scalar) `= complementarity · (−max(z_a, z_b))`, gated on `complementary_exposure` in network mode.
 **Theory:** Menche et al. (2015) module separation; Cheng, Kovács & Barabási (2019) *Nat Commun* 10:1197 Complementary Exposure.
 

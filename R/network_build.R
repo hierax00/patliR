@@ -275,7 +275,9 @@ network_build <- function(proj, condition = NULL,
   if (is.null(edges_all)) {
     csv_path <- file.path(projectDir(proj), "results", "network_edges.csv")
     if (file.exists(csv_path)) {
-      edges_all <- utils::read.csv(csv_path, stringsAsFactors = FALSE)
+      edges_all <- utils::read.csv(
+        csv_path, stringsAsFactors = FALSE, colClasses = .patliR_results_colclasses
+      )
     }
   }
   if (is.null(edges_all) || !condition %in% edges_all$condition) {
@@ -381,24 +383,17 @@ network_build <- function(proj, condition = NULL,
     shared   <- intersect(names(new_rows), names(kept))
     ## An all-NA column (common when a CSV round-trip reads an empty column
     ## back as logical) is compatible with anything; the numeric family
-    ## (integer/double) rbinds without loss. A character column paired with
-    ## a numeric one is tolerated *only* when every non-NA character value
-    ## parses as a finite number: `utils::read.csv()` type-infers, so a
-    ## character column whose values all look numeric (e.g. a STRING
-    ## `string_version` of "12.0") is silently read back as numeric on
-    ## `patliR_load()`, and rbind then coerces the merged column to
-    ## character losslessly. A genuine character-vs-number change ("two"
-    ## vs `1L`) still aborts. Everything else must match.
+    ## (integer/double) rbinds without loss. Everything else must match --
+    ## a shared column changing class is not something this function can
+    ## silently reconcile. (CSV type-inference reversing a character column
+    ## whose values all look numeric -- e.g. a STRING `string_version` of
+    ## "12.0" -- is fixed at the read boundary instead: see
+    ## `.patliR_results_colclasses` in `R/patliR_project.R`.)
     .col_compat <- function(a, b) {
       if (all(is.na(a)) || all(is.na(b))) return(TRUE)
       num <- c("integer", "numeric", "double")
       ca <- class(a)[1]; cb <- class(b)[1]
       if (ca %in% num && cb %in% num) return(TRUE)
-      if (xor(ca %in% num, cb %in% num) && "character" %in% c(ca, cb)) {
-        chr <- if (ca == "character") a else b
-        chr <- chr[!is.na(chr) & nzchar(chr)]
-        return(length(chr) == 0 || all(is.finite(suppressWarnings(as.numeric(chr)))))
-      }
       identical(ca, cb)
     }
     type_conflict <- shared[!vapply(shared, function(cn)

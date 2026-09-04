@@ -187,6 +187,44 @@ test_that(".network_upsert() aborts on a type conflict on a shared column", {
   )
 })
 
+test_that(".network_upsert() still aborts on numeric-looking character vs number (the loosening is reverted)", {
+  proj <- .test_project()
+  patliRResults(proj, "demo_slot") <- data.frame(
+    condition = "X", value = c("12"), stringsAsFactors = FALSE
+  )
+  expect_error(
+    patliR:::.network_upsert(
+      proj, "demo_slot",
+      data.frame(condition = "Y", value = 12, stringsAsFactors = FALSE), "condition"
+    ),
+    "[Tt]ype changed|not reconcilable"
+  )
+})
+
+test_that("results CSV round-trip keeps by-contract character columns character", {
+  reg <- patliR:::.patliR_results_colclasses
+  expect_identical(unname(reg[["string_version"]]), "character")
+
+  proj <- .test_project()
+  dir.create(file.path(projectDir(proj), "results"), showWarnings = FALSE)
+  patliRResults(proj, "demo_slot") <- data.frame(
+    condition = "2024", string_version = "12.0", score_threshold = 400,
+    stringsAsFactors = FALSE
+  )
+  # write it the way the package does, then reload
+  utils::write.csv(
+    patliRResults(proj, "demo_slot"),
+    file.path(projectDir(proj), "results", "demo_slot.csv"), row.names = FALSE
+  )
+  reloaded <- patliR_load(projectDir(proj))
+  got <- patliRResults(reloaded, "demo_slot")
+  expect_type(got$string_version, "character")
+  expect_identical(got$string_version, "12.0")
+  expect_type(got$condition, "character")
+  expect_identical(got$condition, "2024")
+  expect_true(is.numeric(got$score_threshold))  # genuine numbers stay numeric
+})
+
 test_that(".network_upsert() back-fills a purely-added column as NA on pre-existing rows (S1: legacy CSV migration)", {
   proj <- .test_project()
   ## a pre-Phase-1 table with no `disease_gene_source` / `n_overlap`

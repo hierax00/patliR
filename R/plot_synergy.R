@@ -76,6 +76,46 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 10,
   if (nrow(dat) == 0) {
     cli::cli_abort("No {.val network_synergy} rows for the requested condition(s)/disease.")
   }
+  ## `synergy_score` is `NA` for every pair that is not Complementary
+  ## Exposure (P2) -- or, in `separation = "network"` mode, whenever the
+  ## proximity BH gate was arithmetically unreachable. An all-NA score
+  ## column would otherwise make every point vanish with a bare ggplot
+  ## warning, so draw a self-explanatory empty panel instead.
+  n_scored <- sum(!is.na(dat$synergy_score))
+  if (n_scored == 0) {
+    cheng <- if ("cheng_class" %in% names(dat)) {
+      tb <- table(dat$cheng_class, useNA = "ifany")
+      paste0(names(tb), " x", as.integer(tb), collapse = ", ")
+    } else NA_character_
+    msg <- paste0(
+      "No scored compound pairs for ", scope_label, ".\n\n",
+      "synergy_score is only set for Complementary-Exposure (P2) pairs",
+      if (!is.na(cheng)) paste0(".\nCheng classes present: ", cheng) else ".",
+      "\n\nIf network_synergy() warned that the BH-adjusted proximity p\n",
+      "cannot clear alpha, rerun network_proximity() with a larger n_random."
+    )
+    p <- ggplot2::ggplot() +
+      ggplot2::annotate("text", x = 0, y = 0, label = msg, size = 3.4,
+                        colour = "grey25", lineheight = 1.1) +
+      ggplot2::labs(title = paste0("Compound pair synergy -- ", scope_label)) +
+      ggplot2::theme_void() +
+      ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"))
+    return(.plot_finish(
+      proj, p,
+      name = "synergy_plot_log",
+      filename = paste0("synergy_", scope_label, ".png"),
+      log_row = data.frame(condition = scope_label, path = NA_character_, stringsAsFactors = FALSE),
+      key_cols = "condition",
+      engine = engine, save = save, out_dir = out_dir,
+      width = width, height = height, dpi = dpi
+    ))
+  }
+  if (n_scored < nrow(dat)) {
+    cli::cli_inform(c(
+      "i" = "{nrow(dat) - n_scored} of {nrow(dat)} pair{?s} {?is/are} unscored ({.field synergy_score} {.val NA}) and {?is/are} not drawn -- only Complementary-Exposure (P2) pairs get a score."
+    ))
+  }
+
   label_a <- .plot_label_nodes(proj, conditions, dat$compound_a, "compound")
   label_b <- .plot_label_nodes(proj, conditions, dat$compound_b, "compound")
   dat$pair_label <- paste(label_a, "+", label_b)

@@ -93,12 +93,34 @@ patliR_load <- function(project_dir, cache_dir = NULL) {
     result_files <- list.files(results_dir, pattern = "\\.csv$", full.names = TRUE)
     for (f in result_files) {
       entry_name <- tools::file_path_sans_ext(basename(f))
-      patliRResults(proj, entry_name) <- utils::read.csv(f, stringsAsFactors = FALSE)
+      patliRResults(proj, entry_name) <- utils::read.csv(
+        f, stringsAsFactors = FALSE, colClasses = .patliR_results_colclasses
+      )
     }
   }
 
   proj
 }
+
+#' Columns of any `results/*.csv` that are character *by contract* and must
+#' not be re-typed by `utils::read.csv()`'s value inference
+#'
+#' @description
+#' Most character results columns hold non-numeric-looking values
+#' (`"C0001"`, `"P12345"`, `"EFO_0000537"`, `"P2"`, `"leiden"`) and survive
+#' a `read.csv()` round-trip unchanged. A few do not: `string_version`
+#' holds `"12.0"` / `"11.5"`, which `read.csv()` reads back as a numeric,
+#' and `condition` is a user-chosen label that could be all digits. When
+#' such a column is later merged by [network_build()]'s `.network_upsert()`
+#' against a freshly-built (still character) column of the same name, the
+#' type mismatch aborts the upsert. Pinning them here fixes it at the read
+#' boundary; `read.csv()` silently ignores names not present in a given
+#' file, so one shared vector covers every results CSV.
+#' @keywords internal
+.patliR_results_colclasses <- c(
+  string_version = "character",
+  condition      = "character"
+)
 
 .patliR_version <- function() {
   tryCatch(as.character(utils::packageVersion("patliR")), error = function(e) "0.0.0.dev")

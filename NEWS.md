@@ -2,15 +2,23 @@
 
 ## `network_synergy()` — real `s_AB` (Menche 2015) + Cheng P1–P6 classification
 
-- **New `separation = c("network", "jaccard")`** (default `"network"`).
-  `"network"` computes the topological separation
+- **New `separation = c("network", "jaccard")`** (default `"network"`) —
+  **breaking**: the default now requires `STRINGdb` and a one-time
+  interactome download, and `cli_abort`s (naming `separation = "jaccard"`
+  as the escape) when `STRINGdb` is absent, where the old behaviour was
+  always the cheap set-overlap proxy. `"network"` computes the
+  topological separation
   `s_AB = ⟨d_AB⟩ − (⟨d_AA⟩ + ⟨d_BB⟩)/2` (Menche et al. 2015) between the
   two compounds' STRING-mapped target sets on the interactome's largest
   connected component, and classifies every pair into Cheng, Kovács &
   Barabási (2019)'s `P1`–`P6` (`cheng_class`); `complementary_exposure`
-  is `cheng_class == "P2"`. `"jaccard"` keeps the old set-overlap proxy
-  for users without `STRINGdb` (all `s_AB`/Cheng columns `NA`,
-  `synergy_score` stays on its historical `both_proximal` gate).
+  is `cheng_class == "P2"`. Absolute `s_AB` and the `P1`–`P6` boundary
+  are not numerically comparable to Cheng's published figures (STRING at
+  `score_threshold = 400` includes text-mining / co-expression edges);
+  the classification is for relative ranking within a run. `"jaccard"`
+  keeps the old set-overlap proxy for users without `STRINGdb` (all
+  `s_AB`/Cheng columns `NA`, `synergy_score` stays on its historical
+  `both_proximal` gate).
 - **New arguments** `alpha` (proximity significance cut for the
   `proximal_a`/`proximal_b` predicates — patliR's tightening, *not*
   Cheng's, who use the z-score alone), `species` / `version` /
@@ -48,6 +56,21 @@
   `network_synergy()` so both operate on a byte-identical graph. Only the
   graph is cached (`cacheDir(proj)/stringdb/lcc_<species>_<version>_<thr>.rds`,
   safe to delete); `network_proximity()`'s `z_score` is unchanged.
+- `network_synergy()` now `cli_warn`s when the `network_proximity()` rows
+  it consumes were assembled from calls with different BH family sizes
+  (`n_tests_in_family`), and records `disease_gene_source = NA` (with a
+  warning) rather than fabricating `"disease_genes"` when the proximity
+  table predates the provenance column.
+- `plot_synergy()` draws a self-explanatory empty panel (instead of an
+  all-points-dropped ggplot warning) when no pair is scored — the
+  guaranteed outcome whenever the proximity BH gate is unreachable.
+- CSV round-trip: results columns that are character *by contract* but
+  hold numeric-looking values (`string_version` = `"12.0"`, and
+  `condition`) are pinned via `colClasses` when `patliR_load()` /
+  `.network_graph()` read them, so a save→load→rerun no longer trips
+  `.network_upsert()`'s (correctly strict) column-type check. The
+  short-lived character-vs-numeric tolerance in `.col_compat()` is
+  reverted.
 
 ## `network_module_robustness()` — clustering backends and a random-failure baseline
 

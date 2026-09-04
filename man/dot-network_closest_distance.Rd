@@ -14,7 +14,7 @@ is a confidence, not a distance).
 \description{
 \code{unique()} on both \code{source_ids} and \code{target_ids} before calling
 \code{igraph::distances()}: igraph's underlying C routine rejects a \verb{to=}
-argument with duplicate vertices. \code{.network_resample_degree_matched()}
+argument with duplicate vertices. \code{.network_resample_matched()}
 returns distinct nodes, but the observed sets can still contain a
 repeat, and the "closest" measure only cares about the node \emph{set}, so
 deduping is harmless.

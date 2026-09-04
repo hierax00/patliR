@@ -92,8 +92,14 @@ guessing.
   Phase 3 piece 12):** `separation = "network"` computes `s_AB` on the
   shared STRING LCC (`.network_string_lcc()`) and emits the `P1`–`P6`
   `cheng_class`; `separation = "jaccard"` keeps the set-overlap proxy.
-- **`network_degeneracy()`** — swap `pathway_jaccard` for GO semantic
-  similarity (GOSemSim, already a dependency); add a permutation null.
+- ~~**`network_degeneracy()`** — swap `pathway_jaccard` for GO semantic
+  similarity (GOSemSim, already a dependency); add a permutation null.~~
+  **Done (0.2.0, Phase 3 piece 14):** `annotation = "direct"` (default)
+  scores GO semantic similarity (`GOSemSim`, Wang/BMA) on the targets'
+  own annotations against an annotation-count-matched permutation null
+  (fast `termSim`-matrix path), needing only `network_build()`;
+  `"enriched"` / `"jaccard"` keep the enrichment-based paths.
+  `pathway_jaccard` renamed to `functional_similarity`.
 - **`bias_audit()` categorical enrichment** — the half of the original
   design with no code: MeSH / Disease Ontology enrichment vs. a
   STRING/DrugBank/reference background. Needs a confirmed category source.

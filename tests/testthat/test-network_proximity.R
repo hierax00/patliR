@@ -47,13 +47,13 @@ test_that("network_proximity() errors clearly on an unknown disease_id", {
   )
 })
 
-test_that(".network_degree_bins() builds >=min_per_bin bins from consecutive degrees (Guney rule)", {
+test_that(".network_value_bins() builds >=min_per_bin bins from consecutive degrees (Guney rule)", {
   set.seed(1)
   degree_all <- stats::setNames(
     pmax(1L, rpois(2000, 4) + rbinom(2000, 40, 0.1)),
     paste0("n", 1:2000)
   )
-  bins <- patliR:::.network_degree_bins(degree_all, min_per_bin = 100)
+  bins <- patliR:::.network_value_bins(degree_all, min_per_bin = 100)
 
   sizes <- lengths(bins)
   expect_true(all(utils::head(sizes, -1) >= 100))          # all but last >= 100
@@ -63,17 +63,17 @@ test_that(".network_degree_bins() builds >=min_per_bin bins from consecutive deg
   }
 })
 
-test_that(".network_resample_degree_matched() returns an equal-size set of distinct, degree-matched nodes", {
+test_that(".network_resample_matched() returns an equal-size set of distinct, degree-matched nodes", {
   set.seed(2)
   degree_all <- stats::setNames(sample(1:60, 400, replace = TRUE), paste0("n", 1:400))
-  bins <- patliR:::.network_degree_bins(degree_all, min_per_bin = 50)
+  bins <- patliR:::.network_value_bins(degree_all, min_per_bin = 50)
 
   node_names <- names(degree_all)
   bin_of_node <- integer(length(degree_all))
   for (b in seq_along(bins)) bin_of_node[bins[[b]]] <- b
 
   input <- node_names[1:12]
-  out <- patliR:::.network_resample_degree_matched(input, node_names, bins, bin_of_node)
+  out <- patliR:::.network_resample_matched(input, node_names, bins, bin_of_node)
   expect_length(out, length(input))
   expect_false(anyDuplicated(out) > 0)
   expect_true(all(out %in% node_names))
@@ -104,10 +104,10 @@ test_that("network_proximity schema carries p_adjusted whether or not any row is
   expect_identical(names(empty), names(populated))
 })
 
-test_that(".network_degree_bins() count-per-degree pass matches a brute-force recount", {
+test_that(".network_value_bins() count-per-degree pass matches a brute-force recount", {
   set.seed(7)
   degree_all <- stats::setNames(sample(1:40, 600, replace = TRUE), paste0("n", 1:600))
-  bins <- patliR:::.network_degree_bins(degree_all, min_per_bin = 100)
+  bins <- patliR:::.network_value_bins(degree_all, min_per_bin = 100)
   ## every node accounted for exactly once, bins non-empty
   expect_equal(sort(unlist(bins, use.names = FALSE)), seq_along(degree_all))
   expect_true(all(lengths(bins) > 0))

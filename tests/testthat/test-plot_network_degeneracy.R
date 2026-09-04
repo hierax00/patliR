@@ -9,7 +9,7 @@ test_that("plot_network_degeneracy() returns a ggplot and errors clearly without
   fake_deg <- data.frame(
     condition = "FLO-ET", compound_a = ct[1], compound_b = ct[2],
     n_targets_a = 3L, n_targets_b = 3L, n_pathways_a = 2L, n_pathways_b = 2L,
-    target_jaccard = 0.5, pathway_jaccard = 0.5, degeneracy_score = 0.5,
+    target_jaccard = 0.5, functional_similarity = 0.5, degeneracy_score = 0.5,
     stringsAsFactors = FALSE
   )
   patliRResults(proj, "network_degeneracy") <- fake_deg

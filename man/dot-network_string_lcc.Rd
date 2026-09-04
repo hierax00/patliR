@@ -14,7 +14,7 @@ on a cache miss.}
 \value{
 \code{list(graph, degree, bins, bin_of_node)} -- \code{graph} the LCC
 \code{igraph}, \code{degree} its named degree vector, \code{bins} the list of
-node-index vectors from \code{\link[=.network_degree_bins]{.network_degree_bins()}}, \code{bin_of_node} the
+node-index vectors from \code{\link[=.network_value_bins]{.network_value_bins()}}, \code{bin_of_node} the
 bin index of every node aligned to \code{names(degree)}.
 }
 \description{

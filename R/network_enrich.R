@@ -126,12 +126,12 @@ network_enrich <- function(proj, condition = NULL,
   ## clusterProfiler::simplify() when semData isn't supplied) parses the
   ## whole GO DAG + org.Hs.eg.db's term-gene annotations, which is by far
   ## the slowest part of simplify() -- reusing it across every condition in
-  ## this call turns an O(n_conditions) rebuild into a one-time cost.
+  ## this call turns an O(n_conditions) rebuild into a one-time cost. Shared
+  ## construction + on-disk cache with network_degeneracy() via
+  ## .network_godata() (annoDb=, not the deprecated OrgDb=); it already
+  ## wraps godata() in tryCatch(..., NULL).
   go_sem_data <- if (db == "go" && simplify_go) {
-    tryCatch(
-      GOSemSim::godata(OrgDb = "org.Hs.eg.db", ont = if (ont == "ALL") "BP" else ont, computeIC = FALSE),
-      error = function(e) NULL
-    )
+    .network_godata(proj, ont = if (ont == "ALL") "BP" else ont, computeIC = FALSE)
   } else {
     NULL
   }

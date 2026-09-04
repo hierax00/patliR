@@ -221,7 +221,7 @@ network_proximity <- function(proj, condition = NULL, disease,
   degree_all <- lcc$degree
   bins <- lcc$bins
   ## node_names / bin_of_node are hoisted out of
-  ## .network_resample_degree_matched() -- it is called ~2 * n_random per
+  ## .network_resample_matched() -- it is called ~2 * n_random per
   ## compound and both are invariant across every one of those calls.
   node_names <- names(degree_all)
   bin_of_node <- lcc$bin_of_node
@@ -273,7 +273,7 @@ network_proximity <- function(proj, condition = NULL, disease,
     target_string <- disease_string[disease_string %in% g_names]
     t_rand_list <- if (length(target_string) > 0) {
       lapply(seq_len(n_random), function(j)
-        .network_resample_degree_matched(target_string, node_names, bins, bin_of_node))
+        .network_resample_matched(target_string, node_names, bins, bin_of_node))
     } else {
       vector("list", n_random)
     }
@@ -296,7 +296,7 @@ network_proximity <- function(proj, condition = NULL, disease,
       n_overlap <- length(intersect(unique(source_string), unique(target_string)))
       d_observed <- .network_closest_distance(g, source_string, target_string)
       d_random <- vapply(seq_len(n_random), function(j) {
-        s_rand <- .network_resample_degree_matched(source_string, node_names, bins, bin_of_node)
+        s_rand <- .network_resample_matched(source_string, node_names, bins, bin_of_node)
         .network_closest_distance(g, s_rand, t_rand_list[[j]])
       }, numeric(1))
       d_random <- d_random[is.finite(d_random)]
@@ -384,63 +384,73 @@ network_proximity <- function(proj, condition = NULL, disease,
                score_threshold = score_threshold, input_directory = dir)
 }
 
-#' Degree bins over every node of the interactome -- the pool each random
-#' resampling draws from, per node, to preserve degree.
+#' Contiguous-value bins over a numeric node property -- the pool each
+#' random resampling draws from, per node, to preserve that property.
 #'
 #' @details
-#' Guney et al. (2016), *Nat Commun* 7:10331, Methods: bins are built from
-#' *consecutive degree values*, a bin extended until it holds at least
-#' `min_per_bin` (100) nodes. This keeps bins fine-grained at low degree
-#' and only coarsens in the sparse high-degree tail -- unlike fixed
-#' quantile bins, where a single decile on a scale-free graph spans an
-#' enormous degree range and a hub can be swapped for a low-degree node,
-#' destroying degree preservation exactly where the hub bias it corrects
-#' for is strongest.
-#' @return A list of integer vectors (node indices), one per bin.
+#' Generic over any per-node numeric value: [network_proximity()] passes
+#' node degree (Guney et al. 2016, *Nat Commun* 7:10331 -- the
+#' degree-preserving null), [network_degeneracy()] passes each gene's GO
+#' annotation count. Bins are built from *consecutive values*, a bin
+#' extended until it holds at least `min_per_bin` (default 100) nodes. This
+#' keeps bins fine-grained where the values are dense and only coarsens in
+#' a sparse tail -- unlike fixed quantile bins, where on a heavy-tailed
+#' distribution a single decile spans an enormous range and a
+#' high-value node can be swapped for a low-value one, destroying the
+#' property preservation exactly where the bias it corrects for is
+#' strongest.
+#' @param values Named or unnamed numeric vector, one entry per node, in
+#'   the node order the caller will align `bins` against.
+#' @return A list of integer vectors (indices into `values`), one per bin.
 #' @keywords internal
-.network_degree_bins <- function(degree_all, min_per_bin = 100) {
-  ## one sorted pass: rle() over the sorted degrees gives every unique
-  ## degree and its multiplicity at once, instead of an O(|V|) rescan
-  ## (`sum(degs_sorted == uniq_degs[i])`) per unique degree.
-  runs <- rle(sort(as.vector(degree_all)))
-  uniq_degs <- runs$values
-  count_per_degree <- runs$lengths
+.network_value_bins <- function(values, min_per_bin = 100) {
+  ## one sorted pass: rle() over the sorted values gives every unique
+  ## value and its multiplicity at once, instead of an O(|V|) rescan per
+  ## unique value.
+  runs <- rle(sort(as.vector(values)))
+  uniq_vals <- runs$values
+  count_per_value <- runs$lengths
 
-  ## walk up the unique degrees, closing a bin once it has >= min_per_bin
-  bin_of_degree <- integer(length(uniq_degs))
+  ## walk up the unique values, closing a bin once it has >= min_per_bin
+  bin_of_value <- integer(length(uniq_vals))
   b <- 1L
   count <- 0L
-  for (i in seq_along(uniq_degs)) {
-    bin_of_degree[i] <- b
-    count <- count + count_per_degree[i]
+  for (i in seq_along(uniq_vals)) {
+    bin_of_value[i] <- b
+    count <- count + count_per_value[i]
     if (count >= min_per_bin) { b <- b + 1L; count <- 0L }
   }
   ## a trailing under-full bin is merged into the previous one
-  if (count > 0 && b > 1L) bin_of_degree[bin_of_degree == b] <- b - 1L
+  if (count > 0 && b > 1L) bin_of_value[bin_of_value == b] <- b - 1L
 
-  node_bin <- bin_of_degree[match(degree_all, uniq_degs)]
-  split(seq_along(degree_all), node_bin)
+  node_bin <- bin_of_value[match(values, uniq_vals)]
+  split(seq_along(values), node_bin)
 }
 
 #' Replace `string_ids` with an equal-size set of *distinct* nodes drawn
-#' from the same degree bins.
+#' from the same value bins ([.network_value_bins()]).
 #'
 #' @details
-#' Nodes are grouped by their degree bin and, per bin, `k` distinct
-#' replacements are drawn from that bin's pool -- so the returned set has
-#' exactly `length(string_ids)` distinct nodes, matching Guney et al.'s
-#' "a set of |S| proteins with matching degrees". Drawing each node
-#' independently with replacement (and then `unique()`-ing downstream)
-#' would shrink the random set, inflating its distance variance and
-#' shrinking `|z_score|` in a way that varies with set size.
+#' Nodes are grouped by their bin and, per bin, `k` distinct replacements
+#' are drawn from that bin's pool -- so the returned set has exactly
+#' `length(string_ids)` distinct nodes, matching the property-preserving
+#' null (Guney et al.'s "a set of |S| proteins with matching degrees" for
+#' [network_proximity()]; an annotation-count-matched gene set for
+#' [network_degeneracy()]). Drawing each node independently with
+#' replacement (and then `unique()`-ing downstream) would shrink the
+#' random set, inflating its variance and shrinking `|z_score|` in a way
+#' that varies with set size.
 #'
-#' `node_names` (`names(igraph::degree(g))`) and `bin_of_node` (the
-#' bin index of every node, aligned to `node_names`) are passed in rather
-#' than rebuilt here: this function is called ~`2 * n_random` times per
-#' compound and both are invariant across every call.
-#' @return Character vector of STRING IDs, length `length(string_ids)`.
+#' `node_names` (the node identifiers, in the order `bins` indexes) and
+#' `bin_of_node` (the bin index of every node, aligned to `node_names`)
+#' are passed in rather than rebuilt here: this function is called
+#' `~2 * n_random` times per pair and both are invariant across every call.
+#' `string_ids` must all be in `node_names` (the resampling pool) -- an
+#' absent id would silently corrupt the output.
+#' @return Character vector of node IDs, length `length(string_ids)`.
 #' @keywords internal
-.network_resample_degree_matched <- function(string_ids, node_names, bins, bin_of_node) {
+.network_resample_matched <- function(string_ids, node_names, bins, bin_of_node) {
+  stopifnot(all(string_ids %in% node_names))
   idx <- match(string_ids, node_names)
   by_bin <- split(seq_along(idx), bin_of_node[idx])
 
@@ -458,6 +468,9 @@ network_proximity <- function(proj, condition = NULL, disease,
     }
     out[slots] <- node_names[picks]
   }
+  if (any(!nzchar(out))) {
+    cli::cli_abort("{.fn .network_resample_matched}: {sum(!nzchar(out))} output slot(s) unfilled -- a `string_ids` entry has no bin.")
+  }
   out
 }
 
@@ -466,7 +479,7 @@ network_proximity <- function(proj, condition = NULL, disease,
 #' @description
 #' `unique()` on both `source_ids` and `target_ids` before calling
 #' `igraph::distances()`: igraph's underlying C routine rejects a `to=`
-#' argument with duplicate vertices. `.network_resample_degree_matched()`
+#' argument with duplicate vertices. `.network_resample_matched()`
 #' returns distinct nodes, but the observed sets can still contain a
 #' repeat, and the "closest" measure only cares about the node *set*, so
 #' deduping is harmless.
@@ -527,7 +540,7 @@ network_proximity <- function(proj, condition = NULL, disease,
 #'   on a cache miss.
 #' @return `list(graph, degree, bins, bin_of_node)` -- `graph` the LCC
 #'   `igraph`, `degree` its named degree vector, `bins` the list of
-#'   node-index vectors from [.network_degree_bins()], `bin_of_node` the
+#'   node-index vectors from [.network_value_bins()], `bin_of_node` the
 #'   bin index of every node aligned to `names(degree)`.
 #' @keywords internal
 .network_string_lcc <- function(proj, species, version, score_threshold, string_db = NULL) {
@@ -551,7 +564,7 @@ network_proximity <- function(proj, condition = NULL, disease,
   }
 
   degree_all <- igraph::degree(g)
-  bins <- .network_degree_bins(degree_all)
+  bins <- .network_value_bins(degree_all)
   bin_of_node <- integer(length(degree_all))
   for (b in seq_along(bins)) bin_of_node[bins[[b]]] <- b
   list(graph = g, degree = degree_all, bins = bins, bin_of_node = bin_of_node)

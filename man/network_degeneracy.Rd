@@ -2,9 +2,21 @@
 % Please edit documentation in R/network_degeneracy.R
 \name{network_degeneracy}
 \alias{network_degeneracy}
-\title{Pairwise functional degeneracy between compounds (pathway-based)}
+\title{Pairwise functional degeneracy between compounds (GO semantic similarity)}
 \usage{
-network_degeneracy(proj, condition = NULL, pathway_db = NULL)
+network_degeneracy(
+  proj,
+  condition = NULL,
+  annotation = c("direct", "enriched", "jaccard"),
+  ont = c("BP", "MF", "CC"),
+  measure = c("Wang", "Resnik", "Lin", "Rel", "Jiang"),
+  combine = c("BMA", "max", "avg", "rcmax"),
+  drop = "IEA",
+  universe = c("project", "condition", "genome"),
+  n_random = 200,
+  seed = NULL,
+  pathway_db = NULL
+)
 }
 \arguments{
 \item{proj}{A \code{\link[=PatliRProject-class]{PatliRProject}} object.}
@@ -14,77 +26,162 @@ of \code{\link[=binarizedMatrix]{binarizedMatrix()}}), or \code{NULL} (default) 
 condition. Rebuilding a subset leaves previously-built conditions
 untouched in \code{patliRResults(proj, "network_edges")}.}
 
+\item{annotation}{How \code{functional_similarity} is computed: \code{"direct"}
+(default, GO semantic similarity on the targets' own annotations, no
+\code{network_enrich()}), \code{"enriched"} (GO semantic similarity on the
+enriched-term sets), or \code{"jaccard"} (historical enriched-pathway
+Jaccard).}
+
+\item{ont}{GO ontology for \code{"direct"} / \code{"enriched"}: \code{"BP"} (default --
+process-level convergence, the concept degeneracy requires), \code{"MF"}
+(molecular action -- answers "do these compounds engage the same
+\emph{kind} of protein", a different question), or \code{"CC"}.}
+
+\item{measure}{GO semantic-similarity measure: \code{"Wang"} (default,
+\code{computeIC = FALSE}) or an IC measure (\code{"Resnik"}, \code{"Lin"}, \code{"Rel"},
+\code{"Jiang"} -- each needs a separate \code{computeIC = TRUE} \code{godata} object,
+logged when built; Resnik is unbounded).}
+
+\item{combine}{Set-to-set combination: \code{"BMA"} (default, best-match
+average), \code{"max"}, \code{"avg"}, or \code{"rcmax"}.}
+
+\item{drop}{GO evidence codes excluded before scoring / before the
+annotation-count binning. Default \code{"IEA"} (electronic annotations --
+~44\% of \code{org.Hs.eg.db} BP annotations and the entire BP annotation of
+~1,966 genes; Cheng et al. 2019 exclude them too). \code{NULL} keeps all.}
+
+\item{universe}{Resampling pool for the permutation null: \code{"project"}
+(default), \code{"condition"}, or \code{"genome"}.}
+
+\item{n_random}{Permutation-null resamplings for the z-score
+(\code{"direct"} mode). Default \code{200}; \verb{>= 1} required. \code{n_random = 1}
+gives \code{sim_random_sd = NA}, \code{z_score = NA}, \code{p_empirical} in
+\verb{\{0.5, 1\}}.}
+
+\item{seed}{\code{NULL} (default, auto-generated and logged) or an integer,
+for the resampling. Does not leak into the caller's RNG state.}
+
 \item{pathway_db}{See \code{.network_target_pathway_edges()}, internal --
-restrict \code{pathway_jaccard}'s pathway sets to specific
-\code{network_enrich()} \code{db} value(s) (e.g. \code{"kegg"} alone), or \code{NULL}
-(default) for every \code{db} combined. Worth restricting when a real
-target set makes GO's pathway_jaccard uninformatively close to 1 for
-nearly every pair -- GO's hierarchical redundancy means most compounds
-end up sharing at least some very generic term, which flattens
-\code{degeneracy_score} toward "everything looks degenerate".
-\code{network_enrich()}'s own
-\code{simplify_go} addresses the same root cause upstream (fewer, less
-redundant GO terms in the first place); this argument is the
-complementary downstream lever, for when you want KEGG's coarser
-pathway sets specifically rather than a de-duplicated but still
-GO-scale set of terms.}
+restrict \code{"enriched"} / \code{"jaccard"} pathway sets to specific
+\code{network_enrich()} \code{db} value(s), or \code{NULL} (default) for all.}
 }
 \value{
 The updated \code{proj}, with a \code{network_degeneracy} entry in
 \code{\link[=patliRResults]{patliRResults()}} (columns \code{condition}, \code{compound_a}, \code{compound_b},
-\code{n_targets_a}, \code{n_targets_b}, \code{n_pathways_a}, \code{n_pathways_b},
-\code{target_jaccard}, \code{pathway_jaccard}, \code{degeneracy_score}), also written
-to \code{results/network_degeneracy.csv}.
+\code{n_targets_a}, \code{n_targets_b}, \code{n_genes_a_mapped}, \code{n_genes_b_mapped},
+\code{n_pathways_a}, \code{n_pathways_b} (\code{NA} in \code{"direct"} mode),
+\code{target_jaccard}, \code{functional_similarity}, \code{sim_random_mean},
+\code{sim_random_sd}, \code{z_score}, \code{p_empirical}, \code{p_adjusted} (right-tail;
+\code{NA} outside \code{"direct"} mode), \code{degeneracy_score}, and the per-call
+constants \code{annotation}, \code{ont}, \code{measure}, \code{combine}, \code{drop},
+\code{universe}, \code{n_random}, \code{seed_used}), also written to
+\code{results/network_degeneracy.csv}. The pre-0.2.0 \code{pathway_jaccard}
+column is transparently renamed to \code{functional_similarity} on the
+first run.
 }
 \description{
-For each condition, computes, for every pair of compounds present in that
-condition's network:
+For each condition, and every pair of compounds present in that
+condition's network (\code{\link[=network_build]{network_build()}}), computes:
 \itemize{
 \item \code{target_jaccard}: Jaccard similarity of the two compounds' target sets
 (structural overlap -- do they act on the same proteins?).
-\item \code{pathway_jaccard}: Jaccard similarity of the two compounds' \emph{enriched}
-pathway sets (functional overlap -- reconstructed from
-\code{\link[=network_enrich]{network_enrich()}}'s \code{geneID} column via the same UniProt -> Entrez
-mapping \code{\link[=network_enrich]{network_enrich()}} itself uses, see \code{.network_target_pathway_edges()},
-internal).
-\item \code{degeneracy_score = pathway_jaccard * (1 - target_jaccard)}: high only
-when two compounds are functionally similar (\code{pathway_jaccard} near 1)
-\emph{despite} being structurally distinct (\code{target_jaccard} near 0) --
-different elements, same function, in the spirit of degeneracy as
-Edelman & Gally (2001, \emph{PNAS} 98(24), 13763-8) describe it
-qualitatively (their quantitative measure, Tononi et al. 1999, is a
-different, information-theoretic construction). A pair that hits the
-same targets is redundant, not degenerate; a pair that shares neither
-targets nor pathways is unrelated. Only the different-targets /
-same-pathways quadrant scores high.
-
-The multiplicative form is a convenience scalarisation, not a derived
-result -- and in sparse target data \code{target_jaccard} is ~0 for almost
-every pair, so \code{degeneracy_score} collapses to roughly
-\code{pathway_jaccard}. Read \code{target_jaccard} and \code{pathway_jaccard}
-together (the columns are both in the output) rather than leaning on
-the scalar alone; \code{pathway_jaccard} is also an unweighted set overlap
-over GO terms, so it does not account for term specificity (see
-\code{ROADMAP.md} -- a \code{GOSemSim} semantic-similarity version is planned).
+\item \code{functional_similarity}: how strongly the two compounds' targets
+converge on the same biology. What it is depends on \code{annotation}:
+\itemize{
+\item \code{"direct"} (default) -- GO semantic similarity
+(\code{\link[GOSemSim:clusterSim]{GOSemSim::clusterSim()}}-equivalent) between the two compounds'
+Entrez-mapped target sets, scored on each protein's \emph{own} GO
+annotations. No enrichment involved.
+\item \code{"enriched"} -- \code{\link[GOSemSim:mgoSim]{GOSemSim::mgoSim()}} between the two compounds'
+\emph{enriched} GO-term sets (from \code{\link[=network_enrich]{network_enrich()}}, reconstructed via
+\code{.network_target_pathway_edges()}, internal). Carries the
+circularity described below.
+\item \code{"jaccard"} -- the historical unweighted Jaccard of the two
+compounds' enriched-pathway sets (no GOSemSim). Regression path.
+}
+\item \code{degeneracy_score = functional_similarity * (1 - target_jaccard)}:
+high only when two compounds are functionally similar
+(\code{functional_similarity} near 1) \emph{despite} being structurally distinct
+(\code{target_jaccard} near 0) -- different elements, same function, in the
+spirit of degeneracy as Edelman & Gally (2001, \emph{PNAS} 98(24), 13763-8)
+describe it qualitatively (their quantitative measure, Tononi et al.
+1999, is a different, information-theoretic construction). A pair that
+hits the same targets is redundant, not degenerate; a pair that shares
+neither targets nor function is unrelated. Only the different-targets /
+same-function quadrant scores high. The multiplicative form is a
+convenience scalarisation, not a derived result; read \code{target_jaccard}
+and \code{functional_similarity} together.
 }
 }
-\section{Requires \code{\link[=network_enrich]{network_enrich()}} to have already run for the condition}{
+\section{The permutation null (\code{annotation = "direct"} only)}{
 
-Unlike \code{\link[=network_centrality]{network_centrality()}} or \code{\link[=network_hub_penalty]{network_hub_penalty()}} (which only need
-\code{\link[=network_build]{network_build()}}), this function needs the pathway layer, so it errors
-clearly (naming the exact missing prerequisite) rather than silently
-returning empty/\code{NA} results if \code{\link[=network_enrich]{network_enrich()}} has not been run, or if
-its optional package dependencies (\code{clusterProfiler}, \code{org.Hs.eg.db}) are
-not installed.
+Proteins differ ~100-fold in how many GO BP terms they carry (median 6,
+max > 270 in \code{org.Hs.eg.db}), and a random set of poorly-annotated
+proteins scores low for reasons unrelated to biology. For each pair the
+observed similarity is z-scored against \code{n_random} resamplings in which
+each compound's gene set is replaced by an equal-size set of \emph{distinct}
+genes drawn from the same annotation-count bins (the same
+consecutive-value >= \code{min_per_bin} binning \code{\link[=network_proximity]{network_proximity()}} uses for
+degree, via the shared \code{.network_value_bins()} /
+\code{.network_resample_matched()}). The resampling pool is \code{universe}:
+\code{"project"} (default -- every imported target, so the null carries the
+target predictor's family bias, which is what you want), \code{"condition"}
+(this condition's targets only -- often too small), or \code{"genome"} (every
+annotated gene -- the weakest null; capped for tractability and warned).
+
+\code{z_score} is the primary reported statistic (as in Guney/Menche/Cheng).
+\code{p_empirical} is the \strong{right-tail} permutation p
+(\verb{(1 + #\{sim* >= sim_obs\}) / (n_random + 1)}) -- high similarity is the
+interesting direction, so the tail is flipped relative to
+\code{\link[=network_proximity]{network_proximity()}}, whose identically-named \code{p_adjusted} is a
+\emph{left}-tail p. \code{p_adjusted} is its Benjamini-Hochberg value across every
+pair in the call. Because the GOSemSim score is quantised to 0.001, ties
+at the observed value are common and inflate \code{p_empirical} (conservative);
+\verb{sd(sim*) == 0} is a realistic outcome for small pools and gives
+\code{z_score = NA}. With \code{n_pairs / (n_random + 1) > 0.05} a BH-adjusted p
+cannot resolve an isolated pair and a warning is emitted -- lead with
+\code{z_score} there.
 }
 
-\section{Compound pairs with no pathway data are omitted, not \code{NA}-filled}{
+\section{Why the default does not use network_enrich()}{
 
-If neither compound in a pair has any target participating in a
-significant pathway (\code{pathway_jaccard} would be \code{0/0}), that pair
-contributes no row -- consistent with the rest of \code{patliR}, "nothing to
-compare" is not the same as "zero functional similarity". See
-\code{projectLog(proj)} for how many pairs were skipped this way.
+In \code{annotation = "enriched"} mode a compound's functional profile is the
+set of terms that were called significant for the \strong{whole condition} --
+a pool the compound's own targets helped define, shared by every compound
+in the condition. Two compounds are then compared on membership in a
+small, mutually-determined list, which inflates the similarity of any
+pair sharing even one promiscuous target and makes the score depend on
+how many \emph{other} compounds were in the condition. \code{annotation = "direct"}
+compares each compound's targets by their own GO annotations, which are
+fixed properties of the proteins and do not move when the condition's
+compound list changes. The permutation null corrects the scale but not
+this dependence, so \code{"direct"} is the default. \code{measure = "Wang"} is
+chosen for consistency with \code{network_enrich(simplify_go = TRUE)} (which
+also uses Wang) and for cost, \strong{not} because it is bias-free -- Wang
+removes the term-level frequency dependence that Resnik/Lin/Rel/Jiang
+carry, but not the gene-level one (well-studied proteins carry more
+terms), and UniProt->Entrez and the GO annotations both come from
+\code{org.Hs.eg.db}. It is the annotation-count-matched null that corrects the
+curation bias.
+}
+
+\section{Requires network_enrich() only for \code{"enriched"} / \code{"jaccard"}}{
+
+\code{annotation = "direct"} (default) needs only \code{\link[=network_build]{network_build()}}, the
+\code{clusterProfiler} + \code{org.Hs.eg.db} UniProt->Entrez map, and \code{GOSemSim} --
+it does not need \code{\link[=network_enrich]{network_enrich()}} and is usable one step after
+\code{\link[=network_build]{network_build()}}, like \code{\link[=network_centrality]{network_centrality()}}. \code{"enriched"} and
+\code{"jaccard"} still require \code{\link[=network_enrich]{network_enrich()}} to have run for the
+condition; \code{"jaccard"} does not need \code{GOSemSim}.
+}
+
+\section{Compound pairs with nothing to compare are omitted, not \code{NA}-filled}{
+
+In \code{"direct"} mode a pair is skipped (no row) when either compound has no
+Entrez-mapped, GO-annotated target. In \code{"enriched"} / \code{"jaccard"} mode a
+pair is skipped when neither compound has a target in a significant
+pathway (\code{functional_similarity} would be \code{0/0}). The row \emph{set} is
+therefore mode-dependent; see \code{projectLog(proj)} for the skip counts.
 }
 
 \examples{
@@ -105,8 +202,8 @@ proj <- targets_import_batch(
   platform = "superpred"
 )
 proj <- network_build(proj)
-proj <- network_enrich(proj, condition = "FLO-ET", db = "go")
-proj <- network_degeneracy(proj, condition = "FLO-ET")
+# default "direct" mode -- no network_enrich() needed
+proj <- network_degeneracy(proj, condition = "FLO-ET", seed = 1)
 patliRResults(proj, "network_degeneracy")
 }
 

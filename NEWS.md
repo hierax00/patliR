@@ -72,6 +72,50 @@
   short-lived character-vs-numeric tolerance in `.col_compat()` is
   reverted.
 
+## `network_degeneracy()` — GO semantic similarity + a permutation null
+
+- **New `annotation = c("direct", "enriched", "jaccard")`** (default
+  `"direct"`). `"direct"` scores functional convergence as **GO semantic
+  similarity** (`GOSemSim`, Wang/BMA — `GOSemSim::clusterSim()`-equivalent,
+  reproduced exactly by a fast pooled-`termSim`-matrix path) between the two
+  compounds' Entrez-mapped targets on each protein's *own* GO annotations.
+  It needs only `network_build()` — **not `network_enrich()`** — which
+  removes the enrichment-universe circularity the old `pathway_jaccard`
+  carried. `"enriched"` is `GOSemSim::mgoSim()` over the enriched-term sets
+  (keeps `network_enrich()` as a prerequisite and the circularity);
+  `"jaccard"` is the historical enriched-pathway Jaccard (no `GOSemSim`).
+- **Permutation null (`"direct"` mode).** The observed similarity is
+  z-scored against `n_random` (default `200`) resamplings drawn from
+  **GO-annotation-count bins** (the same `.network_value_bins()` consecutive
+  binning `network_proximity()` uses for degree) over
+  `universe = c("project", "condition", "genome")` (default `"project"`).
+  `z_score` is the primary statistic; `p_empirical` / `p_adjusted` are the
+  **right-tail** permutation p (opposite tail to `network_proximity()`'s
+  identically-named left-tail `p_adjusted`), BH per call, and
+  resolution-limited (a warning fires when `n_pairs / (n_random + 1) >
+  0.05`). `n_random = 1` gives `sim_random_sd`/`z_score` `NA`.
+- **`pathway_jaccard` renamed to `functional_similarity`.** An existing
+  `results/network_degeneracy.csv` is migrated in place on the first run
+  (the column is renamed before the upsert, and the new provenance columns
+  back-filled `NA`) — no delete-and-rebuild. `degeneracy_score` is retained.
+- **New arguments** `ont` (`"BP"` default), `measure` (`"Wang"` default; the
+  IC measures need a separate `computeIC = TRUE` `godata`), `combine`
+  (`"BMA"`), `drop` (`"IEA"` — excludes electronic annotations, ~44% of
+  `org.Hs.eg.db` BP), `seed`. New output columns `n_genes_a_mapped` /
+  `n_genes_b_mapped`, `sim_random_mean` / `sim_random_sd` / `z_score` /
+  `p_empirical` / `p_adjusted`, and the per-call constants `annotation` /
+  `ont` / `measure` / `combine` / `drop` / `universe` / `n_random` /
+  `seed_used`. `n_pathways_a/b` are retained but `NA` in `"direct"` mode.
+- **`godata` construction is now shared** between `network_enrich()` and
+  `network_degeneracy()` via `.network_godata()` (uses the non-deprecated
+  `annoDb =` spelling; caches under `cacheDir(proj)/gosemsim/` with the
+  `org.Hs.eg.db` / `GO.db` versions in the key).
+- The proximity resampling helpers `.network_degree_bins()` /
+  `.network_resample_degree_matched()` are renamed
+  `.network_value_bins()` / `.network_resample_matched()` (generalised
+  from degree to any per-node numeric property; signatures unchanged).
+  `network_proximity()` output is byte-identical.
+
 ## `network_module_robustness()` — clustering backends and a random-failure baseline
 
 - **Breaking change to the numbers.** `network_module_robustness()`'s

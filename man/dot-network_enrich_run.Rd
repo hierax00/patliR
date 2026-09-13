@@ -4,7 +4,32 @@
 \alias{.network_enrich_run}
 \title{Run the actual enrichment call for one (already ID-mapped) gene set}
 \usage{
-.network_enrich_run(db, entrez_ids, ont, pvalueCutoff, qvalueCutoff)
+.network_enrich_run(
+  db,
+  entrez_ids,
+  ont,
+  pvalueCutoff,
+  qvalueCutoff,
+  pAdjustMethod = "BH",
+  universe_entrez = NULL
+)
+}
+\arguments{
+\item{universe_entrez}{\code{NULL} (no background restriction -- each
+function's own whole-genome/whole-pathway-database default) or a
+character vector of Entrez Gene IDs to pass as \verb{universe =}. Confirmed
+against the installed \code{clusterProfiler}/\code{ReactomePA} formals that all
+three underlying functions accept \verb{universe =} in the same ID space as
+\verb{gene =} (\code{enrichKEGG(keyType = "kegg")}'s KEGG-prefixed IDs are only
+used internally when querying KEGG's REST API -- both \verb{gene =} and
+\verb{universe =} are documented as "a vector of entrez gene id", and
+\code{DOSE::enricher_internal()}, which all three call into, intersects
+\code{universe} against its own background gene set without re-keying it).
+Passing \code{universe = NULL} explicitly is equivalent to omitting the
+argument (\code{enrichGO()} does \code{if (missing(universe)) universe <- NULL};
+\code{enricher_internal()}'s own default is \code{universe = NULL} and it
+no-ops the background restriction when \code{is.null(universe)}), so this
+can always be passed rather than conditionally.}
 }
 \value{
 An \code{enrichResult} object (from \code{clusterProfiler}/\code{ReactomePA}).

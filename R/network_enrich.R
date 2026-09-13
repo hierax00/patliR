@@ -38,6 +38,40 @@ NULL
 #' `KEGG.db` is deprecated). GO and Reactome are fully local once their
 #' packages are installed.
 #'
+#' @section Background universe -- why the default is not the whole genome:
+#' Every over-representation test asks "is this term hit more than you would
+#' expect against the background?" -- and "expect" is meaningless until the
+#' background is specified (Boyle et al. 2004, *Bioinformatics* 20(18),
+#' 3710-3715, the original GO::TermFinder framing). The foreground gene set
+#' here is never a random sample of the genome: it is the reachable output
+#' of a ligand-similarity target predictor (SuperPred/SwissTargetPrediction),
+#' which can only return proteins with enough known ligands to build a
+#' similarity model in the first place -- overwhelmingly GPCRs, kinases,
+#' nuclear receptors, proteases, and transporters. Tested against all
+#' ~20,000 genes annotated in `org.Hs.eg.db` (`clusterProfiler`'s own
+#' default background), those families come out "significant" for *any*
+#' input compound before a single biological difference between compounds
+#' is considered -- Timmons, Szkop & Gallagher (2015), *Genome Biol* 16:186,
+#' "Multiple sources of bias confound functional enrichment analysis of
+#' global -omics data". `universe = "project"` (the default here) fixes
+#' this by restricting the background to the project's own predictable
+#' proteome -- every protein any compound in the project could plausibly
+#' have been assigned as a target, not every protein in the genome -- so
+#' the test asks the sharper question "is this term hit more than you'd
+#' expect from *this predictor's* output," not "...from a random gene."
+#' `universe = "genome"` is kept as an explicit, opt-in escape hatch back to
+#' the old whole-genome/whole-pathway-database behaviour, for comparison or
+#' for callers who have a specific reason to want it.
+#'
+#' **This is a breaking change for existing projects.** Before this
+#' argument existed, every call implicitly ran with today's `"genome"`
+#' behaviour. Re-running `network_enrich()` under the new `"project"`
+#' default changes every p-value it reports, and therefore every downstream
+#' result that consumes `network_enrichment` --
+#' [network_degeneracy(annotation = "enriched")][network_degeneracy()] /
+#' `annotation = "jaccard"`, [network_motifs()]'s pathway layer, and
+#' [plot_network_layers()]/[plot_enrichment()]. See `NEWS.md`.
+#'
 #' @inheritParams compounds
 #' @param condition Character vector of condition names (must already have
 #'   been built by [network_build()]), or `NULL` (default) for every built
@@ -47,9 +81,27 @@ NULL
 #'   `(condition, db)` pairs are replaced, not duplicated).
 #' @param ont Only used when `db = "go"`: `"BP"` (default), `"MF"`, `"CC"`,
 #'   or `"ALL"` -- passed straight to [clusterProfiler::enrichGO()].
+#' @param universe `"project"` (default) or `"genome"` -- the
+#'   over-representation background; see the "Background universe" section
+#'   above. `"project"`
+#'   maps `unique(patliRResults(proj, "targets_imported")$uniprot_id)` (or,
+#'   if that slot is absent, every target across every condition
+#'   [network_build()] has built -- the same fallback and the same pool
+#'   [network_degeneracy(universe = "project")][network_degeneracy()] uses)
+#'   to Entrez once per call (not once per condition, since the pool does
+#'   not depend on which condition is being enriched) and passes it as
+#'   `universe =` to [clusterProfiler::enrichGO()]/
+#'   [clusterProfiler::enrichKEGG()]/[ReactomePA::enrichPathway()].
+#'   `"genome"` passes no `universe =` at all, so each function falls back
+#'   to its own whole-genome/whole-pathway-database default. Recorded as a
+#'   per-row `universe` column.
 #' @param pvalueCutoff,qvalueCutoff Passed straight to the underlying
 #'   `clusterProfiler`/`ReactomePA` enrichment function (defaults `0.05`/
 #'   `0.2`, same as their own defaults).
+#' @param pAdjustMethod One of `stats::p.adjust.methods` (default `"BH"`,
+#'   same as `clusterProfiler`'s own default when this argument did not
+#'   exist). Passed straight to [clusterProfiler::enrichGO()]/
+#'   [clusterProfiler::enrichKEGG()]/[ReactomePA::enrichPathway()].
 #' @param simplify_go Logical, default `TRUE`. Only used when `db = "go"`.
 #'   GO terms are hierarchical and highly redundant -- a real target set
 #'   routinely comes back with hundreds of "significant" GO terms, many of
@@ -76,9 +128,14 @@ NULL
 #'
 #' @return The updated `proj`, with a `network_enrichment` entry in
 #'   [patliRResults()] (columns `condition`, `db`, `ID`, `Description`,
-#'   `GeneRatio`, `BgRatio`, `pvalue`, `p.adjust`, `qvalue`, `geneID`
-#'   (Entrez IDs, `/`-separated -- `clusterProfiler`'s own convention,
-#'   preserved as-is rather than reformatted), `Count`), also written to
+#'   `GeneRatio`, `BgRatio`, `pvalue`, `p.adjust`, `qvalue` (`NA` when
+#'   `clusterProfiler` omitted it -- routine when the `qvalue` package's
+#'   pi0 estimation fails on a small gene set, never a crash here),
+#'   `geneID` (Entrez IDs, `/`-separated -- `clusterProfiler`'s own
+#'   convention, preserved as-is rather than reformatted), `Count`,
+#'   `ONTOLOGY` (only populated when `ont = "ALL"`; `NA` otherwise, kept
+#'   for a stable schema across calls), `universe` (the resolved `universe`
+#'   argument for that row, `"project"` or `"genome"`)), also written to
 #'   `results/network_enrichment.csv`. UniProt IDs that could not be mapped
 #'   to an Entrez ID are logged (`"network_enrich_unmapped_target"`) and
 #'   excluded from that condition's gene set, never silently included as
@@ -110,11 +167,15 @@ NULL
 network_enrich <- function(proj, condition = NULL,
                             db = c("reactome", "go", "kegg"),
                             ont = c("BP", "MF", "CC", "ALL"),
+                            universe = c("project", "genome"),
                             pvalueCutoff = 0.05, qvalueCutoff = 0.2,
+                            pAdjustMethod = "BH",
                             simplify_go = TRUE, simplify_cutoff = 0.7) {
   stopifnot(is(proj, "PatliRProject"))
   db <- match.arg(db)
   ont <- match.arg(ont)
+  universe <- match.arg(universe)
+  pAdjustMethod <- match.arg(pAdjustMethod, choices = stats::p.adjust.methods)
   stopifnot(is.numeric(pvalueCutoff), length(pvalueCutoff) == 1, pvalueCutoff > 0, pvalueCutoff <= 1)
   stopifnot(is.numeric(qvalueCutoff), length(qvalueCutoff) == 1, qvalueCutoff > 0, qvalueCutoff <= 1)
   stopifnot(is.logical(simplify_go), length(simplify_go) == 1, !is.na(simplify_go))
@@ -144,6 +205,35 @@ network_enrich <- function(proj, condition = NULL,
     ))
   }
   built_conditions <- unique(edges_all$condition)
+
+  ## Background universe, built ONCE per call (not once per condition): it
+  ## does not depend on which condition is being enriched. Same source and
+  ## the same UniProt -> Entrez mapping pattern as
+  ## network_degeneracy(universe = "project")'s `project_pool_entrez` --
+  ## intentionally kept identical so the two `universe = "project"`
+  ## concepts mean the same thing across the package. See the "Background
+  ## universe" @section above for why this exists.
+  universe_entrez <- NULL
+  if (universe == "project") {
+    ti <- patliRResults(proj, "targets_imported")
+    proj_uni <- if (!is.null(ti) && nrow(ti) > 0) unique(ti$uniprot_id) else unique(edges_all$uniprot_id)
+    universe_entrez <- .network_uniprot_to_entrez(proj_uni)
+    if (length(universe_entrez) == 0) {
+      cli::cli_warn(c(
+        "!" = "{.fn network_enrich}: {.code universe = \"project\"} resolved to 0 Entrez-mapped gene(s) from {length(proj_uni)} UniProt accession(s).",
+        "i" = "Falling back to no background restriction for this call (equivalent to {.code universe = \"genome\"})."
+      ))
+      universe_entrez <- NULL
+    } else {
+      proj <- .log_append(
+        proj, step = "network_enrich", id = NA_character_,
+        message = paste0(
+          "universe = 'project': background pool = ", length(universe_entrez),
+          " Entrez gene(s) mapped from ", length(proj_uni), " distinct UniProt accession(s)"
+        )
+      )
+    }
+  }
 
   if (!is.null(condition)) {
     unknown <- setdiff(condition, built_conditions)
@@ -191,7 +281,7 @@ network_enrich <- function(proj, condition = NULL,
     }
 
     enrich_result <- tryCatch(
-      .network_enrich_run(db, entrez_ids, ont, pvalueCutoff, qvalueCutoff),
+      .network_enrich_run(db, entrez_ids, ont, pvalueCutoff, qvalueCutoff, pAdjustMethod, universe_entrez),
       error = function(e) e
     )
     if (inherits(enrich_result, "error")) {
@@ -232,26 +322,20 @@ network_enrich <- function(proj, condition = NULL,
     }
 
     df <- as.data.frame(enrich_result)
-    if (nrow(df) == 0) {
-      result_list[[cond]] <- .empty_network_enrichment_row()
+    result_list[[cond]] <- if (nrow(df) == 0) {
+      .empty_network_enrichment_row()
     } else {
-      df$condition <- cond
-      df$db <- db
-      result_list[[cond]] <- df[, c("condition", "db", "ID", "Description", "GeneRatio", "BgRatio",
-                                     "pvalue", "p.adjust", "qvalue", "geneID", "Count")]
+      .network_enrich_result_df(df, cond, db, universe)
     }
   }
 
   new_rows <- do.call(rbind, result_list)
   rownames(new_rows) <- NULL
 
-  existing <- patliRResults(proj, "network_enrichment")
-  if (!is.null(existing) && nrow(existing) > 0) {
-    touched <- paste(new_rows$condition, new_rows$db)
-    existing_key <- paste(existing$condition, existing$db)
-    existing <- existing[!existing_key %in% touched, , drop = FALSE]
-    new_rows <- rbind(existing, new_rows)
-  }
+  new_rows <- .network_upsert(
+    proj, "network_enrichment", new_rows, c("condition", "db"),
+    touched_keys = data.frame(condition = conditions, db = db, stringsAsFactors = FALSE)
+  )
 
   patliRResults(proj, "network_enrichment") <- new_rows
   .write_results_csv(proj, "network_enrichment", new_rows)
@@ -278,25 +362,73 @@ network_enrich <- function(proj, condition = NULL,
 }
 
 #' Run the actual enrichment call for one (already ID-mapped) gene set
+#'
+#' @param universe_entrez `NULL` (no background restriction -- each
+#'   function's own whole-genome/whole-pathway-database default) or a
+#'   character vector of Entrez Gene IDs to pass as `universe =`. Confirmed
+#'   against the installed `clusterProfiler`/`ReactomePA` formals that all
+#'   three underlying functions accept `universe =` in the same ID space as
+#'   `gene =` (`enrichKEGG(keyType = "kegg")`'s KEGG-prefixed IDs are only
+#'   used internally when querying KEGG's REST API -- both `gene =` and
+#'   `universe =` are documented as "a vector of entrez gene id", and
+#'   `DOSE::enricher_internal()`, which all three call into, intersects
+#'   `universe` against its own background gene set without re-keying it).
+#'   Passing `universe = NULL` explicitly is equivalent to omitting the
+#'   argument (`enrichGO()` does `if (missing(universe)) universe <- NULL`;
+#'   `enricher_internal()`'s own default is `universe = NULL` and it
+#'   no-ops the background restriction when `is.null(universe)`), so this
+#'   can always be passed rather than conditionally.
 #' @return An `enrichResult` object (from `clusterProfiler`/`ReactomePA`).
 #' @keywords internal
-.network_enrich_run <- function(db, entrez_ids, ont, pvalueCutoff, qvalueCutoff) {
+.network_enrich_run <- function(db, entrez_ids, ont, pvalueCutoff, qvalueCutoff,
+                                 pAdjustMethod = "BH", universe_entrez = NULL) {
   if (db == "reactome") {
     return(ReactomePA::enrichPathway(
       gene = entrez_ids, organism = "human",
-      pvalueCutoff = pvalueCutoff, qvalueCutoff = qvalueCutoff
+      pvalueCutoff = pvalueCutoff, qvalueCutoff = qvalueCutoff,
+      pAdjustMethod = pAdjustMethod, universe = universe_entrez
     ))
   }
   if (db == "go") {
     return(clusterProfiler::enrichGO(
       gene = entrez_ids, OrgDb = "org.Hs.eg.db", keyType = "ENTREZID", ont = ont,
-      pvalueCutoff = pvalueCutoff, qvalueCutoff = qvalueCutoff
+      pvalueCutoff = pvalueCutoff, qvalueCutoff = qvalueCutoff,
+      pAdjustMethod = pAdjustMethod, universe = universe_entrez
     ))
   }
   ## db == "kegg" -- hits KEGG's live REST API, needs internet
   clusterProfiler::enrichKEGG(
     gene = entrez_ids, organism = "hsa",
-    pvalueCutoff = pvalueCutoff, qvalueCutoff = qvalueCutoff
+    pvalueCutoff = pvalueCutoff, qvalueCutoff = qvalueCutoff,
+    pAdjustMethod = pAdjustMethod, universe = universe_entrez
+  )
+}
+
+#' Build the per-row `network_enrichment` columns from one condition's
+#' `as.data.frame(enrichResult)`, defensively.
+#'
+#' @description
+#' Replaces a hard `df[, c(...)]` column subset, which threw `undefined
+#' columns selected` whenever `clusterProfiler` omitted `qvalue` --
+#' routine when the `qvalue` package's pi0 estimation fails on the small
+#' p-value vectors a 10-50-gene target set produces (would otherwise abort
+#' a run that had already spent minutes on GO/KEGG/Reactome). `ONTOLOGY` is
+#' handled the same defensive way: `clusterProfiler` only adds it when
+#' `ont = "ALL"`; keeping it present-but-`NA` otherwise (rather than
+#' absent) matches the zero-row-invariant, stable-schema convention
+#' `.empty_network_enrichment_row()` documents for this table.
+#' @keywords internal
+.network_enrich_result_df <- function(df, cond, db, universe) {
+  qvalue_col   <- if ("qvalue" %in% names(df)) df$qvalue else rep(NA_real_, nrow(df))
+  ontology_col <- if ("ONTOLOGY" %in% names(df)) df$ONTOLOGY else rep(NA_character_, nrow(df))
+  data.frame(
+    condition = cond, db = db,
+    ID = df$ID, Description = df$Description,
+    GeneRatio = df$GeneRatio, BgRatio = df$BgRatio,
+    pvalue = df$pvalue, p.adjust = df$p.adjust, qvalue = qvalue_col,
+    geneID = df$geneID, Count = df$Count,
+    ONTOLOGY = ontology_col, universe = universe,
+    stringsAsFactors = FALSE
   )
 }
 
@@ -311,6 +443,7 @@ network_enrich <- function(proj, condition = NULL,
     condition = character(0), db = character(0), ID = character(0), Description = character(0),
     GeneRatio = character(0), BgRatio = character(0), pvalue = double(0),
     p.adjust = double(0), qvalue = double(0), geneID = character(0), Count = integer(0),
+    ONTOLOGY = character(0), universe = character(0),
     stringsAsFactors = FALSE
   )
 }

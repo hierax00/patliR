@@ -575,6 +575,71 @@
   whenever `clusterProfiler`'s pi0 estimation fails, routine for a small
   gene set). Logged to `patliRResults(proj, "enrichment_plot_log")`.
 
+## `network_enrich()` — background universe (BREAKING), `pAdjustMethod`, and crash fixes
+
+- **BREAKING: new default background universe.** `network_enrich()` gains a
+  `universe = c("project", "genome")` argument, **defaulting to
+  `"project"`**. Previously every call to `enrichGO()`/`enrichKEGG()`/
+  `enrichPathway()` ran with no `universe =` at all, so the background was
+  clusterProfiler's own whole-genome/whole-pathway-database default (all
+  ~20,000 `org.Hs.eg.db` genes for GO, the whole KEGG/Reactome gene-set
+  universe otherwise) -- appropriate for an unbiased gene list, but the
+  foreground here is the reachable output of a ligand-similarity target
+  predictor (SuperPred/SwissTargetPrediction), structurally skewed toward
+  GPCRs, kinases, nuclear receptors, proteases, and transporters -- the
+  only families with enough known ligands to build a similarity model from
+  in the first place. Tested against a whole-genome background, those
+  families come out "enriched" for *any* input compound before a single
+  biological difference between compounds is considered (Timmons, Szkop &
+  Gallagher 2015, *Genome Biol* 16:186, "Multiple sources of bias confound
+  functional enrichment analysis of global -omics data"; Boyle et al. 2004,
+  *Bioinformatics* 20(18):3710-3715, the original over-representation-test
+  framing). `universe = "project"` restricts the background to the
+  project's own predictable proteome --
+  `unique(patliRResults(proj, "targets_imported")$uniprot_id)`, or every
+  target across every built condition if that slot is absent -- mapped to
+  Entrez once per call (not once per condition, since the pool does not
+  depend on which condition is being enriched), the same pool and mapping
+  `network_degeneracy(universe = "project")` already uses so the two
+  concepts mean the same thing across the package. `universe = "genome"`
+  restores the old, unrestricted behaviour as an explicit opt-out (for
+  comparison, or when there is a specific reason to want it). The resolved
+  universe is recorded per row in a new `universe` column.
+  **This changes every p-value `network_enrich()` reports for every
+  existing project that re-runs with the new default** -- and therefore
+  every downstream `network_degeneracy(annotation = "enriched"/"jaccard")`,
+  `network_motifs()`'s pathway layer, and `plot_network_layers()`/
+  `plot_enrichment()` result that consumes `network_enrichment`. Re-run
+  `network_enrich()` (and anything downstream of it) deliberately after
+  upgrading -- do not assume the numbers carried over.
+- **Fix: a missing `qvalue` column no longer crashes the run.**
+  `clusterProfiler` omits `qvalue` when the `qvalue` package's pi0
+  estimation fails -- routine on the small p-value vectors a 10-50-gene
+  target set produces. The result table is now built column-by-column,
+  with `NA` fill for `qvalue` (and for the new `ONTOLOGY` column, populated
+  only when `ont = "ALL"`) instead of a hard `df[, c(...)]` subset that
+  threw `undefined columns selected` and aborted a run that had already
+  spent minutes on GO/KEGG/Reactome.
+- **New `pAdjustMethod` argument** (default `"BH"`, matching
+  `clusterProfiler`'s own internal default -- not previously exposed at
+  all), passed through to `enrichGO()`/`enrichKEGG()`/`enrichPathway()`.
+- **Internal: switched the `(condition, db)` replace-on-rerun logic to the
+  shared `.network_upsert()`**, instead of a hand-rolled re-derivation --
+  one code path, one set of tests, and it fixes a blind spot in the old
+  logic (a condition whose enrichment came back empty never appeared in
+  the touched-keys it derived, so a stale row from an earlier, non-empty
+  run of that same `(condition, db)` could survive an empty rerun
+  untouched). Legacy `network_enrichment.csv` files predating the
+  `universe`/`ONTOLOGY` columns migrate through it cleanly (pure column
+  addition, back-filled as `NA` on existing rows).
+- **`network_degeneracy()`'s abort message**, shown when `annotation =
+  "enriched"`/`"jaccard"` needs a `network_enrichment` entry that isn't
+  there, no longer flatly says "run `network_enrich()` first" -- an empty
+  or missing `network_enrichment` table is indistinguishable from "ran and
+  found nothing" (by design: `patliR` never writes a placeholder row for
+  "nothing to report"), so the message now also names that possibility and
+  points at `projectLog()`.
+
 # patliR 0.1.0
 
 Initial public release. Core pipeline implemented and tested, pre-1.0.

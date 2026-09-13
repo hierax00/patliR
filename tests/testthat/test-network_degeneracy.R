@@ -247,7 +247,13 @@ test_that("network_degeneracy(annotation = 'jaccard') reproduces the enriched-pa
   skip_on_cran()
 
   proj <- .network_stats_test_setup()
-  proj <- network_enrich(proj, condition = "FLO-ET", db = "go", simplify_go = FALSE)
+  ## universe = "genome" (explicit opt-out of the new default, 20-U1): this
+  ## test is about network_degeneracy()'s jaccard math reproducing the
+  ## pathway-overlap computation, not about network_enrich()'s background
+  ## choice -- universe = "project" restricts the background enough that
+  ## this tiny fixture can come back with zero significant GO terms, which
+  ## would make this a test of the enrichment universe instead.
+  proj <- network_enrich(proj, condition = "FLO-ET", db = "go", simplify_go = FALSE, universe = "genome")
   proj <- network_degeneracy(proj, condition = "FLO-ET", annotation = "jaccard")
   res <- patliRResults(proj, "network_degeneracy")
   skip_if(nrow(res) == 0, "no enriched pathways for this fixture")

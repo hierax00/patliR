@@ -210,14 +210,14 @@ network_degeneracy <- function(proj, condition = NULL,
     if (is.null(enrichment_all) || nrow(enrichment_all) == 0) {
       cli::cli_abort(c(
         "No {.val network_enrichment} entry in {.arg proj}.",
-        "i" = "{.code annotation = {.val {annotation}}} needs the pathway layer -- run {.fn network_enrich} first, or use the default {.code annotation = \"direct\"}."
+        "i" = "{.code annotation = {.val {annotation}}} needs the pathway layer -- either {.fn network_enrich} was never run, or it ran and found nothing (check {.fn projectLog}); or use the default {.code annotation = \"direct\"}."
       ))
     }
     missing_enrich <- setdiff(conditions, unique(enrichment_all$condition))
     if (length(missing_enrich) > 0) {
       cli::cli_abort(c(
-        "Condition(s) {.val {missing_enrich}} have no {.fn network_enrich} results.",
-        "i" = "Run {.fn network_enrich} for {.val {missing_enrich}} first, or use {.code annotation = \"direct\"}."
+        "Condition(s) {.val {missing_enrich}} have no {.val network_enrichment} rows.",
+        "i" = "Either {.fn network_enrich} was never run for {.val {missing_enrich}}, or it ran and found nothing (check {.fn projectLog}); or use {.code annotation = \"direct\"}."
       ))
     }
   }

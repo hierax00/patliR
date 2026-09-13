@@ -9,8 +9,10 @@ network_enrich(
   condition = NULL,
   db = c("reactome", "go", "kegg"),
   ont = c("BP", "MF", "CC", "ALL"),
+  universe = c("project", "genome"),
   pvalueCutoff = 0.05,
   qvalueCutoff = 0.2,
+  pAdjustMethod = "BH",
   simplify_go = TRUE,
   simplify_cutoff = 0.7
 )
@@ -29,9 +31,29 @@ call again with a different \code{db} to accumulate results (existing
 \item{ont}{Only used when \code{db = "go"}: \code{"BP"} (default), \code{"MF"}, \code{"CC"},
 or \code{"ALL"} -- passed straight to \code{\link[clusterProfiler:enrichGO]{clusterProfiler::enrichGO()}}.}
 
+\item{universe}{\code{"project"} (default) or \code{"genome"} -- the
+over-representation background; see the "Background universe" section
+above. \code{"project"}
+maps \code{unique(patliRResults(proj, "targets_imported")$uniprot_id)} (or,
+if that slot is absent, every target across every condition
+\code{\link[=network_build]{network_build()}} has built -- the same fallback and the same pool
+\link[=network_degeneracy]{network_degeneracy(universe = "project")} uses)
+to Entrez once per call (not once per condition, since the pool does
+not depend on which condition is being enriched) and passes it as
+\verb{universe =} to \code{\link[clusterProfiler:enrichGO]{clusterProfiler::enrichGO()}}/
+\code{\link[clusterProfiler:enrichKEGG]{clusterProfiler::enrichKEGG()}}/\code{\link[ReactomePA:enrichPathway]{ReactomePA::enrichPathway()}}.
+\code{"genome"} passes no \verb{universe =} at all, so each function falls back
+to its own whole-genome/whole-pathway-database default. Recorded as a
+per-row \code{universe} column.}
+
 \item{pvalueCutoff, qvalueCutoff}{Passed straight to the underlying
 \code{clusterProfiler}/\code{ReactomePA} enrichment function (defaults \code{0.05}/
 \code{0.2}, same as their own defaults).}
+
+\item{pAdjustMethod}{One of \code{stats::p.adjust.methods} (default \code{"BH"},
+same as \code{clusterProfiler}'s own default when this argument did not
+exist). Passed straight to \code{\link[clusterProfiler:enrichGO]{clusterProfiler::enrichGO()}}/
+\code{\link[clusterProfiler:enrichKEGG]{clusterProfiler::enrichKEGG()}}/\code{\link[ReactomePA:enrichPathway]{ReactomePA::enrichPathway()}}.}
 
 \item{simplify_go}{Logical, default \code{TRUE}. Only used when \code{db = "go"}.
 GO terms are hierarchical and highly redundant -- a real target set
@@ -61,9 +83,14 @@ dissimilar terms (more aggressive collapsing); \code{1} keeps everything
 \value{
 The updated \code{proj}, with a \code{network_enrichment} entry in
 \code{\link[=patliRResults]{patliRResults()}} (columns \code{condition}, \code{db}, \code{ID}, \code{Description},
-\code{GeneRatio}, \code{BgRatio}, \code{pvalue}, \code{p.adjust}, \code{qvalue}, \code{geneID}
-(Entrez IDs, \code{/}-separated -- \code{clusterProfiler}'s own convention,
-preserved as-is rather than reformatted), \code{Count}), also written to
+\code{GeneRatio}, \code{BgRatio}, \code{pvalue}, \code{p.adjust}, \code{qvalue} (\code{NA} when
+\code{clusterProfiler} omitted it -- routine when the \code{qvalue} package's
+pi0 estimation fails on a small gene set, never a crash here),
+\code{geneID} (Entrez IDs, \code{/}-separated -- \code{clusterProfiler}'s own
+convention, preserved as-is rather than reformatted), \code{Count},
+\code{ONTOLOGY} (only populated when \code{ont = "ALL"}; \code{NA} otherwise, kept
+for a stable schema across calls), \code{universe} (the resolved \code{universe}
+argument for that row, \code{"project"} or \code{"genome"})), also written to
 \code{results/network_enrichment.csv}. UniProt IDs that could not be mapped
 to an Entrez ID are logged (\code{"network_enrich_unmapped_target"}) and
 excluded from that condition's gene set, never silently included as
@@ -99,6 +126,42 @@ touch the network. \code{db = "kegg"} is different:
 call (there is no current local Bioconductor package for this -- the old
 \code{KEGG.db} is deprecated). GO and Reactome are fully local once their
 packages are installed.
+}
+
+\section{Background universe -- why the default is not the whole genome}{
+
+Every over-representation test asks "is this term hit more than you would
+expect against the background?" -- and "expect" is meaningless until the
+background is specified (Boyle et al. 2004, \emph{Bioinformatics} 20(18),
+3710-3715, the original GO::TermFinder framing). The foreground gene set
+here is never a random sample of the genome: it is the reachable output
+of a ligand-similarity target predictor (SuperPred/SwissTargetPrediction),
+which can only return proteins with enough known ligands to build a
+similarity model in the first place -- overwhelmingly GPCRs, kinases,
+nuclear receptors, proteases, and transporters. Tested against all
+~20,000 genes annotated in \code{org.Hs.eg.db} (\code{clusterProfiler}'s own
+default background), those families come out "significant" for \emph{any}
+input compound before a single biological difference between compounds
+is considered -- Timmons, Szkop & Gallagher (2015), \emph{Genome Biol} 16:186,
+"Multiple sources of bias confound functional enrichment analysis of
+global -omics data". \code{universe = "project"} (the default here) fixes
+this by restricting the background to the project's own predictable
+proteome -- every protein any compound in the project could plausibly
+have been assigned as a target, not every protein in the genome -- so
+the test asks the sharper question "is this term hit more than you'd
+expect from \emph{this predictor's} output," not "...from a random gene."
+\code{universe = "genome"} is kept as an explicit, opt-in escape hatch back to
+the old whole-genome/whole-pathway-database behaviour, for comparison or
+for callers who have a specific reason to want it.
+
+\strong{This is a breaking change for existing projects.} Before this
+argument existed, every call implicitly ran with today's \code{"genome"}
+behaviour. Re-running \code{network_enrich()} under the new \code{"project"}
+default changes every p-value it reports, and therefore every downstream
+result that consumes \code{network_enrichment} --
+\link[=network_degeneracy]{network_degeneracy(annotation = "enriched")} /
+\code{annotation = "jaccard"}, \code{\link[=network_motifs]{network_motifs()}}'s pathway layer, and
+\code{\link[=plot_network_layers]{plot_network_layers()}}/\code{\link[=plot_enrichment]{plot_enrichment()}}. See \code{NEWS.md}.
 }
 
 \examples{

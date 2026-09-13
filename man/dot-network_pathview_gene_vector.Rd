@@ -5,13 +5,23 @@
 \title{Aggregate a condition's (Entrez-mapped) compound-target edges into one
 named numeric vector, per \code{gene_score}}
 \usage{
-.network_pathview_gene_vector(edges_cond, gene_score)
+.network_pathview_gene_vector(proj, cond, edges_cond, gene_score)
+}
+\arguments{
+\item{proj}{The project (for \code{.log_append()}); returned inside the
+result list so the caller's own \code{proj} stays threaded through.}
+
+\item{cond}{Single condition name, for the log message only.}
 }
 \value{
-Named numeric vector (\code{names} = Entrez IDs).
+\verb{list(proj = <updated proj>, gene_vector = <named numeric vector, names = Entrez IDs>)}.
 }
 \description{
-Aggregate a condition's (Entrez-mapped) compound-target edges into one
-named numeric vector, per \code{gene_score}
+For \code{gene_score \%in\% c("max_weight", "mean_weight")}, an edge with \code{NA}
+\code{weight} (some import platforms do not report one) is explicitly
+excluded and logged -- \code{stats::aggregate()}'s default \code{na.action = na.omit} would otherwise drop it with no trace, and if \emph{every} edge for
+\code{cond} has \code{NA} weight the resulting gene vector would be length 0 and
+\code{pathview()} would fail on it with a cryptic error. That case now aborts
+here instead, with a clear message.
 }
 \keyword{internal}

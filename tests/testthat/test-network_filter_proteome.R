@@ -13,9 +13,66 @@ test_that("network_filter_proteome() keeps only edges whose target is in the giv
 
 test_that("network_filter_proteome() returns zero rows (not an error) when nothing matches", {
   proj <- .network_stats_test_setup()
-  proj <- network_filter_proteome(proj, proteome = "NOT-A-REAL-UNIPROT-ID")
+  ## "NOT-A-REAL-UNIPROT-ID" matches nothing AND does not look like a
+  ## UniProt accession, so this also exercises the new sanity-check warning
+  ## (spec 1.11 [SHOULD] #2) -- expected here, asserted more directly below.
+  expect_warning(
+    proj <- network_filter_proteome(proj, proteome = "NOT-A-REAL-UNIPROT-ID"),
+    "UniProt"
+  )
   filtered <- patliRResults(proj, "network_filtered_edges")
   expect_equal(nrow(filtered), 0)
+})
+
+test_that("network_filter_proteome() warns when the input looks like gene symbols, not UniProt accessions", {
+  proj <- .network_stats_test_setup()
+  ## Neither "TP53" nor "EGFR" matches the 6-character UniProt accession
+  ## shape, and neither will be present in the fixture's uniprot_id column.
+  expect_warning(
+    network_filter_proteome(proj, proteome = c("TP53", "EGFR")),
+    "gene symbols"
+  )
+})
+
+test_that("network_filter_proteome() does not warn when the input is UniProt-shaped even if it matches nothing", {
+  proj <- .network_stats_test_setup()
+  ## "P99999" is UniProt-accession-shaped (matches the regex) even though it
+  ## is not present in this fixture -- more than half of a length-1 vector
+  ## being accession-shaped means no warning should fire.
+  expect_no_warning(network_filter_proteome(proj, proteome = "P99999"))
+})
+
+test_that("network_filter_proteome() records proteome_label and n_proteome, and keys the upsert on (condition, proteome_label)", {
+  proj <- .network_stats_test_setup()
+  edges <- patliRResults(proj, "network_edges")
+  tgt <- edges$uniprot_id[1]
+
+  proj <- network_filter_proteome(proj, proteome = tgt, proteome_label = "my_proteome")
+  f1 <- patliRResults(proj, "network_filtered_edges")
+  expect_true(all(c("proteome_label", "n_proteome") %in% names(f1)))
+  expect_true(all(f1$proteome_label == "my_proteome"))
+  expect_true(all(f1$n_proteome == 1L))
+
+  ## a second, differently-labelled filter over the SAME condition must be
+  ## kept alongside the first, not overwrite it -- proteome_label is part
+  ## of the upsert key.
+  proj <- network_filter_proteome(proj, proteome = tgt, proteome_label = "other_proteome")
+  f2 <- patliRResults(proj, "network_filtered_edges")
+  expect_setequal(unique(f2$proteome_label), c("my_proteome", "other_proteome"))
+  expect_equal(sum(f2$proteome_label == "my_proteome"), nrow(f1))
+})
+
+test_that("network_filter_proteome() auto-derives a stable proteome_label when none is given", {
+  proj <- .network_stats_test_setup()
+  edges <- patliRResults(proj, "network_edges")
+  tgt <- edges$uniprot_id[1]
+
+  proj1 <- network_filter_proteome(proj, proteome = tgt)
+  proj2 <- network_filter_proteome(proj, proteome = tgt)
+  lab1 <- unique(patliRResults(proj1, "network_filtered_edges")$proteome_label)
+  lab2 <- unique(patliRResults(proj2, "network_filtered_edges")$proteome_label)
+  expect_equal(lab1, lab2) ## same proteome content -> same auto label
+  expect_false(is.na(lab1) || !nzchar(lab1))
 })
 
 test_that("network_filter_proteome() zero-row rerun drops the recomputed condition's stale rows, keeps the others", {
@@ -28,13 +85,25 @@ test_that("network_filter_proteome() zero-row rerun drops the recomputed conditi
   tgtA <- edges$uniprot_id[edges$condition == cA][1]
   tgtB <- edges$uniprot_id[edges$condition == cB][1]
 
-  proj <- network_filter_proteome(proj, proteome = c(tgtA, tgtB))
+  ## Same proteome_label both calls: this models re-running the SAME named
+  ## filter with an updated proteome list, which is what headline bug #2
+  ## (a zero-row rerun silently keeping the previous run's rows) is about.
+  ## A DIFFERENT proteome_label would legitimately coexist instead (see the
+  ## "keys the upsert on (condition, proteome_label)" test above) -- that is
+  ## the new, intended behaviour, not the bug this test guards against.
+  proj <- network_filter_proteome(proj, proteome = c(tgtA, tgtB), proteome_label = "shared_label")
   f1 <- patliRResults(proj, "network_filtered_edges")
   expect_true(cA %in% f1$condition)
   expect_true(cB %in% f1$condition)
 
-  ## rerun for condition cA only against a proteome that matches nothing
-  proj <- network_filter_proteome(proj, proteome = "NOT-A-REAL-UNIPROT-ID", condition = cA)
+  ## rerun for condition cA only, same label, against a proteome that now
+  ## matches nothing
+  expect_warning(
+    proj <- network_filter_proteome(
+      proj, proteome = "NOT-A-REAL-UNIPROT-ID", condition = cA, proteome_label = "shared_label"
+    ),
+    "UniProt"
+  )
   f2 <- patliRResults(proj, "network_filtered_edges")
   expect_false(cA %in% f2$condition)   # stale cA rows gone (was the bug)
   expect_true(cB %in% f2$condition)    # cB untouched

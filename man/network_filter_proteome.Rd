@@ -4,7 +4,12 @@
 \alias{network_filter_proteome}
 \title{Filter a project's compound-target network to a proteome of interest}
 \usage{
-network_filter_proteome(proj, proteome, condition = NULL)
+network_filter_proteome(
+  proj,
+  proteome,
+  condition = NULL,
+  proteome_label = NULL
+)
 }
 \arguments{
 \item{proj}{A \code{\link[=PatliRProject-class]{PatliRProject}} object.}
@@ -16,14 +21,29 @@ of interest.}
 of \code{\link[=binarizedMatrix]{binarizedMatrix()}}), or \code{NULL} (default) to (re)build every
 condition. Rebuilding a subset leaves previously-built conditions
 untouched in \code{patliRResults(proj, "network_edges")}.}
+
+\item{proteome_label}{\code{NULL} (default) auto-derives a stable label from a
+cheap hash of \code{sort(unique(proteome))} (so the same set of accessions,
+in any order, always gets the same label); or a single non-empty
+character string to name this proteome yourself (e.g. \code{"liver"},
+\code{"mitochondrion"}). Without \emph{some} label, \code{network_filtered_edges.csv}
+is uninterpretable on its own (which proteome produced which rows) --
+against the CSV-is-truth contract. Part of the upsert key alongside
+\code{condition}, so filtering the same condition against two different
+proteomes keeps both results instead of one overwriting the other.}
 }
 \value{
 The updated \code{proj}, with a \code{network_filtered_edges} entry in
-\code{\link[=patliRResults]{patliRResults()}} (same columns as \code{network_edges}: \code{condition},
-\code{compound_id}, \code{uniprot_id}, \code{weight}, \code{disease_association_score}),
-also written to \code{results/network_filtered_edges.csv}. How many of
-each condition's edges were kept is always logged, even when the
-answer is zero.
+\code{\link[=patliRResults]{patliRResults()}} (same columns as \code{network_edges} -- \code{condition},
+\code{compound_id}, \code{uniprot_id}, \code{weight} -- plus \code{proteome_label} and
+\code{n_proteome} (\code{length(proteome)}, the size of the proteome that
+produced this row set)), also written to
+\code{results/network_filtered_edges.csv}. How many of each condition's
+edges were kept is always logged, even when the answer is zero. A
+\code{proteome} that matches nothing in \code{network_edges} AND does not look
+like UniProt accessions (see the UniProt accession regex in the
+source) gets a \code{cli_warn} -- the most common cause is passing gene
+symbols by mistake.
 }
 \description{
 Restricts \code{\link[=patliRResults]{patliRResults()}}\verb{(proj, "network_edges")} to rows whose

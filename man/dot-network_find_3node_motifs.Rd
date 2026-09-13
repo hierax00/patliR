@@ -22,4 +22,18 @@ R loop over out-neighbour pairs. This replaced a per-node
 The edge key joins \code{from}/\code{to} with an ASCII \code{0x01} byte, which cannot
 occur in a node name, so \code{"A"} + \code{"BC"} and \code{"AB"} + \code{"C"} never collide.
 }
+\section{Performance ceiling of the two-path \code{merge()}}{
+
+The \code{merge()} below materialises every two-path at once -- \verb{sum_b indeg(b) * outdeg(b)} rows -- before any filtering. That is fast on the
+compound-target-pathway graphs this package builds today (bounded
+fan-out per node), but a single hub node with, say, 40 in-edges and 900
+out-edges (an un-simplified GO layer, \code{pathway_db = NULL}, on a large
+input set) contributes 36,000 rows on its own; a real multi-thousand-node
+graph at GO scale can reach 10^7-10^8 two-path rows before the closing-
+edge filter ever runs. \code{pathway_db = "kegg"} (far coarser than GO, much
+smaller per-compound fan-out) is effectively required to keep this
+function fast at that scale; chunking the join over blocks of \code{b} would
+remove the ceiling entirely but is not implemented.
+}
+
 \keyword{internal}

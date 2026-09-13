@@ -10,19 +10,15 @@ network_bowtie(
   condition = NULL,
   species = 9606,
   version = "12.0",
-  actions_version = "11.0"
+  actions_version = "11.0",
+  actions_score_threshold = 400
 )
 }
 \arguments{
-\item{proj}{A \code{\link[=PatliRProject-class]{PatliRProject}} object.}
+\item{proj, condition}{See \code{\link[=network_build]{network_build()}}.}
 
-\item{condition}{Character vector of condition names (must match columns
-of \code{\link[=binarizedMatrix]{binarizedMatrix()}}), or \code{NULL} (default) to (re)build every
-condition. Rebuilding a subset leaves previously-built conditions
-untouched in \code{patliRResults(proj, "network_edges")}.}
-
-\item{species}{NCBI taxonomy ID passed to \code{STRINGdb$new()}. Default
-\code{9606} (human).}
+\item{species}{NCBI taxonomy ID for the STRING actions file and the
+UniProt -> STRING_id mapping. Default \code{9606} (human).}
 
 \item{version}{Deprecated and unused -- both the actions graph and the
 ID mapping now use \code{actions_version} (mixing releases dropped retired
@@ -33,6 +29,15 @@ calls do not error.}
 \emph{and} the UniProt -> STRING_id mapping (see
 \code{.network_stringdb_actions_graph()}, internal). Defaults to \code{"11.0"}:
 STRING discontinued the "actions" flat file after v11.0.}
+
+\item{actions_score_threshold}{Minimum STRING per-interaction confidence
+\code{score} (0-999, the actions file's own column -- distinct from the
+combined interactome score \code{\link[=network_proximity]{network_proximity()}} filters on) required
+for a directed action to become an edge. Default \code{400}, matching the
+rest of the package's STRING confidence convention. Without this
+filter every directed row is used regardless of confidence, so the
+core SCC size -- the headline bowtie number -- would be driven by
+STRING's lowest-confidence predictions.}
 }
 \value{
 The updated \code{proj}, with two entries in \code{\link[=patliRResults]{patliRResults()}}:
@@ -44,10 +49,13 @@ target in the action graph, \code{"not_in_action_network"} for a target
 that maps to STRING but is absent from the sparse directed action
 graph, or \code{"unmapped"} for a target with no STRING_id at all -- none
 are dropped) and
-\code{network_bowtie_summary} (columns \code{species}, \code{version}, \code{n_nodes},
-\code{n_edges}, \code{n_core}, \code{n_in_component}, \code{n_out_component}, \code{n_other} --
-one row per \verb{(species, version)}; \code{version} here is \code{actions_version}).
-Both written to their matching \verb{results/*.csv}.
+\code{network_bowtie_summary} (columns \code{species}, \code{version},
+\code{actions_score_threshold}, \code{n_nodes}, \code{n_edges}, \code{n_core},
+\code{n_in_component}, \code{n_out_component}, \code{n_other} -- one row per
+\verb{(species, version)}; \code{version} here is \code{actions_version}).
+Both written to their matching \verb{results/*.csv}. A core smaller than 50
+nodes, or under 1\% of \code{n_nodes}, gets a \code{cli_warn} -- every downstream
+bowtie number is likely noise at that size.
 }
 \description{
 Downloads STRING's directed "actions" file for \code{species} (activation/
@@ -79,6 +87,16 @@ directed action network for \code{species}, computed once and cached (see
 \code{.network_stringdb_actions_graph()}, internal). \code{condition} only
 controls which compounds/targets get annotated with their (fixed)
 component membership.
+}
+
+\section{\code{species}/\code{version} are documented once, not inherited}{
+
+\verb{@inheritParams network_proximity} would also pull in that function's
+\code{version} doc, which describes it as the live STRING release passed to
+\code{STRINGdb$new()} -- true there, but \code{version} is deprecated and ignored
+\emph{here} (see its own \verb{@param} below). Only \code{species} is actually shared;
+it is documented explicitly instead, so the two functions' \code{version}
+semantics never end up contradicting each other on the same page.
 }
 
 \examples{

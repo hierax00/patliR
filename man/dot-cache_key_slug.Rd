@@ -2,11 +2,26 @@
 % Please edit documentation in R/targets_disease.R
 \name{.cache_key_slug}
 \alias{.cache_key_slug}
-\title{Sanitize a free-text term into a safe cache-file-name fragment}
+\title{Sanitize a free-text term into a safe, collision-resistant cache-file-name
+fragment}
 \usage{
 .cache_key_slug(x)
 }
+\value{
+\code{character}, same length as \code{x}.
+}
 \description{
-Sanitize a free-text term into a safe cache-file-name fragment
+Sanitize a free-text term into a safe, collision-resistant cache-file-name
+fragment
+}
+\details{
+\code{gsub("[^A-Za-z0-9]+", "_", x)} alone collapses every run of punctuation
+to a single \verb{_}, so distinct raw strings that differ only in punctuation
+-- \code{"FLO-ET"} vs \code{"FLO_ET"}, \code{"EFLO S"} vs \code{"EFLO-S"} -- collapse to the
+\emph{same} slug and silently share a cache file. A short hash of the raw
+string (computed before the punctuation is collapsed, so it still
+differs when the collapsed slug does not) is appended to disambiguate
+them; no new dependency (\code{digest} is not otherwise used anywhere in this
+package).
 }
 \keyword{internal}

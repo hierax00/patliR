@@ -44,7 +44,7 @@ test_that("network_build() builds one network_edges row set per condition, restr
   proj <- network_build(proj)
 
   edges <- patliRResults(proj, "network_edges")
-  expect_true(all(c("condition", "compound_id", "uniprot_id", "weight", "disease_association_score") %in% names(edges)))
+  expect_true(all(c("condition", "compound_id", "uniprot_id", "weight") %in% names(edges)))
 
   bin <- binarizedMatrix(proj)
   all_conditions <- setdiff(names(bin), "compound_id")
@@ -223,6 +223,74 @@ test_that("results CSV round-trip keeps by-contract character columns character"
   expect_type(got$condition, "character")
   expect_identical(got$condition, "2024")
   expect_true(is.numeric(got$score_threshold))  # genuine numbers stay numeric
+})
+
+test_that("network_build() no longer emits disease_association_score (breaking schema change, spec 1.1 [MUST] #1)", {
+  proj <- .network_test_setup()
+  proj <- network_build(proj)
+  edges <- patliRResults(proj, "network_edges")
+  expect_false("disease_association_score" %in% names(edges))
+  expect_true(all(c("condition", "compound_id", "uniprot_id", "weight") %in% names(edges)))
+})
+
+test_that(".cache_key_slug() no longer collides on punctuation-only differences (e.g. 'FLO-ET' vs 'FLO_ET')", {
+  s1 <- patliR:::.cache_key_slug("FLO-ET")
+  s2 <- patliR:::.cache_key_slug("FLO_ET")
+  expect_false(identical(s1, s2))
+  ## same string in -> same slug out (deterministic, needed for the cache to
+  ## actually be reused across calls)
+  expect_identical(patliR:::.cache_key_slug("FLO-ET"), s1)
+})
+
+test_that(".network_build_igraph() aborts with a clear message when a compound_id collides with a uniprot_id (bipartite invariant)", {
+  ## "X" is both a compound_id (edge 2) and a uniprot_id (edge 1's target)
+  ## -- it is typed as a compound (compound_ids includes "X"), so edge 1
+  ## (compound_id="C1", uniprot_id="X") becomes an intra-mode
+  ## compound-compound edge.
+  edges <- data.frame(
+    compound_id = c("C1", "X"), uniprot_id = c("X", "P12345"), weight = c(0.9, 0.5),
+    stringsAsFactors = FALSE
+  )
+  expect_error(patliR:::.network_build_igraph(c("C1", "X"), edges), "not bipartite")
+  expect_error(patliR:::.network_build_igraph(c("C1", "X"), edges), "X")
+})
+
+test_that(".network_graph() rebuilds when the cache is present but its row count disagrees with the live network_edges (hand-edited CSV removed a row)", {
+  proj <- .network_test_setup()
+  proj <- network_build(proj, condition = "FLO-ET")
+
+  g1 <- patliR:::.network_graph(proj, "FLO-ET")
+  n_edges_before <- igraph::ecount(g1)
+  testthat::skip_if(n_edges_before == 0, "no edges in the FLO-ET fixture")
+
+  ## Simulate a hand-edit of results/network_edges.csv removing one row for
+  ## FLO-ET -- .network_graph() reads patliRResults() first (falling back
+  ## to the CSV only when that slot is NULL), so setting it directly here
+  ## exercises the same "live rows disagree with the cache" path.
+  edges <- patliRResults(proj, "network_edges")
+  drop_idx <- which(edges$condition == "FLO-ET")[1]
+  edited <- edges[-drop_idx, , drop = FALSE]
+  patliRResults(proj, "network_edges") <- edited
+
+  g2 <- patliR:::.network_graph(proj, "FLO-ET")
+  expect_lt(igraph::ecount(g2), n_edges_before) ## rebuilt from the edited edge set, not served stale
+})
+
+test_that(".network_graph() rebuilds when the cache's edge CONTENT disagrees with network_edges even at the same row count (checksum catches it)", {
+  proj <- .network_test_setup()
+  proj <- network_build(proj, condition = "FLO-ET")
+
+  g1 <- patliR:::.network_graph(proj, "FLO-ET")
+  checksum_before <- attr(g1, "edges_checksum")
+
+  edges <- patliRResults(proj, "network_edges")
+  idx <- which(edges$condition == "FLO-ET")[1]
+  edges$weight[idx] <- edges$weight[idx] + 0.0001234 ## same nrow, different content
+  patliRResults(proj, "network_edges") <- edges
+
+  g2 <- patliR:::.network_graph(proj, "FLO-ET")
+  expect_equal(igraph::ecount(g2), igraph::ecount(g1)) ## same edge count
+  expect_false(identical(attr(g2, "edges_checksum"), checksum_before)) ## but rebuilt, not served stale
 })
 
 test_that(".network_upsert() back-fills a purely-added column as NA on pre-existing rows (S1: legacy CSV migration)", {

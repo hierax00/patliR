@@ -26,12 +26,18 @@ NULL
 #' exists; the other two raise a clear "not implemented yet" error if
 #' requested.
 #'
-#' @section Edges are enriched with disease association when available:
-#' If [targets_disease_filter()] has already been run, each edge also gets a
-#' `disease_association_score` attribute/column (`NA` if that target has no
-#' recorded association, or if `targets_disease_filter()` was never run at
-#' all) -- this is purely descriptive at this stage; `network_proximity()`
-#' (not implemented yet) is what will actually use it topologically.
+#' @section `disease_association_score` was removed (breaking change):
+#' Earlier versions attached a `disease_association_score` column to every
+#' edge, joined from [targets_disease_filter()]'s output via
+#' `match(paste(compound_id, uniprot_id), paste(compound_id, target_id))`.
+#' That `match()` only ever returns the *first* hit -- once
+#' `targets_disease_filter()` had accumulated more than one disease (exactly
+#' the case [network_proximity()]/[network_synergy()] rely on),
+#' `network_edges` silently carried an arbitrary one of them with no
+#' `disease_id` column recording which. There is no fix that keeps a single
+#' scalar column meaningful, so the column is gone: join
+#' `patliRResults(proj, "targets_disease")` yourself on
+#' `(compound_id, target_id, disease_id)` if you need it.
 #'
 #' @inheritParams compounds
 #' @param condition Character vector of condition names (must match columns
@@ -40,16 +46,20 @@ NULL
 #'   untouched in `patliRResults(proj, "network_edges")`.
 #' @param target_source `"imported"` (default and only implemented source
 #'   right now), `"consensus"`, or `"bipartite"`. See the section above.
-#' @param min_score `NULL` (default, keep every imported target) or a single
-#'   number in `[0, 1]`: drop target edges whose `probability` (from
-#'   [targets_import()]) is below this threshold before building the graph.
+#' @param min_score `NULL` (default, keep every imported target, including
+#'   those with an `NA` probability) or a single number in `[0, 1]`: drop
+#'   target edges whose `probability` (from [targets_import()]) is below
+#'   this threshold, **or is `NA`**, before building the graph. This
+#'   asymmetry is easy to miss: `min_score = NULL` keeps `NA` probabilities;
+#'   any non-`NULL` `min_score` treats an `NA` probability as "fails the
+#'   threshold" and drops it (`is.na(probability) | probability < min_score`).
 #'
 #' @return The updated `proj`, with a `network_edges` entry in
 #'   [patliRResults()] (columns `condition`, `compound_id`, `uniprot_id`,
-#'   `weight` (the import probability), `disease_association_score`), also
-#'   written to `results/network_edges.csv`. One `igraph` object per
-#'   (re)built condition is cached under [cacheDir()] for the rest of the
-#'   `network_*` family to reuse -- see `.network_graph()`, internal.
+#'   `weight` (the import probability)), also written to
+#'   `results/network_edges.csv`. One `igraph` object per (re)built
+#'   condition is cached under [cacheDir()] for the rest of the `network_*`
+#'   family to reuse -- see `.network_graph()`, internal.
 #'
 #' @examples
 #' \dontrun{
@@ -120,8 +130,6 @@ network_build <- function(proj, condition = NULL,
     imported <- imported[!below, , drop = FALSE]
   }
 
-  disease <- patliRResults(proj, "targets_disease")
-
   edge_list <- vector("list", length(conditions))
   names(edge_list) <- conditions
   n_edges <- integer(length(conditions))
@@ -151,19 +159,13 @@ network_build <- function(proj, condition = NULL,
       )
     }
 
-    edges$disease_association_score <- rep(NA_real_, nrow(edges))
-    if (!is.null(disease) && nrow(disease) > 0 && nrow(edges) > 0) {
-      key <- paste(edges$compound_id, edges$uniprot_id)
-      dkey <- paste(disease$compound_id, disease$target_id)
-      hit <- match(key, dkey)
-      edges$disease_association_score <- disease$association_score[hit]
-    }
-
     g <- .network_build_igraph(present_ids, edges)
+    attr(g, "edges_nrow") <- nrow(edges)
+    attr(g, "edges_checksum") <- .network_edges_checksum(edges)
     saveRDS(g, .network_cache_path(proj, cond))
 
     edges$condition <- rep(cond, nrow(edges))
-    edge_list[[cond]] <- edges[, c("condition", "compound_id", "uniprot_id", "weight", "disease_association_score")]
+    edge_list[[cond]] <- edges[, c("condition", "compound_id", "uniprot_id", "weight")]
     n_edges[[cond]] <- nrow(edges)
   }
 
@@ -200,10 +202,47 @@ network_build <- function(proj, condition = NULL,
     type = c(rep(FALSE, length(compound_ids)), rep(TRUE, length(target_ids))),
     stringsAsFactors = FALSE
   )
-  igraph::graph_from_data_frame(
-    d = edges[, c("compound_id", "uniprot_id", "weight", "disease_association_score"), drop = FALSE],
+  g <- igraph::graph_from_data_frame(
+    d = edges[, c("compound_id", "uniprot_id", "weight"), drop = FALSE],
     directed = FALSE, vertices = vertices
   )
+
+  ## .network_is_bipartite() guards the invariant .network_node_types() and
+  ## every mode-aware network_*() function assumes: no edge connects two
+  ## vertices of the same mode. The only way this construction can violate
+  ## it is a compound_id that collides with a uniprot_id -- that ID is
+  ## typed as a compound (it is in compound_ids) yet still carries a
+  ## compound-target edge, which becomes intra-mode (compound-compound).
+  if (!.network_is_bipartite(g)) {
+    collided <- intersect(compound_ids, if (nrow(edges) > 0) unique(edges$uniprot_id) else character(0))
+    cli::cli_abort(c(
+      "The compound-target graph built by {.fn network_build} is not bipartite.",
+      "x" = if (length(collided) > 0) {
+        "ID(s) {.val {collided}} appear as BOTH a compound_id and a uniprot_id, so they were typed as compounds and their edges became intra-mode (compound-compound)."
+      } else {
+        "An edge connects two vertices of the same mode; see {.fn .network_is_bipartite}."
+      },
+      "i" = "Check {.fn prep_compounds}/{.fn targets_import} for an ID-space collision between compound and target identifiers."
+    ))
+  }
+  g
+}
+
+#' Cheap, `digest`-free checksum over a condition's `network_edges` rows --
+#' provenance stamped on the cached `igraph` object so `.network_graph()`
+#' can tell a hand-edited CSV apart from the graph that was cached for it
+#' @details
+#' Not cryptographically strong -- deliberately so, per DESIGN.md's minimal
+#' dependency principle (no new package needed) -- but sensitive enough to
+#' catch the kind of edit this guards against (a handful of edges added,
+#' removed, or reweighted). `nrow()` is checked separately
+#' (`attr(g, "edges_nrow")`) so this only needs to catch same-`nrow` edits.
+#' @return `numeric(1)`.
+#' @keywords internal
+.network_edges_checksum <- function(edges) {
+  if (nrow(edges) == 0) return(0)
+  key <- paste(edges$compound_id, edges$uniprot_id, edges$weight, sep = "\x01")
+  sum(nchar(paste(sort(key), collapse = "")))
 }
 
 #' Node "mode" labels for a bipartite compound-target graph
@@ -257,19 +296,30 @@ network_build <- function(proj, condition = NULL,
 #' other `network_*` function uses
 #'
 #' @description
-#' Reads the cached `.rds` for `condition` if present; otherwise transparently
-#' rebuilds it from `patliRResults(proj, "network_edges")` (falling back to
+#' Reads the cached `.rds` for `condition` if present *and its stamped
+#' provenance still matches the live `network_edges` rows for that
+#' condition*; otherwise transparently rebuilds it from
+#' `patliRResults(proj, "network_edges")` (falling back to
 #' `results/network_edges.csv` on disk if `proj` was reloaded fresh via
 #' [patliR_load()] and the in-memory results bag does not have it) and
 #' repopulates the cache. Deleting the cache is always safe, same principle
 #' as `refdb_rebuild_cache()`.
+#'
+#' @section Why the cache is not returned unconditionally:
+#' DESIGN.md's contract is "the CSV is truth, the `.rds` is a disposable
+#' cache" -- but a cache returned whenever present, only rebuilt when
+#' absent, silently ignores a hand-edited `results/network_edges.csv` (e.g.
+#' a user removing low-confidence rows directly in the CSV). Every cached
+#' graph is stamped with `attr(g, "edges_nrow")` and `attr(g,
+#' "edges_checksum")` (see `.network_edges_checksum()`) for the condition's
+#' rows at the time it was written; a cache whose stamp disagrees with -- or
+#' was written before this check existed and so carries no stamp at all --
+#' the *current* `network_edges` rows for `condition` is rebuilt instead of
+#' trusted.
 #' @return An `igraph` object.
 #' @keywords internal
 .network_graph <- function(proj, condition) {
   cache_path <- .network_cache_path(proj, condition)
-  if (file.exists(cache_path)) {
-    return(readRDS(cache_path))
-  }
 
   edges_all <- patliRResults(proj, "network_edges")
   if (is.null(edges_all)) {
@@ -286,8 +336,21 @@ network_build <- function(proj, condition = NULL,
       "i" = "Run {.fn network_build} first."
     ))
   }
-
   edges <- edges_all[edges_all$condition == condition, , drop = FALSE]
+
+  if (file.exists(cache_path)) {
+    g_cached <- readRDS(cache_path)
+    cached_nrow <- attr(g_cached, "edges_nrow")
+    cached_checksum <- attr(g_cached, "edges_checksum")
+    if (!is.null(cached_nrow) && !is.null(cached_checksum) &&
+        identical(cached_nrow, nrow(edges)) &&
+        identical(cached_checksum, .network_edges_checksum(edges))) {
+      return(g_cached)
+    }
+    ## Cache present but stale (or from before this provenance check
+    ## existed, so unstamped) -- fall through and rebuild.
+  }
+
   bin <- binarizedMatrix(proj)
   if (!condition %in% names(bin)) {
     cli::cli_abort("Condition {.val {condition}} not found in {.fn binarizedMatrix}; cannot rebuild its graph.")
@@ -295,6 +358,8 @@ network_build <- function(proj, condition = NULL,
   present_ids <- bin$compound_id[!is.na(bin[[condition]]) & bin[[condition]] == 1]
 
   g <- .network_build_igraph(present_ids, edges)
+  attr(g, "edges_nrow") <- nrow(edges)
+  attr(g, "edges_checksum") <- .network_edges_checksum(edges)
   saveRDS(g, cache_path)
   g
 }

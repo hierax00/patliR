@@ -23,17 +23,21 @@ untouched in \code{patliRResults(proj, "network_edges")}.}
 \item{target_source}{\code{"imported"} (default and only implemented source
 right now), \code{"consensus"}, or \code{"bipartite"}. See the section above.}
 
-\item{min_score}{\code{NULL} (default, keep every imported target) or a single
-number in \verb{[0, 1]}: drop target edges whose \code{probability} (from
-\code{\link[=targets_import]{targets_import()}}) is below this threshold before building the graph.}
+\item{min_score}{\code{NULL} (default, keep every imported target, including
+those with an \code{NA} probability) or a single number in \verb{[0, 1]}: drop
+target edges whose \code{probability} (from \code{\link[=targets_import]{targets_import()}}) is below
+this threshold, \strong{or is \code{NA}}, before building the graph. This
+asymmetry is easy to miss: \code{min_score = NULL} keeps \code{NA} probabilities;
+any non-\code{NULL} \code{min_score} treats an \code{NA} probability as "fails the
+threshold" and drops it (\code{is.na(probability) | probability < min_score}).}
 }
 \value{
 The updated \code{proj}, with a \code{network_edges} entry in
 \code{\link[=patliRResults]{patliRResults()}} (columns \code{condition}, \code{compound_id}, \code{uniprot_id},
-\code{weight} (the import probability), \code{disease_association_score}), also
-written to \code{results/network_edges.csv}. One \code{igraph} object per
-(re)built condition is cached under \code{\link[=cacheDir]{cacheDir()}} for the rest of the
-\verb{network_*} family to reuse -- see \code{.network_graph()}, internal.
+\code{weight} (the import probability)), also written to
+\code{results/network_edges.csv}. One \code{igraph} object per (re)built
+condition is cached under \code{\link[=cacheDir]{cacheDir()}} for the rest of the \verb{network_*}
+family to reuse -- see \code{.network_graph()}, internal.
 }
 \description{
 Builds one bipartite compound-target graph per condition column of
@@ -53,13 +57,19 @@ exists; the other two raise a clear "not implemented yet" error if
 requested.
 }
 
-\section{Edges are enriched with disease association when available}{
+\section{\code{disease_association_score} was removed (breaking change)}{
 
-If \code{\link[=targets_disease_filter]{targets_disease_filter()}} has already been run, each edge also gets a
-\code{disease_association_score} attribute/column (\code{NA} if that target has no
-recorded association, or if \code{targets_disease_filter()} was never run at
-all) -- this is purely descriptive at this stage; \code{network_proximity()}
-(not implemented yet) is what will actually use it topologically.
+Earlier versions attached a \code{disease_association_score} column to every
+edge, joined from \code{\link[=targets_disease_filter]{targets_disease_filter()}}'s output via
+\code{match(paste(compound_id, uniprot_id), paste(compound_id, target_id))}.
+That \code{match()} only ever returns the \emph{first} hit -- once
+\code{targets_disease_filter()} had accumulated more than one disease (exactly
+the case \code{\link[=network_proximity]{network_proximity()}}/\code{\link[=network_synergy]{network_synergy()}} rely on),
+\code{network_edges} silently carried an arbitrary one of them with no
+\code{disease_id} column recording which. There is no fix that keeps a single
+scalar column meaningful, so the column is gone: join
+\code{patliRResults(proj, "targets_disease")} yourself on
+\verb{(compound_id, target_id, disease_id)} if you need it.
 }
 
 \examples{

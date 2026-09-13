@@ -49,13 +49,27 @@ NULL
 #'   hashed closing-edge test), fast enough that a `parallel` cluster would
 #'   cost more than it saves. Kept only so old calls do not error.
 #'
+#' @section A feedback loop is listed 3 times, once per starting node:
+#' A directed 3-cycle `A -> B -> C -> A` is the same cycle whichever node
+#' you start the enumeration from, so `.network_find_3node_motifs()` (which
+#' walks every 2-path once) lists it three times -- `(A, B, C)`, `(B, C,
+#' A)`, `(C, A, B)`. This row-emission shape is kept deliberately (some
+#' consumers want every rotation visible, e.g. to look up "what is node X's
+#' role in this cycle" directly), but it means `nrow(subset(motif_type ==
+#' "feedback"))` is exactly 3x the number of *distinct* cycles, never the
+#' cycle count itself. The `projectLog(proj)` summary line reports the
+#' deduplicated cycle count (canonical rotation = the 3 node IDs sorted),
+#' not the row count -- read the row count as "3 rows per real cycle", the
+#' log line as the actual count.
+#'
 #' @return The updated `proj`, with a `network_motifs` entry in
 #'   [patliRResults()] (columns `condition`, `motif_type`
 #'   (`"feed_forward"`/`"feedback"`), `node_a`, `node_b`, `node_c`,
 #'   `layer_a`, `layer_b`, `layer_c`), also written to
 #'   `results/network_motifs.csv`. Conditions with zero motifs of either
 #'   type contribute no rows (not a row full of `NA`s) -- see
-#'   `projectLog(proj)` for a summary count either way.
+#'   `projectLog(proj)` for a summary count either way (feedback loops
+#'   counted as distinct cycles, not rows -- see the section above).
 #'
 #' @examples
 #' \dontrun{
@@ -103,11 +117,15 @@ network_motifs <- function(proj, condition = NULL, n_cores = 1L, pathway_db = NU
     } else {
       cbind(condition = cond, found, stringsAsFactors = FALSE)
     }
+    feedback_rows <- rows[[cond]][rows[[cond]]$motif_type == "feedback", , drop = FALSE]
+    n_feedback_rows <- nrow(feedback_rows)
+    n_feedback_cycles <- .network_n_distinct_feedback_cycles(feedback_rows)
     proj <- .log_append(
       proj, step = "network_motifs", id = NA_character_,
       message = paste0(
         "condition '", cond, "': ", sum(rows[[cond]]$motif_type == "feed_forward"), " feed-forward, ",
-        sum(rows[[cond]]$motif_type == "feedback"), " feedback loop(s) found"
+        n_feedback_cycles, " feedback loop(s) found",
+        if (n_feedback_rows > 0) paste0(" (", n_feedback_rows, " row(s), 3 per cycle)") else ""
       )
     )
   }
@@ -139,6 +157,19 @@ network_motifs <- function(proj, condition = NULL, n_cores = 1L, pathway_db = NU
 #' `choose(out_degree, 2)` search that took minutes on a hub-heavy graph.
 #' The edge key joins `from`/`to` with an ASCII `0x01` byte, which cannot
 #' occur in a node name, so `"A"` + `"BC"` and `"AB"` + `"C"` never collide.
+#'
+#' @section Performance ceiling of the two-path `merge()`:
+#' The `merge()` below materialises every two-path at once -- `sum_b
+#' indeg(b) * outdeg(b)` rows -- before any filtering. That is fast on the
+#' compound-target-pathway graphs this package builds today (bounded
+#' fan-out per node), but a single hub node with, say, 40 in-edges and 900
+#' out-edges (an un-simplified GO layer, `pathway_db = NULL`, on a large
+#' input set) contributes 36,000 rows on its own; a real multi-thousand-node
+#' graph at GO scale can reach 10^7-10^8 two-path rows before the closing-
+#' edge filter ever runs. `pathway_db = "kegg"` (far coarser than GO, much
+#' smaller per-compound fan-out) is effectively required to keep this
+#' function fast at that scale; chunking the join over blocks of `b` would
+#' remove the ceiling entirely but is not implemented.
 #' @return `data.frame(motif_type, node_a, node_b, node_c, layer_a, layer_b, layer_c)`.
 #' @keywords internal
 .network_find_3node_motifs <- function(g) {
@@ -178,6 +209,24 @@ network_motifs <- function(proj, condition = NULL, n_cores = 1L, pathway_db = NU
   if (is.null(out) || nrow(out) == 0) return(empty)
   rownames(out) <- NULL
   out
+}
+
+#' Number of DISTINCT feedback (3-cycle) loops in a `motif_type == "feedback"`
+#' subset of `network_motifs()`'s output -- not the row count, which is
+#' always exactly 3x this for real cycles (see `network_motifs()`'s own
+#' docs)
+#' @param feedback_rows A data frame with (at least) `node_a`, `node_b`,
+#'   `node_c` columns, already restricted to `motif_type == "feedback"`
+#'   (zero rows is fine).
+#' @return `integer(1)`.
+#' @keywords internal
+.network_n_distinct_feedback_cycles <- function(feedback_rows) {
+  if (nrow(feedback_rows) == 0) return(0L)
+  canon <- apply(
+    feedback_rows[, c("node_a", "node_b", "node_c"), drop = FALSE], 1,
+    function(r) paste(sort(r), collapse = "\x01")
+  )
+  length(unique(canon))
 }
 
 #' @keywords internal

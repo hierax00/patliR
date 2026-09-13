@@ -58,11 +58,15 @@ downloaded \code{.xml}/\code{.png} from. Defaults to
 The updated \code{proj}, with a \code{kegg_pathview_log} entry in
 \code{\link[=patliRResults]{patliRResults()}} (columns \code{condition}, \code{pathway_id}, \code{description},
 \code{gene_score}, \code{n_genes_mapped}, \code{ok}, \code{path}, \code{message}), also written
-to \code{results/kegg_pathview_log.csv}. A pathway that fails to render
-(e.g. \code{pathview} cannot reach KEGG, or the pathway has no mappable
-nodes) gets \code{ok = FALSE} and a \code{message}, is logged
+to \code{results/kegg_pathview_log.csv}. A pathway that fails to render, or
+renders without producing the expected PNG (see the \code{ok} section
+above), gets \code{ok = FALSE}, \code{path = NA}, and a \code{message}, is logged
 (\code{"network_pathview_render_failed"}), and does \strong{not} stop the other
-pathways in the same call from rendering.
+pathways in the same call from rendering. Targets whose \code{weight} is
+\code{NA} are dropped from the \code{"max_weight"}/\code{"mean_weight"} colour vector
+(logged as \code{"network_pathview_na_weight_dropped"}); if that leaves
+\emph{no} targets scored at all, the function aborts with a clear message
+instead of handing \code{pathview()} an empty vector.
 }
 \description{
 For one \code{condition} already enriched against KEGG by \code{\link[=network_enrich]{network_enrich()}}
@@ -103,6 +107,30 @@ KEGG's REST API on first use (needs internet, like \code{db = "kegg"} in
 \code{\link[=network_enrich]{network_enrich()}} itself) and caches them under \code{kegg_dir} afterwards
 (default \code{cacheDir(proj)/kegg_pathview}) -- deleting that cache is
 always safe, same principle as every other cache in \code{patliR}.
+}
+
+\section{\code{ok} means the PNG actually exists, not just "no R error"}{
+
+\code{pathview::pathview()} frequently \emph{warns} and returns without ever
+writing a file -- a pathway with no mappable nodes, or a KGML/PNG
+download that silently returns an HTML error page instead of the
+expected KEGG data are both real, observed failure modes that raise no R
+\code{error} condition. \code{ok} is therefore \verb{!inherits(res, "error") && file.exists(<expected PNG path>)}, not merely the first half -- a run
+that "succeeds" without writing anything gets \code{ok = FALSE} here, where an
+earlier version reported \code{ok = TRUE} with a \code{path} pointing at a file
+that was never created.
+}
+
+\section{Gene scores assume \code{targets_import()}'s \verb{[0, 1]} convention}{
+
+\code{gene_score = "max_weight"}/\code{"mean_weight"} are hard-clamped to \code{pathview}'s
+colour \code{limit = c(0, 1)}. This is correct as long as \code{weight} (the import
+probability) is already on a \verb{[0, 1]} scale, which is
+\code{\link[=targets_import]{targets_import()}}'s own convention (\code{"96.5\%"} -> \code{0.965}). A platform
+that instead reported raw \code{0}-\code{100} percentages into \code{weight} would
+saturate every single node fully red against the clamp with no error --
+a \code{cli_warn} fires if any score exceeds \code{1} before clamping, as a
+tripwire for exactly that.
 }
 
 \examples{

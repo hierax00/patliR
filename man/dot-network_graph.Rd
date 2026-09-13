@@ -11,11 +11,26 @@ other \verb{network_*} function uses}
 An \code{igraph} object.
 }
 \description{
-Reads the cached \code{.rds} for \code{condition} if present; otherwise transparently
-rebuilds it from \code{patliRResults(proj, "network_edges")} (falling back to
+Reads the cached \code{.rds} for \code{condition} if present \emph{and its stamped
+provenance still matches the live \code{network_edges} rows for that
+condition}; otherwise transparently rebuilds it from
+\code{patliRResults(proj, "network_edges")} (falling back to
 \code{results/network_edges.csv} on disk if \code{proj} was reloaded fresh via
 \code{\link[=patliR_load]{patliR_load()}} and the in-memory results bag does not have it) and
 repopulates the cache. Deleting the cache is always safe, same principle
 as \code{refdb_rebuild_cache()}.
 }
+\section{Why the cache is not returned unconditionally}{
+
+DESIGN.md's contract is "the CSV is truth, the \code{.rds} is a disposable
+cache" -- but a cache returned whenever present, only rebuilt when
+absent, silently ignores a hand-edited \code{results/network_edges.csv} (e.g.
+a user removing low-confidence rows directly in the CSV). Every cached
+graph is stamped with \code{attr(g, "edges_nrow")} and \code{attr(g, "edges_checksum")} (see \code{.network_edges_checksum()}) for the condition's
+rows at the time it was written; a cache whose stamp disagrees with -- or
+was written before this check existed and so carries no stamp at all --
+the \emph{current} \code{network_edges} rows for \code{condition} is rebuilt instead of
+trusted.
+}
+
 \keyword{internal}

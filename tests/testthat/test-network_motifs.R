@@ -126,3 +126,52 @@ test_that("network_motifs() ignores the deprecated n_cores with a warning", {
   proj <- .network_stats_test_setup()
   expect_warning(network_motifs(proj, condition = "FLO-ET", n_cores = 4L), "deprecated")
 })
+
+test_that(".network_n_distinct_feedback_cycles() dedupes the 3 rows a single cycle produces down to 1", {
+  ## Same A1->B1->C1->A1 cycle as the ".network_find_3node_motifs() lists
+  ## the exact ..." test above -- 3 rows (one per starting node), 1 real
+  ## cycle. Spec 1.6 [SHOULD]: the row-emission shape stays 3-per-cycle
+  ## (existing test above asserts exactly that), but the log/summary count
+  ## must report the deduplicated cycle count, not the row count.
+  feedback_rows <- data.frame(
+    node_a = c("A1", "B1", "C1"), node_b = c("B1", "C1", "A1"), node_c = c("C1", "A1", "B1"),
+    stringsAsFactors = FALSE
+  )
+  expect_equal(patliR:::.network_n_distinct_feedback_cycles(feedback_rows), 1L)
+
+  ## two independent real cycles -> 6 rows, 2 distinct cycles
+  two_cycles <- rbind(
+    feedback_rows,
+    data.frame(node_a = c("A2", "B2", "C2"), node_b = c("B2", "C2", "A2"), node_c = c("C2", "A2", "B2"),
+               stringsAsFactors = FALSE)
+  )
+  expect_equal(patliR:::.network_n_distinct_feedback_cycles(two_cycles), 2L)
+
+  ## zero rows -> zero cycles, no error
+  expect_equal(patliR:::.network_n_distinct_feedback_cycles(feedback_rows[0, , drop = FALSE]), 0L)
+})
+
+test_that("network_motifs()'s log line reports the deduplicated feedback CYCLE count, not the 3x row count", {
+  ## A directed 3-cycle A->B->C->A, laid over the "target"/"compound" layers
+  ## .network_layered_graph() would build, but constructed directly here so
+  ## the test exercises only .network_find_3node_motifs() + the log line,
+  ## not the full compound/target/pathway pipeline. network_motifs() itself
+  ## calls .network_layered_graph(proj, cond, ...) internally, so this test
+  ## instead calls the row-emission + logging logic's building blocks the
+  ## same way network_motifs() does, via a mocked .network_layered_graph().
+  proj <- .network_stats_test_setup()
+  edges <- data.frame(from = c("A", "B", "C"), to = c("B", "C", "A"))
+  vertices <- data.frame(name = c("A", "B", "C"), layer = c("compound", "target", "target"),
+                         stringsAsFactors = FALSE)
+  g <- igraph::graph_from_data_frame(edges, directed = TRUE, vertices = vertices)
+  testthat::local_mocked_bindings(.network_layered_graph = function(...) g, .package = "patliR")
+
+  proj <- network_motifs(proj, condition = "FLO-ET")
+  result <- patliRResults(proj, "network_motifs")
+  expect_equal(sum(result$motif_type == "feedback"), 3L) ## row-emission shape unchanged
+
+  msgs <- projectLog(proj)$message
+  feedback_msg <- msgs[grepl("^condition 'FLO-ET'.*feedback loop", msgs)]
+  expect_true(length(feedback_msg) >= 1)
+  expect_true(any(grepl("1 feedback loop\\(s\\) found", feedback_msg))) ## deduplicated count, not 3
+})

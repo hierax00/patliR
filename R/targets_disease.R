@@ -208,10 +208,26 @@ targets_disease_filter <- function(proj, disease, source = c("open_targets"),
              association_score = double(), evidence = character(), stringsAsFactors = FALSE)
 }
 
-#' Sanitize a free-text term into a safe cache-file-name fragment
+#' Sanitize a free-text term into a safe, collision-resistant cache-file-name
+#' fragment
+#' @details
+#' `gsub("[^A-Za-z0-9]+", "_", x)` alone collapses every run of punctuation
+#' to a single `_`, so distinct raw strings that differ only in punctuation
+#' -- `"FLO-ET"` vs `"FLO_ET"`, `"EFLO S"` vs `"EFLO-S"` -- collapse to the
+#' *same* slug and silently share a cache file. A short hash of the raw
+#' string (computed before the punctuation is collapsed, so it still
+#' differs when the collapsed slug does not) is appended to disambiguate
+#' them; no new dependency (`digest` is not otherwise used anywhere in this
+#' package).
+#' @return `character`, same length as `x`.
 #' @keywords internal
 .cache_key_slug <- function(x) {
-  gsub("[^A-Za-z0-9]+", "_", x)
+  vapply(x, function(xi) {
+    slug <- gsub("[^A-Za-z0-9]+", "_", xi)
+    codes <- utf8ToInt(enc2utf8(xi))
+    h <- if (length(codes) == 0) 0 else sum(as.numeric(codes) * seq_along(codes)) %% (2^31 - 1)
+    paste0(slug, "_", sprintf("%08x", as.integer(h)))
+  }, character(1), USE.NAMES = FALSE)
 }
 
 #' POST one query to the Open Targets Platform GraphQL API (v4, no API key)

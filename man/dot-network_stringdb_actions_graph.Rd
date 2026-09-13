@@ -2,11 +2,18 @@
 % Please edit documentation in R/network_bowtie.R
 \name{.network_stringdb_actions_graph}
 \alias{.network_stringdb_actions_graph}
-\title{Download (if not already cached) and parse STRING's directed "actions"
-file into an \code{igraph}, caching the parsed graph under
-\verb{cacheDir(proj)/stringdb/}}
+\title{Parse STRING's directed "actions" file into an \code{igraph}, optionally
+filtered on the actions file's own per-interaction \code{score}}
 \usage{
-.network_stringdb_actions_graph(proj, species, version)
+.network_stringdb_actions_graph(proj, species, version, score_threshold = NULL)
+}
+\arguments{
+\item{score_threshold}{\code{NULL} (default) applies no confidence filter --
+every directed row becomes an edge, the historical behaviour every
+existing caller (\code{plot_target_chord()}, which does its own separate
+score-based arc filtering afterwards) still relies on. A number filters
+to \code{score >= score_threshold} first (\code{\link[=network_bowtie]{network_bowtie()}} passes its
+\code{actions_score_threshold} here).}
 }
 \value{
 \verb{list(graph = <directed igraph>)}.

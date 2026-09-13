@@ -32,7 +32,8 @@ The updated \code{proj}, with a \code{network_motifs} entry in
 \code{layer_a}, \code{layer_b}, \code{layer_c}), also written to
 \code{results/network_motifs.csv}. Conditions with zero motifs of either
 type contribute no rows (not a row full of \code{NA}s) -- see
-\code{projectLog(proj)} for a summary count either way.
+\code{projectLog(proj)} for a summary count either way (feedback loops
+counted as distinct cycles, not rows -- see the section above).
 }
 \description{
 Lists the condition's directed compound-target-pathway-disease graph
@@ -68,6 +69,19 @@ Every edge in \code{.network_layered_graph()} points strictly downstream
 exist. The search still runs (cheaply, on the same enumeration) so a
 future cyclic substrate would be picked up, but on the current graph it
 always returns zero -- expected, not a bug.
+}
+
+\section{A feedback loop is listed 3 times, once per starting node}{
+
+A directed 3-cycle \code{A -> B -> C -> A} is the same cycle whichever node
+you start the enumeration from, so \code{.network_find_3node_motifs()} (which
+walks every 2-path once) lists it three times -- \verb{(A, B, C)}, \verb{(B, C, A)}, \verb{(C, A, B)}. This row-emission shape is kept deliberately (some
+consumers want every rotation visible, e.g. to look up "what is node X's
+role in this cycle" directly), but it means \code{nrow(subset(motif_type == "feedback"))} is exactly 3x the number of \emph{distinct} cycles, never the
+cycle count itself. The \code{projectLog(proj)} summary line reports the
+deduplicated cycle count (canonical rotation = the 3 node IDs sorted),
+not the row count -- read the row count as "3 rows per real cycle", the
+log line as the actual count.
 }
 
 \examples{

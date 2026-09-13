@@ -81,14 +81,39 @@ NULL
 #'   downloaded `.xml`/`.png` from. Defaults to
 #'   `file.path(cacheDir(proj), "kegg_pathview")`.
 #'
+#' @section `ok` means the PNG actually exists, not just "no R error":
+#' `pathview::pathview()` frequently *warns* and returns without ever
+#' writing a file -- a pathway with no mappable nodes, or a KGML/PNG
+#' download that silently returns an HTML error page instead of the
+#' expected KEGG data are both real, observed failure modes that raise no R
+#' `error` condition. `ok` is therefore `!inherits(res, "error") &&
+#' file.exists(<expected PNG path>)`, not merely the first half -- a run
+#' that "succeeds" without writing anything gets `ok = FALSE` here, where an
+#' earlier version reported `ok = TRUE` with a `path` pointing at a file
+#' that was never created.
+#'
+#' @section Gene scores assume `targets_import()`'s `[0, 1]` convention:
+#' `gene_score = "max_weight"`/`"mean_weight"` are hard-clamped to `pathview`'s
+#' colour `limit = c(0, 1)`. This is correct as long as `weight` (the import
+#' probability) is already on a `[0, 1]` scale, which is
+#' [targets_import()]'s own convention (`"96.5%"` -> `0.965`). A platform
+#' that instead reported raw `0`-`100` percentages into `weight` would
+#' saturate every single node fully red against the clamp with no error --
+#' a `cli_warn` fires if any score exceeds `1` before clamping, as a
+#' tripwire for exactly that.
+#'
 #' @return The updated `proj`, with a `kegg_pathview_log` entry in
 #'   [patliRResults()] (columns `condition`, `pathway_id`, `description`,
 #'   `gene_score`, `n_genes_mapped`, `ok`, `path`, `message`), also written
-#'   to `results/kegg_pathview_log.csv`. A pathway that fails to render
-#'   (e.g. `pathview` cannot reach KEGG, or the pathway has no mappable
-#'   nodes) gets `ok = FALSE` and a `message`, is logged
+#'   to `results/kegg_pathview_log.csv`. A pathway that fails to render, or
+#'   renders without producing the expected PNG (see the `ok` section
+#'   above), gets `ok = FALSE`, `path = NA`, and a `message`, is logged
 #'   (`"network_pathview_render_failed"`), and does **not** stop the other
-#'   pathways in the same call from rendering.
+#'   pathways in the same call from rendering. Targets whose `weight` is
+#'   `NA` are dropped from the `"max_weight"`/`"mean_weight"` colour vector
+#'   (logged as `"network_pathview_na_weight_dropped"`); if that leaves
+#'   *no* targets scored at all, the function aborts with a clear message
+#'   instead of handing `pathview()` an empty vector.
 #'
 #' @references Luo, W. & Brouwer, C. (2013), "Pathview: an R/Bioconductor
 #'   package for pathway-based data integration and visualization",
@@ -204,7 +229,16 @@ network_pathview <- function(proj, condition = NULL,
     cli::cli_abort("None of condition {.val {cond}}'s targets mapped to an Entrez Gene ID; cannot build a gene score vector.")
   }
 
-  gene_vector <- .network_pathview_gene_vector(edges_cond, gene_score)
+  gv <- .network_pathview_gene_vector(proj, cond, edges_cond, gene_score)
+  proj <- gv$proj
+  gene_vector <- gv$gene_vector
+
+  if (gene_score != "n_compounds" && any(gene_vector > 1, na.rm = TRUE)) {
+    cli::cli_warn(c(
+      "Some {.val {gene_score}} values exceed 1 before pathview()'s colour {.arg limit} clamps to [0, 1].",
+      "i" = "This assumes {.fn targets_import}'s convention (e.g. \"96.5%\" -> 0.965) -- a platform reporting raw 0-100 percentages into {.field weight} will saturate every node fully red with no other warning."
+    ))
+  }
   limit_gene <- if (gene_score == "n_compounds") c(0, max(gene_vector, 1)) else c(0, 1)
 
   if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots", "kegg_pathview")
@@ -230,18 +264,31 @@ network_pathview <- function(proj, condition = NULL,
       ),
       error = function(e) e
     )
-    ok <- !inherits(res, "error")
+    ## pathview() frequently *warns* and returns without ever writing a
+    ## file (no mappable nodes, or a KGML/PNG download that silently
+    ## returns an HTML error page) -- !inherits(res, "error") alone cannot
+    ## tell that apart from a genuine render, so `ok` also requires the
+    ## expected output PNG to actually exist on disk.
+    expected_png <- file.path(out_dir, paste0(pid, ".pathview.png"))
+    ok <- !inherits(res, "error") && file.exists(expected_png)
+    msg <- if (inherits(res, "error")) {
+      conditionMessage(res)
+    } else if (!ok) {
+      "pathview() returned without an R error but did not write the expected PNG (no mappable nodes for this pathway, or a KGML/PNG download that returned unusable data)"
+    } else {
+      NA_character_
+    }
     if (!ok) {
       proj <- .log_append(
         proj, step = "network_pathview", id = pid,
-        message = paste0("network_pathview_render_failed: ", conditionMessage(res))
+        message = paste0("network_pathview_render_failed: ", msg)
       )
     }
     rows[[i]] <- data.frame(
       condition = cond, pathway_id = pid, description = enr$Description[i],
       gene_score = gene_score, n_genes_mapped = length(gene_vector), ok = ok,
-      path = file.path(out_dir, paste0(pid, ".pathview.png")),
-      message = if (ok) NA_character_ else conditionMessage(res),
+      path = if (ok) expected_png else NA_character_,
+      message = msg,
       stringsAsFactors = FALSE
     )
   }
@@ -267,14 +314,48 @@ network_pathview <- function(proj, condition = NULL,
 
 #' Aggregate a condition's (Entrez-mapped) compound-target edges into one
 #' named numeric vector, per `gene_score`
-#' @return Named numeric vector (`names` = Entrez IDs).
+#'
+#' @description
+#' For `gene_score %in% c("max_weight", "mean_weight")`, an edge with `NA`
+#' `weight` (some import platforms do not report one) is explicitly
+#' excluded and logged -- `stats::aggregate()`'s default `na.action =
+#' na.omit` would otherwise drop it with no trace, and if *every* edge for
+#' `cond` has `NA` weight the resulting gene vector would be length 0 and
+#' `pathview()` would fail on it with a cryptic error. That case now aborts
+#' here instead, with a clear message.
+#' @param proj The project (for `.log_append()`); returned inside the
+#'   result list so the caller's own `proj` stays threaded through.
+#' @param cond Single condition name, for the log message only.
+#' @return `list(proj = <updated proj>, gene_vector = <named numeric
+#'   vector, names = Entrez IDs>)`.
 #' @keywords internal
-.network_pathview_gene_vector <- function(edges_cond, gene_score) {
+.network_pathview_gene_vector <- function(proj, cond, edges_cond, gene_score) {
   if (gene_score == "n_compounds") {
     agg <- stats::aggregate(compound_id ~ ENTREZID, edges_cond, function(x) length(unique(x)))
-    return(stats::setNames(agg$compound_id, agg$ENTREZID))
+    return(list(proj = proj, gene_vector = stats::setNames(agg$compound_id, agg$ENTREZID)))
   }
+
+  na_weight <- is.na(edges_cond$weight)
+  if (any(na_weight)) {
+    dropped <- unique(edges_cond$ENTREZID[na_weight])
+    proj <- .log_append(
+      proj, step = "network_pathview", id = dropped,
+      message = paste0(
+        "network_pathview_na_weight_dropped: condition '", cond,
+        "': at least one compound-target edge for this Entrez ID had an NA weight; ",
+        "that edge is excluded from the '", gene_score, "' aggregation (explicit na.rm, not aggregate()'s implicit na.action = na.omit)"
+      )
+    )
+  }
+  edges_scored <- edges_cond[!na_weight, , drop = FALSE]
+  if (nrow(edges_scored) == 0) {
+    cli::cli_abort(c(
+      "Every compound-target edge for condition {.val {cond}} has an {.val NA} {.field weight}; cannot build a {.val {gene_score}} gene score vector.",
+      "i" = "This usually means the import platform behind {.fn targets_import}/{.fn targets_import_batch} did not report a probability for any of these targets."
+    ))
+  }
+
   fun <- if (gene_score == "max_weight") max else mean
-  agg <- stats::aggregate(weight ~ ENTREZID, edges_cond, fun)
-  stats::setNames(agg$weight, agg$ENTREZID)
+  agg <- stats::aggregate(weight ~ ENTREZID, edges_scored, fun)
+  list(proj = proj, gene_vector = stats::setNames(agg$weight, agg$ENTREZID))
 }

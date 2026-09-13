@@ -1,5 +1,71 @@
 # patliR (development version)
 
+## `network_build()` / `network_bowtie()` / `network_filter_proteome()` / `network_pathview()` / `network_motifs()` — Phase 5 audit fixes (design spec §1.1, §1.6, §1.10, §1.11, §1.12)
+
+- **BREAKING: `network_build()` no longer emits `disease_association_score`.**
+  The old join keyed on `(compound_id, uniprot_id)` against `targets_disease`
+  via `match()`, which only ever returns the *first* hit -- once
+  `targets_disease_filter()` had accumulated more than one disease (the
+  normal case for `network_proximity()`/`network_synergy()`), every edge
+  silently carried an arbitrary one of them with no `disease_id` column
+  recording which. There is no fix that keeps a single scalar column
+  meaningful, so the column is gone from `network_edges`,
+  `network_filtered_edges`, and their `.csv` files. Join
+  `patliRResults(proj, "targets_disease")` yourself on
+  `(compound_id, target_id, disease_id)` if you need this information.
+- **`network_build()`/`.network_graph()` no longer serve a stale cache
+  behind an edited CSV.** The cached `.rds` graph is stamped with a row
+  count and a cheap content checksum for the condition's edges; a later
+  `.network_graph()` call rebuilds instead of trusting the cache when a
+  hand-edited `results/network_edges.csv` (or an in-memory
+  `patliRResults()` write) disagrees with what was stamped.
+- **`network_build()` now asserts the built graph is bipartite** (via the
+  existing `.network_is_bipartite()` helper) and aborts with a clear
+  message naming the colliding ID(s) if a `compound_id` ever equals a
+  `uniprot_id` -- that ID would otherwise be silently typed as a compound
+  and its target edge would become intra-mode.
+- **`.cache_key_slug()` no longer collides on punctuation-only differences**
+  (e.g. `"FLO-ET"` and `"FLO_ET"` used to map to the same cache file). A
+  short hash of the raw string is now appended to the slug.
+- **New `network_bowtie(actions_score_threshold = 400)`.** Previously every
+  directed row of STRING's actions file was used regardless of STRING's own
+  per-interaction confidence, so the core SCC size (the headline bow-tie
+  number) was driven by the lowest-confidence predictions. The threshold
+  used is recorded in `network_bowtie_summary`. A `cli_warn` now also fires
+  when the resulting core is degenerate (< 50 nodes, or < 1% of the
+  network). Internally, UniProt -> STRING_id mapping now reads STRING's
+  `protein.aliases` flat file directly instead of instantiating a second
+  `STRINGdb` object at `score_threshold = 0` (which downloaded the entire
+  interactome just to reach an alias table that never depended on score).
+- **New `network_filter_proteome(proteome_label = NULL)`.** Output rows now
+  carry `proteome_label` (auto-derived from a hash of the sorted proteome
+  when not supplied) and `n_proteome`; `proteome_label` is part of the
+  upsert key alongside `condition`, so two different proteomes filtered
+  against the same condition are both kept instead of one overwriting the
+  other. A `cli_warn` now fires when `proteome` matches nothing in
+  `network_edges` and fewer than half its entries look like UniProt
+  accessions (the usual cause: gene symbols passed by mistake).
+- **`network_pathview()`'s `ok` column now means the PNG actually exists**,
+  not just "pathview() did not raise an R error" -- `pathview::pathview()`
+  frequently warns and returns without writing anything (no mappable nodes,
+  or a KGML/PNG download that silently returns an HTML error page); that
+  case now gets `ok = FALSE`/`path = NA`, where it previously got
+  `ok = TRUE` and a `path` pointing at a file that was never created.
+  Targets with an `NA` `weight` are now explicitly dropped (and logged) from
+  the `"max_weight"`/`"mean_weight"` colour vector instead of vanishing via
+  `aggregate()`'s implicit `na.action = na.omit`; if that would leave zero
+  targets scored, the function now aborts with a clear message instead of
+  handing `pathview()` an empty vector. A `cli_warn` fires if any score
+  exceeds 1 before the `[0, 1]` colour clamp (a tripwire for a platform
+  reporting raw 0-100 percentages instead of `targets_import()`'s `[0, 1]`
+  convention).
+- **`network_motifs()`'s log line now reports the deduplicated feedback
+  *cycle* count, not the row count.** A directed 3-cycle is still listed 3
+  times in `network_motifs` output (once per starting node -- the
+  row-emission shape is unchanged), but the `projectLog()` summary used to
+  report that row count as if it were the number of cycles found (3x the
+  true count for every real cycle).
+
 ## `network_proximity()` / `plot_proximity()` — opt-in raw null draws + a permutation-histogram view
 
 - **New `network_proximity(store_null = FALSE)`.** When `TRUE`, additionally

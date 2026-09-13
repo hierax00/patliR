@@ -321,13 +321,17 @@ network_degeneracy <- function(proj, condition = NULL,
     result$ont <- if (annotation == "jaccard") NA_character_ else ont
     result$measure <- if (annotation == "jaccard") NA_character_ else measure
     result$combine <- if (annotation == "jaccard") NA_character_ else combine
-    result$drop <- if (annotation == "jaccard" || is.null(drop)) NA_character_ else paste(drop, collapse = "+")
+    ## `drop` only affects the annotation index .network_degeneracy_direct()
+    ## builds from `g2go` -- "enriched" mode's `GOSemSim::mgoSim()` call takes
+    ## no `drop` argument, so stamping "IEA" on those rows would claim a
+    ## filter that had no effect on the number in the row.
+    result$drop <- if (annotation != "direct" || is.null(drop)) NA_character_ else paste(drop, collapse = "+")
     result$universe <- if (annotation == "direct") universe else NA_character_
     result$n_random <- if (annotation == "direct") as.integer(n_random) else NA_integer_
     result$seed_used <- if (annotation == "direct") used_seed else NA_integer_
 
-    ## right-tail BH across every pair in the call (direct mode only)
     if (annotation == "direct") {
+      ## right-tail BH across every pair in the call (direct mode only)
       result$p_adjusted <- stats::p.adjust(result$p_empirical, method = "BH")
       if (n_call / (n_random + 1) > 0.05) {
         cli::cli_warn(c(
@@ -335,6 +339,13 @@ network_degeneracy <- function(proj, condition = NULL,
           "i" = "Lead with {.field z_score}; raise {.arg n_random} if you need {.field p_adjusted}."
         ))
       }
+    } else {
+      ## No permutation null exists for "enriched"/"jaccard" (see the
+      ## "Why the default does not use network_enrich()" @section) -- make
+      ## the all-NA significance columns a stated fact, not a silent gap.
+      cli::cli_inform(c(
+        "i" = "{.fn network_degeneracy}: {.code annotation = {.val {annotation}}} has no permutation null -- {.field sim_random_mean}/{.field sim_random_sd}/{.field z_score}/{.field p_empirical}/{.field p_adjusted} are {.val NA} for every row. Use {.code annotation = \"direct\"} for a significance-tested score."
+      ))
     }
   } else {
     result <- .empty_network_degeneracy_row()
@@ -363,6 +374,39 @@ network_degeneracy <- function(proj, condition = NULL,
   proj
 }
 
+#' Cap a resampling pool to at most `cap` genes without ever evicting an
+#' observed gene
+#'
+#' @description
+#' `.network_degeneracy_direct()`'s `universe = "genome"` pool can hold
+#' every annotated gene in `org.Hs.eg.db` (tens of thousands), which has to
+#' be capped for the term x term similarity matrix to stay tractable. A
+#' plain `sample(pool, cap)` caps blindly: since the pool is unrelated to
+#' which genes any particular compound happens to target, it can (and on
+#' real data did) evict a compound's own targets from the survivors --
+#' silently dropping that compound from every pair it appears in. This
+#' guarantees every gene in `observed` survives the cap, then fills the
+#' remaining budget with a random sample of the rest of the pool.
+#'
+#' @param pool Character vector of gene identifiers to cap.
+#' @param observed Character vector of gene identifiers that must survive
+#'   the cap (duplicates and values absent from `pool` are fine, filtered
+#'   internally).
+#' @param cap Integer, the maximum pool size.
+#' @return `list(pool, capped)`: `pool` is `<= max(cap, length(observed))`
+#'   genes and always a superset of `intersect(observed, pool)`; `capped`
+#'   is `TRUE` iff the input pool was larger than `cap` (whether or not the
+#'   final size after guaranteeing `observed` still exceeds it).
+#' @keywords internal
+.network_cap_pool_keep_observed <- function(pool, observed, cap) {
+  if (length(pool) <= cap) return(list(pool = pool, capped = FALSE))
+  observed <- intersect(unique(observed), pool)
+  budget <- max(0L, cap - length(observed))
+  rest <- setdiff(pool, observed)
+  extra <- if (length(rest) > budget) sample(rest, budget) else rest
+  list(pool = union(observed, extra), capped = TRUE)
+}
+
 #' `annotation = "direct"` core: GO semantic similarity + permutation null
 #' for one condition. Returns `list(rows, proj)`.
 #' @keywords internal
@@ -385,13 +429,17 @@ network_degeneracy <- function(proj, condition = NULL,
   pool <- unique(as.character(pool))
   pool <- pool[pool %in% names(g2go)]        # annotated genes only (14-U2)
 
-  ## cap the genome pool so the term x term matrix stays tractable
-  pool_capped <- FALSE
-  cap <- 1500L
-  if (length(pool) > cap) {
-    pool <- sample(pool, cap)
-    pool_capped <- TRUE
-  }
+  ## Cap the pool for the term x term matrix's sake, but never at the cost
+  ## of evicting a compound's own (annotated) targets: .network_resample_matched()
+  ## looks up each observed gene's own annotation-count bin to draw its
+  ## replacement, and the pairwise loop below intersects each compound's
+  ## target set with `pool` before scoring, so a gene missing from `pool`
+  ## silently drops out of every pair it's in.
+  cp_res <- .network_cap_pool_keep_observed(
+    pool, unlist(compound_entrez, use.names = FALSE), cap = 1500L
+  )
+  pool <- cp_res$pool
+  pool_capped <- cp_res$capped
 
   if (length(pool) < 2) {
     proj <- .log_append(proj, step = "network_degeneracy", id = NA_character_,
@@ -413,7 +461,7 @@ network_degeneracy <- function(proj, condition = NULL,
   }
   if (pool_capped) {
     cli::cli_warn(c(
-      "!" = "{.fn network_degeneracy}: condition {.val {cond}} universe = {.val {universe}} pool capped at {cap} genes for the term-similarity matrix."
+      "!" = "{.fn network_degeneracy}: condition {.val {cond}} universe = {.val {universe}} pool capped at {length(pool)} gene{?s} (every observed target kept; the rest randomly subsampled) for the term-similarity matrix."
     ))
   }
 
@@ -518,6 +566,13 @@ network_degeneracy <- function(proj, condition = NULL,
   }
   target_sets <- split(ct$uniprot_id, ct$compound_id)
   pathway_sets <- split(cp$pathway_id, cp$compound_id)
+
+  if (annotation == "enriched" && nrow(cp) > 0 && !any(grepl("^GO:", cp$pathway_id))) {
+    cli::cli_warn(c(
+      "!" = "{.fn network_degeneracy}: condition {.val {cond}} (annotation = \"enriched\") has no GO-prefixed enriched pathway IDs.",
+      "i" = "{.field functional_similarity} needs GO terms ({.fn GOSemSim::mgoSim}); every pair in this condition will score {.val NA}. Re-run {.fn network_enrich} with a GO database, or use {.code annotation = \"direct\"}."
+    ))
+  }
 
   pairs <- utils::combn(all_compounds, 2, simplify = FALSE)
   pair_rows <- vector("list", length(pairs))

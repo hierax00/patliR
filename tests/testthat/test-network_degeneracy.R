@@ -345,3 +345,67 @@ test_that("network_degeneracy(): a legacy 10-column network_degeneracy.csv survi
   expect_equal(keep$functional_similarity, 0.7)   # value carried through under the new name
   expect_true(is.na(keep$annotation))             # per-call constant back-filled NA
 })
+
+## ---------------------------------------------------------------------------
+## piece-14 verification: universe = "genome" pool capping (blocking fix)
+## ---------------------------------------------------------------------------
+
+test_that(".network_cap_pool_keep_observed() never evicts an observed gene", {
+  pool <- paste0("G", seq_len(2000))
+  observed <- c("G5", "G1999", "G2000", "G1")   # scattered, unlikely to survive a naive sample()
+  set.seed(1)
+  res <- patliR:::.network_cap_pool_keep_observed(pool, observed, cap = 1500L)
+  expect_true(res$capped)
+  expect_length(res$pool, 1500L)
+  expect_true(all(observed %in% res$pool))
+})
+
+test_that(".network_cap_pool_keep_observed() keeps the whole observed set even if it alone exceeds cap", {
+  pool <- paste0("G", seq_len(10))
+  res <- patliR:::.network_cap_pool_keep_observed(pool, observed = pool, cap = 3L)
+  expect_true(res$capped)
+  expect_setequal(res$pool, pool)   # can't shrink below the observed set
+})
+
+test_that(".network_cap_pool_keep_observed() is a no-op under the cap", {
+  pool <- paste0("G", seq_len(5))
+  res <- patliR:::.network_cap_pool_keep_observed(pool, observed = "G1", cap = 1500L)
+  expect_false(res$capped)
+  expect_identical(res$pool, pool)
+})
+
+test_that(".network_cap_pool_keep_observed() tolerates observed genes absent from the pool", {
+  pool <- paste0("G", seq_len(2000))
+  res <- patliR:::.network_cap_pool_keep_observed(pool, observed = c("G1", "NOT_IN_POOL"), cap = 1500L)
+  expect_true(res$capped)
+  expect_true("G1" %in% res$pool)
+  expect_false("NOT_IN_POOL" %in% res$pool)
+  expect_length(res$pool, 1500L)
+})
+
+test_that("network_degeneracy(annotation = 'enriched') warns instead of silently scoring all-NA when the enrichment has no GO terms", {
+  testthat::skip_if_not_installed("clusterProfiler")
+  testthat::skip_if_not_installed("org.Hs.eg.db")
+  testthat::skip_if_not_installed("GOSemSim")
+  skip_on_cran()
+
+  proj <- .network_stats_test_setup()
+  ## fabricate an enrichment result with only non-GO (e.g. KEGG-style) IDs
+  patliRResults(proj, "network_enrichment") <- data.frame(
+    condition = "FLO-ET", db = "kegg", ID = "hsa00010", Description = "Glycolysis",
+    pvalue = 0.01, p.adjust = 0.02, geneID = "P12345/P23456",
+    stringsAsFactors = FALSE
+  )
+  ## give the pathway-edge lookup something to merge against
+  local_mocked_bindings(
+    .network_target_pathway_edges = function(proj, cond, uniprot_ids, pathway_db = NULL) {
+      data.frame(uniprot_id = uniprot_ids, pathway_id = "hsa00010", stringsAsFactors = FALSE)
+    }
+  )
+  expect_warning(
+    proj2 <- network_degeneracy(proj, condition = "FLO-ET", annotation = "enriched"),
+    "no GO-prefixed"
+  )
+  res <- patliRResults(proj2, "network_degeneracy")
+  if (nrow(res) > 0) expect_true(all(is.na(res$functional_similarity)))
+})

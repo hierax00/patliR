@@ -115,6 +115,26 @@
   `.network_value_bins()` / `.network_resample_matched()` (generalised
   from degree to any per-node numeric property; signatures unchanged).
   `network_proximity()` output is byte-identical.
+- **Fixed: `universe = "genome"` could silently score zero pairs.** The
+  random 1500-gene cap on the genome-wide resampling pool was applied
+  *before* checking which genes a compound actually targets, so it could
+  (and on the package's own fixture, did) evict a compound's own targets
+  from the survivors -- every pair involving that compound then skipped,
+  with a log message blaming a missing annotation rather than the cap.
+  `.network_cap_pool_keep_observed()` now guarantees every observed gene
+  survives the cap; only the remainder of the pool is randomly subsampled.
+- `network_degeneracy(annotation = "enriched")` now warns (rather than
+  silently scoring every pair `NA`) when the condition's enriched terms
+  contain no GO IDs -- `functional_similarity` in that mode needs
+  `GOSemSim::mgoSim()` over GO terms specifically.
+- `drop` is recorded as `NA` for `annotation != "direct"` rows: the
+  IEA-annotation filter only affects the `"direct"`-mode annotation index,
+  not `"enriched"`'s `mgoSim()` call, so stamping `"IEA"` on an `"enriched"`
+  row claimed a filter that had no effect on that row's number.
+- `network_degeneracy()` now `cli_inform()`s, once per call, that
+  `sim_random_*`/`z_score`/`p_*` are `NA` for every row when
+  `annotation != "direct"` (no permutation null exists for `"enriched"`/
+  `"jaccard"` -- see the `@section` on why).
 
 ## `network_module_robustness()` — clustering backends and a random-failure baseline
 

@@ -123,6 +123,7 @@ Collate:
     'prep_structure2d.R'
     'plot_structure2d.R'
     'plot_synergy.R'
+    'plot_target_chord.R'
     'plot_upset.R'
     'targets_disease.R'
     'plot_venn.R'

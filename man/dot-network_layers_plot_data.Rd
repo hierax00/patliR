@@ -2,16 +2,26 @@
 % Please edit documentation in R/plot_network_layers.R
 \name{.network_layers_plot_data}
 \alias{.network_layers_plot_data}
-\title{Compute a force-directed layout + labels/colors/sizes for
-\code{plot_network_layers()}}
+\title{Compute a layout + labels/colors/sizes for \code{plot_network_layers()}}
 \usage{
-.network_layers_plot_data(proj, g, conditions, layout, top_hub_n, seed)
+.network_layers_plot_data(
+  proj,
+  g,
+  conditions,
+  layout,
+  top_hub_n,
+  seed,
+  colour_by = "layer"
+)
+}
+\arguments{
+\item{colour_by}{\code{"layer"} (default, historical behaviour), \code{"module"},
+or \code{"node_type"} -- see \code{\link[=plot_network_layers]{plot_network_layers()}}'s own \code{colour_by} docs.}
 }
 \value{
-\code{list(nodes = data.frame(name, layer, label, x, y, degree, is_hub), edges = data.frame(x, y, xend, yend, edge_kind, is_derived))}.
+\verb{list(nodes = data.frame(name, layer, label, x, y, degree, is_hub, colour_group), edges = data.frame(x, y, xend, yend, edge_kind, is_derived), palette = named colour vector, legend_name = character(1))}.
 }
 \description{
-Compute a force-directed layout + labels/colors/sizes for
-\code{plot_network_layers()}
+Compute a layout + labels/colors/sizes for \code{plot_network_layers()}
 }
 \keyword{internal}

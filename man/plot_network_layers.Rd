@@ -9,7 +9,8 @@ plot_network_layers(
   proj,
   condition = NULL,
   engine = c("static", "ggiraph"),
-  layout = c("fr", "kk", "drl"),
+  layout = c("fr", "kk", "drl", "bipartite"),
+  colour_by = c("layer", "module", "node_type"),
   top_hub_n = 15,
   seed = 1,
   layers = c("compound", "target"),
@@ -36,8 +37,25 @@ restrict to.}
 
 \item{layout}{One of \code{"fr"} (default, Fruchterman-Reingold -- the
 classic "hairball" force layout, matching the reference figure),
-\code{"kk"} (Kamada-Kawai), or \code{"drl"}; matched against
-\verb{igraph::layout_with_<layout>()}.}
+\code{"kk"} (Kamada-Kawai), \code{"drl"} (matched against
+\verb{igraph::layout_with_<layout>()}), or \code{"bipartite"} -- a deterministic
+two-column layout (compounds on the left, targets on the right, each
+column ordered by degree so fewer edges cross; the standard
+affiliation-network rendering, Borgatti & Everett 1997). \code{"bipartite"}
+only works when the scope's graph is genuinely two-layer
+(compound-target only, the default \code{layers}) -- \code{cli_abort}s naming
+the extra layer(s) otherwise.}
+
+\item{colour_by}{One of \code{"layer"} (default -- the historical behaviour:
+compound/target/pathway/disease, \code{.network_layers_layer_colors()}),
+\code{"module"} (joins \code{\link[=network_module_robustness]{network_module_robustness()}}'s per-node
+\code{network_module_membership} table by \verb{(condition, node_id)}, coloured
+with a qualitative palette (\code{grDevices::hcl.colors(n, "Dark 3")}) and a
+grey \code{"not clustered"} level for any node absent from that table --
+e.g. \code{network_module_robustness()} was never run; \code{cli_abort}s if the
+table does not exist at all, naming the function to run), or
+\code{"node_type"} (compound vs. target, two colours; any opted-in
+pathway/disease node groups as \code{"other"}).}
 
 \item{top_hub_n}{Integer, default \code{15}. Only the \code{top_hub_n}
 highest-degree nodes get a text label (matches the reference figure:
@@ -75,8 +93,11 @@ value(s) (e.g. \code{"kegg"} alone) before \code{max_pathways} even applies, or
 A \code{ggplot} object (\code{engine = "static"}) or a \code{girafe} htmlwidget
 (\code{engine = "ggiraph"}). If \code{save = TRUE} (the default), the PNG path
 is also recorded in \code{patliRResults(proj, "network_layers_plot_log")}
-(one row per distinct \code{condition} scope, \code{"ALL"} for the pooled
-default -- upserted, see \code{.network_upsert()}), retrievable via
+(one row per distinct \verb{(condition, layout, colour_by)} combination --
+\code{"ALL"} for the pooled default \code{condition} -- upserted, see
+\code{.network_upsert()}; the filename encodes all three too, e.g.
+\code{network_layers_ALL_fr_layer.png}, so different \code{layout}/\code{colour_by}
+views never overwrite each other's log row or PNG), retrievable via
 \code{attr(result, "proj")}.
 }
 \description{
@@ -163,6 +184,13 @@ proj <- targets_import_batch(
 proj <- network_build(proj)
 plot_network_layers(proj, save = FALSE) # pooled across every condition
 plot_network_layers(proj, condition = "FLO-ET", save = FALSE) # one condition
+
+## Two-column bipartite layout (compound-target only):
+plot_network_layers(proj, condition = "FLO-ET", layout = "bipartite", save = FALSE)
+
+## Colour by module (needs network_module_robustness() first):
+# proj <- network_module_robustness(proj, condition = "FLO-ET")
+# plot_network_layers(proj, condition = "FLO-ET", colour_by = "module", save = FALSE)
 
 ## To also draw the pathway layer (opt-in -- see the layers section
 ## above for why), run network_enrich() first and pass it explicitly,

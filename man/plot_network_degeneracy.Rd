@@ -9,10 +9,13 @@ plot_network_degeneracy(
   proj,
   condition = NULL,
   engine = c("static", "ggiraph"),
-  layout = c("fr", "kk", "drl"),
+  layout = c("fr", "kk", "drl", "bipartite"),
+  colour_by = c("layer", "module", "node_type"),
   top_hub_n = 15,
   seed = 1,
+  filter = c("p_adjusted", "score"),
   min_degeneracy = 0.3,
+  alpha = 0.05,
   save = TRUE,
   out_dir = NULL,
   width = 9,
@@ -34,8 +37,25 @@ restrict to.}
 
 \item{layout}{One of \code{"fr"} (default, Fruchterman-Reingold -- the
 classic "hairball" force layout, matching the reference figure),
-\code{"kk"} (Kamada-Kawai), or \code{"drl"}; matched against
-\verb{igraph::layout_with_<layout>()}.}
+\code{"kk"} (Kamada-Kawai), \code{"drl"} (matched against
+\verb{igraph::layout_with_<layout>()}), or \code{"bipartite"} -- a deterministic
+two-column layout (compounds on the left, targets on the right, each
+column ordered by degree so fewer edges cross; the standard
+affiliation-network rendering, Borgatti & Everett 1997). \code{"bipartite"}
+only works when the scope's graph is genuinely two-layer
+(compound-target only, the default \code{layers}) -- \code{cli_abort}s naming
+the extra layer(s) otherwise.}
+
+\item{colour_by}{One of \code{"layer"} (default -- the historical behaviour:
+compound/target/pathway/disease, \code{.network_layers_layer_colors()}),
+\code{"module"} (joins \code{\link[=network_module_robustness]{network_module_robustness()}}'s per-node
+\code{network_module_membership} table by \verb{(condition, node_id)}, coloured
+with a qualitative palette (\code{grDevices::hcl.colors(n, "Dark 3")}) and a
+grey \code{"not clustered"} level for any node absent from that table --
+e.g. \code{network_module_robustness()} was never run; \code{cli_abort}s if the
+table does not exist at all, naming the function to run), or
+\code{"node_type"} (compound vs. target, two colours; any opted-in
+pathway/disease node groups as \code{"other"}).}
 
 \item{top_hub_n}{Integer, default \code{15}. Only the \code{top_hub_n}
 highest-degree nodes get a text label (matches the reference figure:
@@ -45,11 +65,19 @@ a handful of named hubs, not every node).}
 layouts are stochastic; a fixed seed makes the figure reproducible
 across reruns of the same graph. Pass \code{NULL} to not fix it.}
 
+\item{filter}{\code{"p_adjusted"} (default) or \code{"score"} -- see the section
+above.}
+
 \item{min_degeneracy}{Single number in \verb{[0, 1]}, default \code{0.3}. Only
-compound pairs with \code{degeneracy_score >= min_degeneracy} get a link
-drawn -- \code{network_degeneracy()} reports every pair, including
-near-zero ones, which would otherwise clutter the plot with
-effectively meaningless links.}
+used when \code{filter} resolves to \code{"score"}: compound pairs with
+\code{degeneracy_score >= min_degeneracy} get a link drawn --
+\code{network_degeneracy()} reports every pair, including near-zero ones,
+which would otherwise clutter the plot with effectively meaningless
+links.}
+
+\item{alpha}{Single number in \verb{(0, 1]}, default \code{0.05}. Only used when
+\code{filter} resolves to \code{"p_adjusted"}: the significance cutoff on
+\code{p_adjusted}.}
 
 \item{save}{Logical, default \code{TRUE}. If \code{TRUE}, also writes a PNG to
 \code{out_dir}.}
@@ -62,20 +90,39 @@ effectively meaningless links.}
 \value{
 A \code{ggplot} object (\code{engine = "static"}) or a \code{girafe} htmlwidget
 (\code{engine = "ggiraph"}). Same \code{save}/logging behavior as
-\code{\link[=plot_network_layers]{plot_network_layers()}}, under \code{patliRResults(proj, "network_degeneracy_plot_log")}.
+\code{\link[=plot_network_layers]{plot_network_layers()}}, under \code{patliRResults(proj, "network_degeneracy_plot_log")} -- keyed (and filenamed) by
+\verb{(condition, layout, colour_by, filter)}, same reasoning as
+\code{\link[=plot_network_layers]{plot_network_layers()}}'s own log.
 }
 \description{
 Draws the same compound-target layout \code{\link[=plot_network_layers]{plot_network_layers()}} does
 (reuses its layout code directly, so node positions match exactly), then
-adds one extra curved edge per compound pair from
-\code{\link[=network_degeneracy]{network_degeneracy()}} whose \code{degeneracy_score >= min_degeneracy} --
-visualizing directly on the network which compounds converge on the same
-targets/pathways, rather than reading \code{degeneracy_score} off a table
-with no structural context.
+adds one extra curved edge per compound pair from \code{\link[=network_degeneracy]{network_degeneracy()}}
+selected by \code{filter} -- visualizing directly on the network which
+compounds converge on the same targets/pathways, rather than reading
+\code{degeneracy_score}/\code{p_adjusted} off a table with no structural context.
 Degeneracy edges are drawn as a slight arc (not a straight line) purely
 so they are visually distinguishable from the underlying compound-target
-edges even when a pair of compounds happens to sit close together.
+edges even when a pair of compounds happens to sit close together, and
+coloured by \code{z_score} -- how far the pair's functional similarity sits
+above the permutation null, the bounded, significance-bearing quantity
+(unlike \code{degeneracy_score}, which is a convenience scalarisation with no
+fixed scale, see \code{\link[=network_degeneracy]{network_degeneracy()}}).
 }
+\section{\code{filter}}{
+ which pairs get a link drawn:
+\code{filter = "p_adjusted"} (default) draws every pair with a non-\code{NA}
+\code{p_adjusted < alpha} -- the significance test \code{\link[=network_degeneracy]{network_degeneracy()}}'s
+default \code{annotation = "direct"} mode actually computes.
+\code{filter = "score"} reproduces the historical behaviour: every pair with
+\code{degeneracy_score >= min_degeneracy}, an arbitrary threshold on an
+unbounded, non-significance-tested scalar. \code{p_adjusted} is \code{NA} for
+every row when \code{network_degeneracy()} was run with
+\code{annotation \%in\% c("enriched", "jaccard")} (piece 14 -- no permutation
+null exists for those modes); if every pair in scope has \code{p_adjusted = NA}, \code{filter = "p_adjusted"} (including the default) transparently
+falls back to \code{filter = "score"} and \code{cli_inform}s why.
+}
+
 \examples{
 \dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
@@ -94,8 +141,8 @@ proj <- targets_import_batch(
   platform = "superpred"
 )
 proj <- network_build(proj)
-proj <- network_enrich(proj, condition = "FLO-ET", db = "go")
-proj <- network_degeneracy(proj, condition = "FLO-ET")
+# "direct" mode (default) has its own permutation null -- filter = "p_adjusted" works
+proj <- network_degeneracy(proj, condition = "FLO-ET", seed = 1)
 plot_network_degeneracy(proj, condition = "FLO-ET", save = FALSE)
 }
 

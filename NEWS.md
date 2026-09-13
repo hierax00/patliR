@@ -1,5 +1,56 @@
 # patliR (development version)
 
+## `plot_network_layers()` / `plot_network_degeneracy()` — bipartite layout, module colouring, significance-based degeneracy filter
+
+- **`plot_network_layers()` gains `layout = "bipartite"`** — a
+  deterministic two-column layout (compounds on the left, targets on the
+  right, each column ordered by degree so fewer edges cross; the standard
+  affiliation-network rendering, Borgatti & Everett 1997). Only valid on a
+  genuinely two-layer (compound-target) scope — `cli_abort`s naming the
+  extra layer(s) if `layers` also includes `"pathway"`/`"disease"`. The
+  existing `"fr"`/`"kk"`/`"drl"` force-directed layouts are unchanged
+  (`"fr"` stays the default).
+- **`plot_network_layers()` gains `colour_by = c("layer", "module",
+  "node_type")`** (default `"layer"`, the historical behaviour, unchanged).
+  `"module"` joins [network_module_robustness()]'s per-node
+  `network_module_membership` table by `(condition, node_id)` and colours
+  with a qualitative palette (`grDevices::hcl.colors(n, "Dark 3")`), with a
+  grey `"not clustered"` level for any node absent from that table;
+  `cli_abort`s if the table does not exist at all, naming
+  `network_module_robustness()`. `"node_type"` colours by compound vs.
+  target.
+- **Node colour is now carried on `fill`, not `colour`** (a plain
+  border replaces the old borderless point) — this is what lets
+  `plot_network_degeneracy()`'s z-score-coloured arcs use their own
+  independent colour scale without clashing with the node legend.
+- **`network_layers_plot_log`'s upsert key is now `(condition, layout,
+  colour_by)`** (was `condition` alone), and the saved filename encodes all
+  three (e.g. `network_layers_ALL_fr_layer.png`) — different
+  `layout`/`colour_by` views no longer overwrite each other's log row or
+  PNG. **Breaking for anyone reading the PNG path by its old, condition-only
+  filename.**
+- **`plot_network_degeneracy()`'s default filter changes from an arbitrary
+  score cutoff to significance** — **breaking**: the new `filter =
+  c("p_adjusted", "score")` argument defaults to `"p_adjusted"`, drawing
+  every compound pair with `p_adjusted < alpha` (`alpha` new, default
+  `0.05`) instead of the old always-on `degeneracy_score >= min_degeneracy`
+  (`min_degeneracy` default unchanged at `0.3`). `filter = "score"`
+  reproduces the pre-revision behaviour exactly. `p_adjusted` is `NA` for
+  every row when [network_degeneracy()] was run with `annotation %in%
+  c("enriched", "jaccard")` (no permutation null exists for those modes,
+  since piece 14) — in that case `filter = "p_adjusted"` (including the
+  default) transparently falls back to `filter = "score"` and
+  `cli_inform`s why.
+- **Degeneracy arcs are now coloured by `z_score`** (bounded,
+  significance-bearing) instead of sized by the unbounded
+  `degeneracy_score`.
+- **`plot_network_degeneracy()` inherits `layout`/`colour_by`** from
+  `plot_network_layers()` (its scope is always two-layer, so `layout =
+  "bipartite"` is always available; `colour_by = "module"` lets a reader
+  see whether a degenerate pair's two compounds landed in the same module).
+  Its own `network_degeneracy_plot_log` key/filename gains `layout`,
+  `colour_by` and `filter` for the same reason as above.
+
 ## `network_synergy()` — real `s_AB` (Menche 2015) + Cheng P1–P6 classification
 
 - **New `separation = c("network", "jaccard")`** (default `"network"`) —
@@ -386,6 +437,42 @@
 **Action required:** projects built with an earlier version must rerun
 `refdb_build()` and rebuild any downstream `bias_*` results -- the previous
 `reference_*.csv` files contain mis-assigned ChEMBL molecules.
+
+## `plot_synergy()` — replaced with the Cheng Complementary-Exposure quadrant; new `plot_enrichment()`
+
+- **`plot_synergy()` is replaced, not revised.** The old figure plotted
+  `complementarity` x `joint_closeness` (a patliR invention) with
+  `synergy_score` on colour/size. The new figure plots `z_score_a` x
+  `z_score_b` (Cheng, Kovacs & Barabasi (2019) Fig. 2's own axes, re-ordered
+  per-row so the more disease-proximal compound is always on `x` --
+  display-only, `compound_a`/`compound_b` in
+  `patliRResults(proj, "network_synergy")` are untouched), colour =
+  `separated` (`s_AB >= 0`, a two-level manual scale, not a gradient),
+  shape = `cheng_class` (`P1`-`P6` + `NA`), size = `abs(s_ab)` (`NA` ->
+  smallest, never dropped). The `P2` (Complementary Exposure) region is
+  shaded and annotated with its count per panel; the top-`synergy_score`
+  `P2` pairs are labeled by compound name. **Breaking**: `top_n`'s default
+  drops from `10` to `5` (the new label set is `P2`-only and much smaller).
+  The empty-state guard now fires on "no row has a `cheng_class`" rather
+  than "no row is scored" -- a pair can be classified without ever getting
+  a `synergy_score`, and gating on the latter made the guard fire on almost
+  every real run.
+- **New companion figure**: `synergy_sab_<scope>.png`, a histogram of
+  `s_AB` across every pair in scope with a `s_AB = 0` reference line --
+  Cheng et al.'s Fig. 1 separation distribution. Logged separately to
+  `patliRResults(proj, "synergy_sab_plot_log")`.
+- **New `plot_enrichment()`** -- the `clusterProfiler::dotplot()`-style
+  enrichment bubble that `network_enrich()` (a core function) previously
+  had no matching plot for. Term (`Description`) on `y` ordered by
+  `GeneRatio` (parsed from its `"k/n"` string, e.g. `"3/20"` -> `0.15`),
+  `GeneRatio` on `x`, size = `Count`, colour = `p.adjust`
+  (`scale_colour_gradient(low = "#c0392b", high = "#2980b9")`, matching the
+  rest of the package's "red = the thing worth looking at" convention: low
+  `p.adjust` = more significant = red). Selects the `top_n` (default `20`)
+  most-significant terms per `(condition, db)`, facets by `db` when more
+  than one is in scope. Does not require the `qvalue` column (absent
+  whenever `clusterProfiler`'s pi0 estimation fails, routine for a small
+  gene set). Logged to `patliRResults(proj, "enrichment_plot_log")`.
 
 # patliR 0.1.0
 

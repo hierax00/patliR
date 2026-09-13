@@ -82,8 +82,24 @@ NULL
 #'   `"static"` with a warning if `ggiraph` is not installed).
 #' @param layout One of `"fr"` (default, Fruchterman-Reingold -- the
 #'   classic "hairball" force layout, matching the reference figure),
-#'   `"kk"` (Kamada-Kawai), or `"drl"`; matched against
-#'   `igraph::layout_with_<layout>()`.
+#'   `"kk"` (Kamada-Kawai), `"drl"` (matched against
+#'   `igraph::layout_with_<layout>()`), or `"bipartite"` -- a deterministic
+#'   two-column layout (compounds on the left, targets on the right, each
+#'   column ordered by degree so fewer edges cross; the standard
+#'   affiliation-network rendering, Borgatti & Everett 1997). `"bipartite"`
+#'   only works when the scope's graph is genuinely two-layer
+#'   (compound-target only, the default `layers`) -- `cli_abort`s naming
+#'   the extra layer(s) otherwise.
+#' @param colour_by One of `"layer"` (default -- the historical behaviour:
+#'   compound/target/pathway/disease, `.network_layers_layer_colors()`),
+#'   `"module"` (joins [network_module_robustness()]'s per-node
+#'   `network_module_membership` table by `(condition, node_id)`, coloured
+#'   with a qualitative palette (`grDevices::hcl.colors(n, "Dark 3")`) and a
+#'   grey `"not clustered"` level for any node absent from that table --
+#'   e.g. `network_module_robustness()` was never run; `cli_abort`s if the
+#'   table does not exist at all, naming the function to run), or
+#'   `"node_type"` (compound vs. target, two colours; any opted-in
+#'   pathway/disease node groups as `"other"`).
 #' @param top_hub_n Integer, default `15`. Only the `top_hub_n`
 #'   highest-degree nodes get a text label (matches the reference figure:
 #'   a handful of named hubs, not every node).
@@ -113,8 +129,11 @@ NULL
 #' @return A `ggplot` object (`engine = "static"`) or a `girafe` htmlwidget
 #'   (`engine = "ggiraph"`). If `save = TRUE` (the default), the PNG path
 #'   is also recorded in `patliRResults(proj, "network_layers_plot_log")`
-#'   (one row per distinct `condition` scope, `"ALL"` for the pooled
-#'   default -- upserted, see `.network_upsert()`), retrievable via
+#'   (one row per distinct `(condition, layout, colour_by)` combination --
+#'   `"ALL"` for the pooled default `condition` -- upserted, see
+#'   `.network_upsert()`; the filename encodes all three too, e.g.
+#'   `network_layers_ALL_fr_layer.png`, so different `layout`/`colour_by`
+#'   views never overwrite each other's log row or PNG), retrievable via
 #'   `attr(result, "proj")`.
 #'
 #' @examples
@@ -138,6 +157,13 @@ NULL
 #' plot_network_layers(proj, save = FALSE) # pooled across every condition
 #' plot_network_layers(proj, condition = "FLO-ET", save = FALSE) # one condition
 #'
+#' ## Two-column bipartite layout (compound-target only):
+#' plot_network_layers(proj, condition = "FLO-ET", layout = "bipartite", save = FALSE)
+#'
+#' ## Colour by module (needs network_module_robustness() first):
+#' # proj <- network_module_robustness(proj, condition = "FLO-ET")
+#' # plot_network_layers(proj, condition = "FLO-ET", colour_by = "module", save = FALSE)
+#'
 #' ## To also draw the pathway layer (opt-in -- see the layers section
 #' ## above for why), run network_enrich() first and pass it explicitly,
 #' ## keeping max_pathways capped:
@@ -151,13 +177,15 @@ NULL
 #'
 #' @export
 plot_network_layers <- function(proj, condition = NULL, engine = c("static", "ggiraph"),
-                                 layout = c("fr", "kk", "drl"), top_hub_n = 15,
+                                 layout = c("fr", "kk", "drl", "bipartite"),
+                                 colour_by = c("layer", "module", "node_type"), top_hub_n = 15,
                                  seed = 1, layers = c("compound", "target"),
                                  max_pathways = 30, pathway_db = NULL, save = TRUE, out_dir = NULL,
                                  width = 9, height = 8, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
   engine <- match.arg(engine)
   layout <- match.arg(layout)
+  colour_by <- match.arg(colour_by)
   unknown_layers <- setdiff(layers, c("compound", "target", "pathway", "disease"))
   if (length(unknown_layers) > 0) {
     cli::cli_abort("Unknown {.arg layers} value(s) {.val {unknown_layers}}; must be a subset of {.val {c('compound', 'target', 'pathway', 'disease')}}.")
@@ -173,19 +201,19 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
     cli::cli_abort("Condition(s) {.val {conditions}} have zero nodes for {.arg layers} = {.val {layers}} -- nothing to plot.")
   }
 
-  pd <- .network_layers_plot_data(proj, g, conditions, layout = layout, top_hub_n = top_hub_n, seed = seed)
+  pd <- .network_layers_plot_data(proj, g, conditions, layout = layout, top_hub_n = top_hub_n, seed = seed, colour_by = colour_by)
   p <- .network_layers_ggplot(pd, engine = engine, title_suffix = scope_label)
 
   .plot_finish(
     proj, p,
     name = "network_layers_plot_log",
-    filename = paste0("network_layers_", scope_label, ".png"),
+    filename = paste0("network_layers_", scope_label, "_", layout, "_", colour_by, ".png"),
     log_row = data.frame(
-      condition = scope_label, path = NA_character_,
+      condition = scope_label, layout = layout, colour_by = colour_by, path = NA_character_,
       n_nodes = igraph::vcount(g), n_edges = igraph::ecount(g),
       stringsAsFactors = FALSE
     ),
-    key_cols = "condition",
+    key_cols = c("condition", "layout", "colour_by"),
     engine = engine, save = save, out_dir = out_dir,
     width = width, height = height, dpi = dpi,
     static = if (engine == "static") p else .network_layers_ggplot(pd, engine = "static", title_suffix = scope_label)
@@ -293,13 +321,16 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
   igraph::induced_subgraph(g, igraph::V(g)[keep])
 }
 
-#' Compute a force-directed layout + labels/colors/sizes for
-#' `plot_network_layers()`
+#' Compute a layout + labels/colors/sizes for `plot_network_layers()`
 #'
+#' @param colour_by `"layer"` (default, historical behaviour), `"module"`,
+#'   or `"node_type"` -- see [plot_network_layers()]'s own `colour_by` docs.
 #' @return `list(nodes = data.frame(name, layer, label, x, y, degree,
-#'   is_hub), edges = data.frame(x, y, xend, yend, edge_kind, is_derived))`.
+#'   is_hub, colour_group), edges = data.frame(x, y, xend, yend, edge_kind,
+#'   is_derived), palette = named colour vector, legend_name =
+#'   character(1))`.
 #' @keywords internal
-.network_layers_plot_data <- function(proj, g, conditions, layout, top_hub_n, seed) {
+.network_layers_plot_data <- function(proj, g, conditions, layout, top_hub_n, seed, colour_by = "layer") {
   if (!is.null(seed)) {
     old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
     on.exit(if (is.null(old_seed)) rm(".Random.seed", envir = .GlobalEnv) else assign(".Random.seed", old_seed, envir = .GlobalEnv), add = TRUE)
@@ -314,7 +345,8 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
   coords <- switch(layout,
     fr = igraph::layout_with_fr(g, niter = 2000),
     kk = igraph::layout_with_kk(g, maxiter = 2000),
-    drl = igraph::layout_with_drl(g)
+    drl = igraph::layout_with_drl(g),
+    bipartite = .network_layers_bipartite_coords(g)
   )
 
   vnames <- igraph::V(g)$name
@@ -329,6 +361,9 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
   hub_cut <- if (nrow(nodes) <= top_hub_n) -Inf else sort(nodes$degree, decreasing = TRUE)[top_hub_n]
   nodes$is_hub <- nodes$degree >= hub_cut & nodes$degree > 0
 
+  colour_info <- .network_layers_colour_info(proj, conditions, nodes, colour_by)
+  nodes$colour_group <- colour_info$group
+
   ed <- igraph::as_data_frame(g, what = "edges")
   idx <- stats::setNames(seq_len(nrow(nodes)), nodes$name)
   edges <- data.frame(
@@ -338,7 +373,115 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
   )
   edges$is_derived <- edges$edge_kind %in% c("compound_pathway_derived", "compound_disease_derived")
 
-  list(nodes = nodes, edges = edges)
+  list(nodes = nodes, edges = edges, palette = colour_info$palette, legend_name = colour_info$legend_name)
+}
+
+#' Deterministic two-column bipartite layout for `layout = "bipartite"`:
+#' compounds on the left, targets on the right, each column ordered by
+#' degree so fewer edges cross
+#'
+#' @description
+#' Only valid on a genuinely two-layer (compound-target) graph -- aborts,
+#' naming any extra layer, otherwise (a pathway/disease node has no
+#' left/right meaning in a two-column affiliation-network drawing).
+#' `igraph::layout_as_bipartite()` is called to exercise its `types=`
+#' contract, but the coordinates actually used are this function's own:
+#' its crossing-minimizing layout lays the two modes out as top/bottom
+#' *rows*, which reads top-to-bottom, not left-to-right -- the axes are
+#' swapped here, and each resulting column is then ordered by degree
+#' (rather than kept in the algorithm's own within-row order), which is
+#' what keeps a small (tens-to-hundreds-of-nodes) bipartite figure legible.
+#' @return A 2-column numeric matrix, `x` (0 = compound, 1 = target) and
+#'   `y` (degree rank within the column), same row order as `igraph::V(g)`.
+#' @keywords internal
+.network_layers_bipartite_coords <- function(g) {
+  vlayer <- igraph::V(g)$layer
+  extra_layers <- setdiff(unique(vlayer), c("compound", "target"))
+  if (length(extra_layers) > 0) {
+    cli::cli_abort(c(
+      "{.arg layout = \"bipartite\"} only supports a two-layer compound-target graph.",
+      "i" = "This scope also includes {.val {extra_layers}} node(s) -- restrict {.arg layers} to {.val {c('compound', 'target')}} (the default) to use the bipartite layout."
+    ))
+  }
+  is_target <- vlayer == "target"
+  deg <- igraph::degree(g, mode = "all")
+
+  invisible(igraph::layout_as_bipartite(g, types = is_target))
+
+  x <- ifelse(is_target, 1, 0)
+  y <- numeric(length(vlayer))
+  for (side in c(FALSE, TRUE)) {
+    idx <- which(is_target == side)
+    if (length(idx) > 0) y[idx] <- rank(deg[idx], ties.method = "first")
+  }
+  cbind(x, y)
+}
+
+#' Resolve `plot_network_layers()`/`plot_network_degeneracy()`'s per-node
+#' colour grouping + palette for `colour_by`
+#'
+#' @return `list(group = character vector, same length/order as
+#'   `nodes$name`; palette = named colour vector; legend_name =
+#'   character(1))`.
+#' @keywords internal
+.network_layers_colour_info <- function(proj, conditions, nodes, colour_by) {
+  switch(
+    colour_by,
+    layer = list(
+      group = nodes$layer,
+      palette = .network_layers_layer_colors(),
+      legend_name = "Layer"
+    ),
+    node_type = list(
+      group = ifelse(nodes$layer %in% c("compound", "target"), nodes$layer, "other"),
+      palette = c(compound = "#e67e22", target = "#2980b9", other = "grey70"),
+      legend_name = "Node type"
+    ),
+    module = .network_layers_module_colour_info(proj, conditions, nodes$name)
+  )
+}
+
+#' Join [network_module_robustness()]'s per-node `network_module_membership`
+#' table onto a node table for `colour_by = "module"`, with a
+#' `"not clustered"` grey fallback level
+#'
+#' @description
+#' Shared by [plot_network_layers()] and [plot_network_degeneracy()] (the
+#' latter draws its base layout via the same `.network_layers_plot_data()`
+#' pipeline, so a degeneracy pair's arc endpoints are coloured by the same
+#' module assignments -- letting the reader see whether a degenerate pair
+#' crosses a module boundary). Nodes present in the scope's graph but
+#' absent from `network_module_membership` (e.g.
+#' `network_module_robustness()` was never run, or the membership table
+#' simply never covers a pathway/disease node -- it is only ever built
+#' from the compound-target graph) fall into a grey `"not clustered"`
+#' level rather than an `NA` colour. Pooled multi-condition scope: a node
+#' built into more than one condition can carry a different `module_id`
+#' per condition -- the first match (by row order in the table) wins; the
+#' common case is a single condition in scope, where this is an exact
+#' join.
+#' @return `list(group, palette, legend_name = "Module")`, same shape as
+#'   `.network_layers_colour_info()`.
+#' @keywords internal
+.network_layers_module_colour_info <- function(proj, conditions, node_names) {
+  membership_all <- patliRResults(proj, "network_module_membership")
+  if (is.null(membership_all) || nrow(membership_all) == 0) {
+    cli::cli_abort(c(
+      "No {.val network_module_membership} entry in {.arg proj}.",
+      "i" = "{.code colour_by = \"module\"} needs per-node module assignments -- run {.fn network_module_robustness} first."
+    ))
+  }
+  mem <- membership_all[membership_all$condition %in% conditions, , drop = FALSE]
+  mem <- mem[!duplicated(mem$node_id), , drop = FALSE]
+  lookup <- stats::setNames(mem$module_id, mem$node_id)
+  module_id <- unname(lookup[node_names])
+  group <- ifelse(is.na(module_id), "not clustered", module_id)
+
+  mod_levels <- sort(unique(group[group != "not clustered"]))
+  palette <- stats::setNames(grDevices::hcl.colors(length(mod_levels), "Dark 3"), mod_levels)
+  palette["not clustered"] <- "grey70"
+
+  list(group = group, palette = palette, legend_name = "Module")
 }
 
 #' @keywords internal
@@ -354,7 +497,7 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
   ## couple of very high-degree nodes (compounds especially, if they map
   ## to many targets) blowing every other node down to invisible.
   nodes$point_size <- 1.2 + 2.6 * sqrt(nodes$degree / max(nodes$degree, 1))
-  nodes$tooltip <- sprintf("%s\n%s, degree %d", nodes$label, nodes$layer, nodes$degree)
+  nodes$tooltip <- sprintf("%s\n%s, degree %d\n%s: %s", nodes$label, nodes$layer, nodes$degree, pd$legend_name, nodes$colour_group)
 
   p <- ggplot2::ggplot() +
     ggplot2::geom_segment(
@@ -366,16 +509,23 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
     ggplot2::scale_linetype_manual(values = c(`FALSE` = "solid", `TRUE` = "22"), guide = "none") +
     ggplot2::scale_alpha_manual(values = c(`FALSE` = 0.35, `TRUE` = 0.2), guide = "none")
 
+  ## Node grouping is carried on `fill` (with a fixed grey border), not
+  ## `colour`, so an overlay that maps `colour` to a *continuous* value --
+  ## plot_network_degeneracy()'s degeneracy arcs, coloured by z_score --
+  ## gets its own independent scale instead of clashing with this discrete
+  ## one (ggplot2 supports only one scale per aesthetic).
   if (engine == "ggiraph" && requireNamespace("ggiraph", quietly = TRUE)) {
     p <- p + ggiraph::geom_point_interactive(
       data = nodes,
-      ggplot2::aes(x = .data$x, y = .data$y, colour = .data$layer, size = .data$point_size,
-                    tooltip = .data$tooltip, data_id = .data$name)
+      ggplot2::aes(x = .data$x, y = .data$y, fill = .data$colour_group, size = .data$point_size,
+                    tooltip = .data$tooltip, data_id = .data$name),
+      shape = 21, colour = "grey30", stroke = 0.2
     )
   } else {
     p <- p + ggplot2::geom_point(
       data = nodes,
-      ggplot2::aes(x = .data$x, y = .data$y, colour = .data$layer, size = .data$point_size)
+      ggplot2::aes(x = .data$x, y = .data$y, fill = .data$colour_group, size = .data$point_size),
+      shape = 21, colour = "grey30", stroke = 0.2
     )
   }
 
@@ -390,7 +540,7 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
 
   layer_title <- paste(unique(nodes$layer[order(match(nodes$layer, c("compound", "target", "pathway", "disease")))]), collapse = "-")
   p +
-    ggplot2::scale_colour_manual(values = .network_layers_layer_colors(), name = "Layer") +
+    ggplot2::scale_fill_manual(values = pd$palette, name = pd$legend_name) +
     ggplot2::scale_size_identity(guide = "none") +
     ggplot2::coord_equal() +
     ggplot2::labs(

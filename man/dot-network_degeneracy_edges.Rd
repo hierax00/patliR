@@ -8,11 +8,14 @@ an already-laid-out \code{plot_network_layers()}-style node table}
 .network_degeneracy_edges(nodes, deg)
 }
 \value{
-\code{data.frame(x, y, xend, yend, degeneracy_score)} -- pairs where
-either compound is not present in \code{nodes} (e.g. it had zero targets in
-this scope) are silently dropped, not an error, since
+\code{data.frame(x, y, xend, yend, degeneracy_score, z_score)} --
+pairs where either compound is not present in \code{nodes} (e.g. it had
+zero targets in this scope) are silently dropped, not an error, since
 \code{network_degeneracy()} covers every pair in the condition regardless
-of whether both ended up in this particular graph.
+of whether both ended up in this particular graph. \code{z_score} is
+\code{NA_real_} for every row when \code{deg} has no \code{z_score} column (a \code{deg}
+built by hand, e.g. in tests, or a call site that only ever produces
+\code{degeneracy_score}).
 }
 \description{
 Resolve \code{network_degeneracy()} compound pairs to node coordinates from

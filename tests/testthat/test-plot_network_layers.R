@@ -26,7 +26,7 @@ test_that("plot_network_layers() errors clearly on an unbuilt condition", {
   expect_error(plot_network_layers(proj, condition = "not_a_real_condition", save = FALSE), "not built")
 })
 
-test_that("plot_network_layers() saves a PNG and logs it to network_layers_plot_log, keyed by scope", {
+test_that("plot_network_layers() saves a PNG and logs it to network_layers_plot_log, keyed by (condition, layout, colour_by)", {
   testthat::skip_if_not_installed("ggplot2")
 
   proj <- .network_stats_test_setup()
@@ -34,16 +34,116 @@ test_that("plot_network_layers() saves a PNG and logs it to network_layers_plot_
   proj2 <- attr(p, "proj")
 
   out_dir <- file.path(projectDir(proj2), "plots")
-  expect_true(file.exists(file.path(out_dir, "network_layers_FLO-ET.png")))
+  expect_true(file.exists(file.path(out_dir, "network_layers_FLO-ET_fr_layer.png")))
   log_df <- patliRResults(proj2, "network_layers_plot_log")
-  expect_true(all(c("condition", "path", "n_nodes", "n_edges") %in% names(log_df)))
+  expect_true(all(c("condition", "layout", "colour_by", "path", "n_nodes", "n_edges") %in% names(log_df)))
   expect_true("FLO-ET" %in% log_df$condition)
 
   p_all <- plot_network_layers(proj2, save = TRUE)
   proj3 <- attr(p_all, "proj")
-  expect_true(file.exists(file.path(out_dir, "network_layers_ALL.png")))
+  expect_true(file.exists(file.path(out_dir, "network_layers_ALL_fr_layer.png")))
   log_df3 <- patliRResults(proj3, "network_layers_plot_log")
   expect_true("ALL" %in% log_df3$condition)
+})
+
+test_that("plot_network_layers() keeps distinct PNGs/log rows per (layout, colour_by) combination", {
+  testthat::skip_if_not_installed("ggplot2")
+
+  proj <- .network_stats_test_setup()
+  p1 <- plot_network_layers(proj, condition = "FLO-ET", layout = "fr", colour_by = "layer", save = TRUE)
+  proj2 <- attr(p1, "proj")
+  p2 <- plot_network_layers(proj2, condition = "FLO-ET", layout = "bipartite", colour_by = "node_type", save = TRUE)
+  proj3 <- attr(p2, "proj")
+
+  out_dir <- file.path(projectDir(proj3), "plots")
+  expect_true(file.exists(file.path(out_dir, "network_layers_FLO-ET_fr_layer.png")))
+  expect_true(file.exists(file.path(out_dir, "network_layers_FLO-ET_bipartite_node_type.png")))
+
+  log_df <- patliRResults(proj3, "network_layers_plot_log")
+  expect_equal(nrow(log_df[log_df$condition == "FLO-ET", ]), 2)
+})
+
+test_that("plot_network_layers() layout = 'bipartite' returns a ggplot on a two-layer scope", {
+  testthat::skip_if_not_installed("ggplot2")
+
+  proj <- .network_stats_test_setup()
+  p <- plot_network_layers(proj, condition = "FLO-ET", layout = "bipartite", save = FALSE)
+  expect_s3_class(p, "ggplot")
+})
+
+test_that(".network_layers_bipartite_coords() places compounds at x = 0, targets at x = 1, ordered by degree", {
+  g <- igraph::graph_from_data_frame(
+    data.frame(from = c("c1", "c1", "c2"), to = c("t1", "t2", "t1"), stringsAsFactors = FALSE),
+    directed = TRUE,
+    vertices = data.frame(name = c("c1", "c2", "t1", "t2"), layer = c("compound", "compound", "target", "target"), stringsAsFactors = FALSE)
+  )
+  coords <- patliR:::.network_layers_bipartite_coords(g)
+  vlayer <- igraph::V(g)$layer
+  expect_true(all(coords[vlayer == "compound", 1] == 0))
+  expect_true(all(coords[vlayer == "target", 1] == 1))
+  ## c1 has degree 2 (t1, t2), c2 has degree 1 -- distinct y within the column
+  expect_equal(length(unique(coords[vlayer == "compound", 2])), 2)
+})
+
+test_that(".network_layers_bipartite_coords() aborts when the graph has more than two layers", {
+  g <- igraph::graph_from_data_frame(
+    data.frame(from = c("c1", "t1"), to = c("t1", "p1"), stringsAsFactors = FALSE),
+    directed = TRUE,
+    vertices = data.frame(name = c("c1", "t1", "p1"), layer = c("compound", "target", "pathway"), stringsAsFactors = FALSE)
+  )
+  expect_error(patliR:::.network_layers_bipartite_coords(g), "two-layer")
+})
+
+test_that("plot_network_layers() colour_by = 'node_type' groups nodes into compound/target", {
+  testthat::skip_if_not_installed("ggplot2")
+
+  proj <- .network_stats_test_setup()
+  p <- plot_network_layers(proj, condition = "FLO-ET", colour_by = "node_type", save = FALSE)
+  expect_s3_class(p, "ggplot")
+
+  g <- patliR:::.network_layered_graph_multi(proj, "FLO-ET")
+  pd <- patliR:::.network_layers_plot_data(proj, g, "FLO-ET", layout = "fr", top_hub_n = 5, seed = 1, colour_by = "node_type")
+  ## default layers = compound/target only -> node_type grouping equals layer exactly
+  expect_equal(pd$nodes$colour_group, pd$nodes$layer)
+})
+
+test_that("plot_network_layers() colour_by = 'module' errors clearly without network_module_robustness()", {
+  testthat::skip_if_not_installed("ggplot2")
+
+  proj <- .network_stats_test_setup()
+  expect_error(
+    plot_network_layers(proj, condition = "FLO-ET", colour_by = "module", save = FALSE),
+    "network_module_membership"
+  )
+})
+
+test_that("plot_network_layers() colour_by = 'module' joins network_module_membership by node_id", {
+  testthat::skip_if_not_installed("ggplot2")
+
+  proj <- .network_stats_test_setup()
+  proj <- network_module_robustness(proj, condition = "FLO-ET", seed = 42)
+  p <- plot_network_layers(proj, condition = "FLO-ET", colour_by = "module", save = FALSE)
+  expect_s3_class(p, "ggplot")
+
+  g <- patliR:::.network_layered_graph_multi(proj, "FLO-ET")
+  pd <- patliR:::.network_layers_plot_data(proj, g, "FLO-ET", layout = "fr", top_hub_n = 5, seed = 1, colour_by = "module")
+  memb <- patliRResults(proj, "network_module_membership")
+  lookup <- stats::setNames(memb$module_id, memb$node_id)
+  expect_equal(pd$nodes$colour_group, unname(lookup[pd$nodes$name]))
+  ## every node in this compound-target graph was clustered -> no "not clustered" fallback here
+  expect_false(any(pd$nodes$colour_group == "not clustered"))
+})
+
+test_that(".network_layers_module_colour_info() falls back to 'not clustered' for nodes absent from the membership table", {
+  proj <- .network_stats_test_setup()
+  fake_memb <- data.frame(
+    condition = "FLO-ET", node_id = "A", node_type = "compound",
+    module_id = "M1", module_type = "cluster", stringsAsFactors = FALSE
+  )
+  patliRResults(proj, "network_module_membership") <- fake_memb
+  info <- patliR:::.network_layers_module_colour_info(proj, "FLO-ET", c("A", "B"))
+  expect_equal(info$group, c("M1", "not clustered"))
+  expect_equal(unname(info$palette["not clustered"]), "grey70")
 })
 
 test_that(".network_layered_graph_multi() pools compound-target edges across conditions without duplicating shared nodes", {

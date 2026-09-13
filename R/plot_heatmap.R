@@ -97,20 +97,47 @@ plot_heatmap <- function(proj, condition = NULL, what = c("compound_target", "co
     title <- paste0("Compound-Target Binding Probability -- ", scope_label)
   }
 
-  if (nrow(mat) == 0 || ncol(mat) == 0) {
-    cli::cli_abort("Nothing to plot for {.arg what} = {.val {what}} in this scope.")
-  }
+  .plot_pheatmap_render(
+    proj, mat, title, save, out_dir, width, height,
+    log_name = "heatmap_plot_log",
+    log_row = data.frame(condition = scope_label, what = what, path = NA_character_, stringsAsFactors = FALSE),
+    key_cols = c("condition", "what"),
+    filename = paste0("heatmap_", what, "_", scope_label, ".pdf")
+  )
+}
 
+#' Render a compound x target/condition matrix with `pheatmap()`, save/log
+#' it, and attach the updated project
+#'
+#' @description
+#' The rendering tail shared by [plot_heatmap()] and [plot_rank()]'s
+#' `view = "heatmap"` -- both need "hierarchical clustering on both axes,
+#' cell values printed, save as PDF, log the path" and differ only in how
+#' `mat`/`title`/`filename` are built. Requires `pheatmap` (checked by the
+#' caller, not here, so the caller's error message can name itself).
+#'
+#' @param mat Numeric matrix to plot.
+#' @param log_row One-row `data.frame` for the log table; a `path` column
+#'   (if present) is overwritten with the resolved path.
+#' @param key_cols Passed to [.network_upsert()] for the log upsert.
+#' @return The `pheatmap` object, with `attr(., "proj")` set when
+#'   `save = TRUE`.
+#' @keywords internal
+.plot_pheatmap_render <- function(proj, mat, title, save, out_dir, width, height,
+                                   log_name, log_row, key_cols, filename) {
+  if (nrow(mat) == 0 || ncol(mat) == 0) {
+    cli::cli_abort("Nothing to plot -- the matrix has zero rows or columns.")
+  }
   if (is.null(width)) width <- max(8, ncol(mat) * 0.9 + 2)
   if (is.null(height)) height <- max(6, nrow(mat) * 0.5 + 2)
 
-  filename <- NA
   path <- NULL
+  pheatmap_filename <- NA
   if (save) {
     if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
     if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
-    path <- file.path(out_dir, paste0("heatmap_", what, "_", scope_label, ".pdf"))
-    filename <- path
+    path <- file.path(out_dir, filename)
+    pheatmap_filename <- path
   }
 
   result <- pheatmap::pheatmap(
@@ -119,14 +146,14 @@ plot_heatmap <- function(proj, condition = NULL, what = c("compound_target", "co
     display_numbers = TRUE, number_format = "%.2f", fontsize_number = 9,
     cluster_rows = nrow(mat) > 1, cluster_cols = ncol(mat) > 1,
     main = title, angle_col = 45, fontsize_row = 10, fontsize_col = 10,
-    filename = filename, width = width, height = height
+    filename = pheatmap_filename, width = width, height = height
   )
 
   if (save) {
-    log_row <- data.frame(condition = scope_label, what = what, path = path, stringsAsFactors = FALSE)
-    log_df <- .network_upsert(proj, "heatmap_plot_log", log_row, c("condition", "what"))
-    patliRResults(proj, "heatmap_plot_log") <- log_df
-    .write_results_csv(proj, "heatmap_plot_log", log_df)
+    log_row$path <- path
+    log_df <- .network_upsert(proj, log_name, log_row, key_cols)
+    patliRResults(proj, log_name) <- log_df
+    .write_results_csv(proj, log_name, log_df)
     attr(result, "proj") <- proj
   }
   result

@@ -64,7 +64,8 @@ Suggests:
     fingerprint,
     ChemmineR,
     plotly,
-    htmlwidgets
+    htmlwidgets,
+    RobustRankAggreg
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 SystemRequirements: Java (>= 8) (required by rcdk / rJava for cheminformatics
@@ -119,6 +120,8 @@ Collate:
     'plot_network_layers.R'
     'plot_network_degeneracy.R'
     'plot_proximity.R'
+    'rank_candidates.R'
+    'plot_rank.R'
     'plot_robustness.R'
     'prep_structure2d.R'
     'plot_structure2d.R'

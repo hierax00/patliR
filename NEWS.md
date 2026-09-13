@@ -1,5 +1,43 @@
 # patliR (development version)
 
+## New `rank_candidates()` / `plot_rank()` (Milestone B)
+
+- **New `rank_candidates()`.** Combines per-compound criteria into one
+  ranked table via Robust Rank Aggregation (RRA; Kolde, Laur, Adler & Vilo
+  2012, *Bioinformatics* 28(4):573-580) -- criteria are compared by *rank*,
+  not raw value, so a criterion with a broken or skewed scale (e.g. a
+  `betweenness_norm` that sits at 0 for most nodes) cannot silently
+  dominate a weighted sum. Two criteria are mandatory: ADME pass fraction
+  (from `adme_filter()`'s `adme_filtered`) and network centrality (a
+  `rowMeans()` composite of `network_centrality()`'s available `*_norm`
+  columns, rolled up target -> compound by the `network_build()` edge
+  weight). Four more are auto-detected and silently skipped when absent,
+  with the decision logged: hub penalty (`network_hub_penalty`), disease
+  proximity (`network_proximity`'s `z_score`, direction-flipped since lower
+  is better), synergy best-partner (`network_synergy`'s `max(synergy_score)`
+  across a compound's partners), and module robustness (`r_index`, joined
+  via `network_module_membership`). Toxicity alerts and
+  `bias_reweight()`'s `score_ajustado` were both considered as criteria and
+  deliberately dropped in this version. Needs the `RobustRankAggreg`
+  package (new `Suggests`) -- namespace-guarded, same pattern as
+  `bipartite`/`dbscan`. Output keeps every raw `crit_*` value, its
+  direction-normalised `rank_*`, `rra_score`/`rra_rank`, and a
+  from-scratch, all-criteria Pareto front tier -- the same "never one
+  opaque number" convention `network_synergy()` already established.
+  `export = "sdf"`/`"smi"` writes the top-N ranked compounds' structures
+  (reuses `rcdk`/`.parse_smiles_safe()`, no new dependency).
+- **New `plot_rank()`.** `view = "pareto"` (default): a new plain-`ggplot2`
+  scatter (no dependency), coloured by the Pareto front `rank_candidates()`
+  already computed, front-1 (non-dominated) compounds labelled by name.
+  `view = "heatmap"`: compound x target matrix restricted to the top
+  `rra_rank`ed compounds and their most relevant targets (breadth/weight/
+  centrality) -- delegates to the same `pheatmap` rendering
+  `plot_heatmap()` uses (factored out into `.plot_pheatmap_render()` in
+  this release) rather than duplicating the geometry.
+- Design rationale, the RRA-vs-weighted-sum-vs-desirability-functions
+  comparison, and every roll-up/missing-data decision:
+  `chilcuague-analysis/reviews/rank-candidates-design-spec.md`.
+
 ## `network_build()` / `network_bowtie()` / `network_filter_proteome()` / `network_pathview()` / `network_motifs()` — Phase 5 audit fixes (design spec §1.1, §1.6, §1.10, §1.11, §1.12)
 
 - **BREAKING: `network_build()` no longer emits `disease_association_score`.**

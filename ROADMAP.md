@@ -66,17 +66,27 @@ guessing.
 
 ## Ranking and reporting
 
-- **`rank_candidates()`** — combine adjusted centrality (hub penalty + bias
-  reweight), ADME filtering, consensus targets, and modular robustness into
-  one ranked table. Blocks `plot_rank()`.
+- **`rank_candidates()` / `plot_rank()` — DONE (Milestone B, 2026-09-13).**
+  Design: `chilcuague-analysis/reviews/rank-candidates-design-spec.md`.
+  Combines ADME pass fraction + network centrality (both mandatory) with
+  hub penalty / disease proximity / synergy best-partner / module
+  robustness (auto-detected, optional) via Robust Rank Aggregation
+  (`RobustRankAggreg`, Kolde et al. 2012) -- not a weighted sum, so no
+  single criterion's scale can dominate. `bias_reweight` and toxicity
+  alerts were deliberately dropped as criteria (user's call). Output
+  carries every raw `crit_*` column, its `rank_*`, `rra_score`/`rra_rank`,
+  and a from-scratch Pareto front tier -- never a single opaque number.
+  `plot_rank(view = "pareto")` (new ggplot2 scatter, Pareto-coloured) /
+  `plot_rank(view = "heatmap")` (top compounds x most relevant targets,
+  delegates to `plot_heatmap()`'s `pheatmap` rendering). `.sdf`/`.smi`
+  top-N export reuses `rcdk`/`.parse_smiles_safe()`, no new dependency.
 - **`dock_prepare()` / `dock_parse()`** — compounds -> PDBQT + a search-box
   config (`box_center` required, no default); parse Vina/DiffDock output
   back to a data frame. No scoring of its own.
 - **`report_generate()`** — one report per condition: ADME filtering,
   ranking, bias audit, modular robustness, full decision/parameter/seed
   log. Docking section only if `dock_results` exists.
-- **`plot_rank()` / `plot_kegg_binding()`** — blocked by the two families
-  above.
+- **`plot_kegg_binding()`** — blocked by `dock_prepare()`/`dock_parse()`.
 
 ## Network
 

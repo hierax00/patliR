@@ -2,12 +2,15 @@
 % Please edit documentation in R/plot_proximity.R
 \name{plot_proximity}
 \alias{plot_proximity}
-\title{Lollipop plot of \code{network_proximity()} z-scores per compound}
+\title{Lollipop plot, or per-compound null-distribution histograms, of
+\code{network_proximity()} results}
 \usage{
 plot_proximity(
   proj,
   condition = NULL,
   disease = NULL,
+  view = c("z", "null"),
+  top_n = 12,
   engine = c("static", "ggiraph"),
   save = TRUE,
   out_dir = NULL,
@@ -27,6 +30,15 @@ untouched in \code{patliRResults(proj, "network_edges")}.}
 \item{disease}{Character EFO ID, or \code{NULL} (default) for every disease
 present in \code{patliRResults(proj, "network_proximity")} (faceted).}
 
+\item{view}{\code{"z"} (default) -- the z-score lollipop, unchanged from
+earlier \code{patliR} versions. \code{"null"} -- the per-compound null-draw
+histogram figure; needs \code{network_proximity(store_null = TRUE)} (see
+Details).}
+
+\item{top_n}{Integer, default \code{12}. \code{view = "null"} only: maximum
+number of compound facets to draw, ranked by \verb{|z_score|} descending.
+Ignored for \code{view = "z"}.}
+
 \item{engine}{\code{"static"} (default) or \code{"ggiraph"}, save/out_dir/width/
 height/dpi -- same as \code{\link[=plot_network_layers]{plot_network_layers()}}.}
 
@@ -44,26 +56,51 @@ to \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}.}
 }
 \value{
 A \code{ggplot} object or \code{girafe} htmlwidget. If \code{save = TRUE}
-(default), also writes a PNG and logs it to
-\code{patliRResults(proj, "proximity_plot_log")}.
+(default), also writes a PNG and logs it -- \code{view = "z"} to
+\code{patliRResults(proj, "proximity_plot_log")} (filename
+\verb{proximity_<scope>.png}); \code{view = "null"} to its own slot,
+\code{patliRResults(proj, "proximity_null_plot_log")} (filename
+\verb{proximity_null_<scope>.png}), so the two views never overwrite each
+other's log row or file.
 }
 \description{
-One point per (\code{condition}, \code{compound_id}) row of
-\code{patliRResults(proj, "network_proximity")}, \code{z_score} on the y-axis,
+\code{view = "z"} (default): one point per (\code{condition}, \code{compound_id}) row
+of \code{patliRResults(proj, "network_proximity")}, \code{z_score} on the y-axis,
 compounds sorted by \code{z_score}, with reference lines at \code{z = 0} and the
 usual \eqn{z = \pm 1.96} two-sided 95\% bands. Points are colored by
 whether they cross that threshold -- a very negative \code{z_score} means
 the compound's targets sit significantly \emph{closer} to the disease module
 than the degree-matched null model, i.e. topologically meaningful
 proximity, which is what \code{\link[=network_proximity]{network_proximity()}} is actually testing for.
+
+\code{view = "null"}: the literal permutation-histogram figure (Guney et al.
+2016 Fig. 1; Menche et al. 2015 SI) -- one facet per \verb{(condition, disease_id, compound_id)} in scope, a histogram of that compound's raw
+\code{d_random} null draws from \code{patliRResults(proj, "network_proximity_null")}, a vertical red line at its \code{d_observed}
+(joined from \code{network_proximity}), and \code{z_score}/\code{p_adjusted} (or
+\code{p_empirical} when no \code{p_adjusted} is available) annotated per panel.
 }
-\section{Not a permutation histogram}{
+\section{\code{view = "z"} -- not a permutation histogram}{
 
 \code{network_proximity()} only stores the null model's summary
 (\code{d_random_mean}, \code{d_random_sd}) and the resulting \code{z_score}, not the
-\code{n_random} raw resampled distances themselves -- so there is nothing to
-draw a literal permutation histogram from. This plot uses what is
-actually persisted.
+\code{n_random} raw resampled distances themselves, \emph{unless} it was run with
+\code{store_null = TRUE} -- so by default there is nothing to draw a literal
+permutation histogram from. \code{view = "z"} uses what is actually persisted
+by every run; \code{view = "null"} uses the opt-in \code{store_null = TRUE}
+output (see below).
+}
+
+\section{\code{view = "null"} needs \code{network_proximity(store_null = TRUE)}}{
+
+This is the one place in the package where a plot's prerequisite is an
+\emph{optional} analysis output, not a required one. \code{view = "null"} reads
+\code{patliRResults(proj, "network_proximity_null")}; if that slot does not
+exist, or has no rows for the condition(s)/disease/compounds in scope,
+it aborts naming \code{network_proximity(store_null = TRUE)} rather than
+silently falling back to \code{view = "z"}. \code{top_n} (default \code{12}) caps how
+many compound facets are drawn, ranked by \verb{|z_score|} descending -- a
+grid of 30+ histograms is illegible, and a message reports how many
+compounds were omitted when the scope has more than \code{top_n}.
 }
 
 \examples{
@@ -92,4 +129,9 @@ proj <- network_proximity(
 plot_proximity(proj, condition = "FLO-ET", save = FALSE)
 }
 
+}
+\references{
+Guney, Menche, Vidal & Barabasi (2016), \emph{Nat Commun} 7:10331, Fig. 1,
+\doi{10.1038/ncomms10331}. Menche et al. (2015), \emph{Science}
+347(6224):1257601, Supplementary Information.
 }

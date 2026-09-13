@@ -1,5 +1,40 @@
 # patliR (development version)
 
+## `network_proximity()` / `plot_proximity()` — opt-in raw null draws + a permutation-histogram view
+
+- **New `network_proximity(store_null = FALSE)`.** When `TRUE`, additionally
+  persists every individual random draw's `d_random` value (already computed
+  on the way to `d_random_mean`/`d_random_sd`/`z_score` -- nothing new is
+  computed) to a new `network_proximity_null` results slot, one row per
+  `(compound, disease, draw)`. Opt-in because it is large (~1 MB at
+  `n_random = 1000` / 30 compounds). `store_null = FALSE` (default) leaves any
+  previously stored draws untouched, and the main `network_proximity` output
+  is byte-identical either way.
+- **New `plot_proximity(view = c("z", "null"))`.** `"z"` is the existing
+  z-score lollipop, unchanged. `"null"` draws the literal permutation-
+  histogram figure the literature uses (Guney et al. 2016 Fig. 1; Menche et
+  al. 2015 SI) -- one facet per compound, its raw `d_random` draws
+  histogrammed, `d_observed` overlaid, `z_score`/`p_adjusted` annotated.
+  Needs `network_proximity(store_null = TRUE)`; aborts with a clear message
+  naming it otherwise. New `top_n` argument (default `12`, `view = "null"`
+  only) caps the number of facets, ranked by `|z_score|`.
+
+## `plot_target_chord()` — new, arc diagram of target-target STRING actions
+
+- **New `plot_target_chord()`** (spec 3.9, lowest priority of the Phase-4
+  plot roster). An arc diagram (Krzywinski et al. 2009's idiom, plain
+  `ggplot2` -- no `circlize` dependency) of a condition's targets placed
+  along one line, with an arc above for every STRING *actions* interaction
+  between two plotted targets, reusing [network_bowtie()]'s already-
+  downloaded/cached actions graph rather than fetching anything new.
+  `actions_score_threshold` (default `400`, matching the rest of the
+  package's STRING confidence convention) recolours arcs by edge score when
+  a per-edge score can be recovered from the cached raw actions file, and
+  falls back to one constant arc colour otherwise. `top_n_labels` (default
+  `15`) labels only the highest-degree targets; the rest get an unlabeled
+  tick. Needs `STRINGdb`; aborts cleanly on fewer than 2 targets or zero
+  actions-edges among the plotted set.
+
 ## `plot_network_layers()` / `plot_network_degeneracy()` — bipartite layout, module colouring, significance-based degeneracy filter
 
 - **`plot_network_layers()` gains `layout = "bipartite"`** — a

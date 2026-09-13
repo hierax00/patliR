@@ -269,6 +269,95 @@ test_that("network_proximity() z_score is unchanged after the .network_string_lc
   expect_true(all(res$species == 9606 & res$string_version == "12.0" & res$score_threshold == 400))
 })
 
+test_that("network_proximity(store_null = FALSE) reproduces byte-identical main-table output to store_null = TRUE (regression)", {
+  ## Phase 4 3.7: store_null must not change how d_random_mean/d_random_sd/
+  ## z_score/p_empirical/p_adjusted are computed -- it only captures an
+  ## intermediate value the loop already had. Same fixture/seed as the
+  ## pinned LCC-extraction test above; the two calls must give identical
+  ## main-table rows.
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  cond <- "FLO-ET"
+  edges <- patliRResults(proj, "network_edges")
+  cmp_uni <- unique(edges$uniprot_id[edges$condition == cond])
+  disease_uni <- paste0("DIS", seq_len(6))
+  proj <- disease_genes_import(
+    proj, data.frame(uniprot_id = disease_uni),
+    disease_id = "D_PIN", disease_name = "synthetic", source = "synthetic"
+  )
+  fake <- .fake_string_db(c(cmp_uni, disease_uni))
+  testthat::local_mocked_bindings(.network_stringdb = function(...) fake, .package = "patliR")
+
+  proj_false <- network_proximity(proj, condition = cond, disease = "D_PIN", n_random = 12, seed = 1, store_null = FALSE)
+  res_false <- patliRResults(proj_false, "network_proximity")
+  res_false <- res_false[order(res_false$compound_id), ]
+
+  proj_true <- network_proximity(proj, condition = cond, disease = "D_PIN", n_random = 12, seed = 1, store_null = TRUE)
+  res_true <- patliRResults(proj_true, "network_proximity")
+  res_true <- res_true[order(res_true$compound_id), ]
+
+  expect_identical(res_false, res_true)
+  expect_null(patliRResults(proj_false, "network_proximity_null"))
+})
+
+test_that("network_proximity(store_null = TRUE) writes network_proximity_null with the right shape and schema", {
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  cond <- "FLO-ET"
+  edges <- patliRResults(proj, "network_edges")
+  cmp_uni <- unique(edges$uniprot_id[edges$condition == cond])
+  disease_uni <- paste0("DIS", seq_len(6))
+  proj <- disease_genes_import(
+    proj, data.frame(uniprot_id = disease_uni),
+    disease_id = "D_PIN", disease_name = "synthetic", source = "synthetic"
+  )
+  fake <- .fake_string_db(c(cmp_uni, disease_uni))
+  testthat::local_mocked_bindings(.network_stringdb = function(...) fake, .package = "patliR")
+
+  proj <- network_proximity(proj, condition = cond, disease = "D_PIN", n_random = 12, seed = 1, store_null = TRUE)
+  main <- patliRResults(proj, "network_proximity")
+  null <- patliRResults(proj, "network_proximity_null")
+
+  expect_identical(
+    names(null),
+    c("condition", "compound_id", "disease_id", "disease_gene_source", "draw", "d_random")
+  )
+  ## one row per (compound, disease, draw) -- n_random rows per compound
+  ## that received a main-table row (spec 3.7).
+  expect_equal(nrow(null), 12L * nrow(main))
+  expect_true(setequal(unique(null$compound_id), main$compound_id))
+  for (cp in main$compound_id) {
+    expect_equal(sort(null$draw[null$compound_id == cp]), 1:12)
+  }
+  expect_true(is.integer(null$draw))
+  expect_true(is.double(null$d_random))
+})
+
+test_that("network_proximity(store_null = FALSE) does not wipe a previously stored network_proximity_null (opt-in, not opt-out)", {
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  cond <- "FLO-ET"
+  edges <- patliRResults(proj, "network_edges")
+  cmp_uni <- unique(edges$uniprot_id[edges$condition == cond])
+  disease_uni <- paste0("DIS", seq_len(6))
+  proj <- disease_genes_import(
+    proj, data.frame(uniprot_id = disease_uni),
+    disease_id = "D_PIN", disease_name = "synthetic", source = "synthetic"
+  )
+  fake <- .fake_string_db(c(cmp_uni, disease_uni))
+  testthat::local_mocked_bindings(.network_stringdb = function(...) fake, .package = "patliR")
+
+  proj <- network_proximity(proj, condition = cond, disease = "D_PIN", n_random = 12, seed = 1, store_null = TRUE)
+  null_before <- patliRResults(proj, "network_proximity_null")
+  expect_gt(nrow(null_before), 0)
+
+  ## A second call with store_null = FALSE must leave the stored draws
+  ## untouched -- not wipe them, not re-key them, not touch them at all.
+  proj <- network_proximity(proj, condition = cond, disease = "D_PIN", n_random = 12, seed = 2, store_null = FALSE)
+  null_after <- patliRResults(proj, "network_proximity_null")
+  expect_identical(null_before, null_after)
+})
+
 test_that(".network_upsert() back-fills the new proximity provenance columns on a legacy table (no abort)", {
   proj <- .network_stats_test_setup()
   legacy <- data.frame(

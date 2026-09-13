@@ -104,6 +104,18 @@ NULL
 #' @param seed `NULL` (default) or a single integer, for the random
 #'   resampling. Logged either way (an auto-generated seed if `NULL`) so a
 #'   run can be reproduced exactly.
+#' @param store_null Logical, default `FALSE`. When `TRUE`, additionally
+#'   writes every individual random draw's `d_random` value (the raw
+#'   per-draw distance the loop already computes on the way to
+#'   `d_random_mean`/`d_random_sd`/`z_score` -- nothing new is computed) to
+#'   a separate `network_proximity_null` results slot, one row per
+#'   `(compound, disease, draw)`. This is opt-in because it is large: at
+#'   `n_random = 1000` and 30 compounds that is ~30,000 rows (~1 MB). It is
+#'   the raw material [plot_proximity(view = "null")][plot_proximity()]
+#'   needs to draw the permutation-histogram figure; when `FALSE` (default)
+#'   the `network_proximity_null` slot is left untouched -- a prior
+#'   `store_null = TRUE` run's stored draws are neither read nor wiped by a
+#'   later `store_null = FALSE` call.
 #'
 #' @return The updated `proj`, with a `network_proximity` entry in
 #'   [patliRResults()] (columns `condition`, `compound_id`, `disease_id`,
@@ -119,6 +131,13 @@ NULL
 #'   this call), `p_adjusted`), also written to
 #'   `results/network_proximity.csv`. Compounds with zero targets mappable
 #'   to the STRING network for `species` contribute no row (logged instead).
+#'   When `store_null = TRUE`, also a `network_proximity_null` entry
+#'   (columns `condition`, `compound_id`, `disease_id`,
+#'   `disease_gene_source`, `draw` (integer, `1..n_random`), `d_random`
+#'   (double, the resampled "closest" distance for that draw, `NA` when
+#'   that draw's resampled pair had no finite path) -- `n_random` rows per
+#'   compound that received a row in `network_proximity`), also written to
+#'   `results/network_proximity_null.csv`.
 #'
 #' @examples
 #' \dontrun{
@@ -151,10 +170,11 @@ network_proximity <- function(proj, condition = NULL, disease,
                                disease_genes = c("disease_genes", "targets_disease"),
                                species = 9606, version = "12.0",
                                score_threshold = 400, n_random = 1000,
-                               seed = NULL) {
+                               seed = NULL, store_null = FALSE) {
   stopifnot(is(proj, "PatliRProject"))
   stopifnot(is.character(disease), length(disease) == 1, nzchar(disease))
   stopifnot(is.numeric(n_random), length(n_random) == 1, n_random >= 1)
+  stopifnot(is.logical(store_null), length(store_null) == 1, !is.na(store_null))
   disease_genes <- match.arg(disease_genes)
   if (!requireNamespace("STRINGdb", quietly = TRUE)) {
     cli::cli_abort(c(
@@ -234,6 +254,10 @@ network_proximity <- function(proj, condition = NULL, disease,
   edges_all <- patliRResults(proj, "network_edges")
   rows <- vector("list", length(conditions))
   names(rows) <- conditions
+  ## Only populated when store_null = TRUE -- one element per condition,
+  ## each the rbind of that condition's per-compound raw-draw rows.
+  null_rows <- vector("list", length(conditions))
+  names(null_rows) <- conditions
 
   for (cond in conditions) {
     ct <- unique(edges_all[edges_all$condition == cond, c("compound_id", "uniprot_id")])
@@ -279,6 +303,7 @@ network_proximity <- function(proj, condition = NULL, disease,
     }
 
     cond_rows <- vector("list", length(compounds))
+    cond_null_rows <- vector("list", length(compounds))
     for (i in seq_along(compounds)) {
       cp <- compounds[i]
       source_string <- unique(stats::na.omit(uni_to_string[target_sets[[cp]]]))
@@ -295,11 +320,25 @@ network_proximity <- function(proj, condition = NULL, disease,
 
       n_overlap <- length(intersect(unique(source_string), unique(target_string)))
       d_observed <- .network_closest_distance(g, source_string, target_string)
-      d_random <- vapply(seq_len(n_random), function(j) {
+      ## The raw, un-filtered per-draw distances -- captured here, before
+      ## the is.finite() filter below, so store_null = TRUE can persist
+      ## exactly what fed into d_random_mean/d_random_sd/z_score without
+      ## changing how any of those are computed.
+      d_random_raw <- vapply(seq_len(n_random), function(j) {
         s_rand <- .network_resample_matched(source_string, node_names, bins, bin_of_node)
         .network_closest_distance(g, s_rand, t_rand_list[[j]])
       }, numeric(1))
-      d_random <- d_random[is.finite(d_random)]
+      d_random <- d_random_raw[is.finite(d_random_raw)]
+
+      if (store_null) {
+        cond_null_rows[[i]] <- data.frame(
+          condition = cond, compound_id = cp, disease_id = disease,
+          disease_gene_source = disease_genes,
+          draw = seq_len(n_random),
+          d_random = ifelse(is.finite(d_random_raw), d_random_raw, NA_real_),
+          stringsAsFactors = FALSE
+        )
+      }
 
       d_random_mean <- if (length(d_random) > 0) mean(d_random) else NA_real_
       d_random_sd <- if (length(d_random) > 1) stats::sd(d_random) else NA_real_
@@ -334,6 +373,14 @@ network_proximity <- function(proj, condition = NULL, disease,
 
     cond_rows <- cond_rows[!vapply(cond_rows, is.null, logical(1))]
     rows[[cond]] <- if (length(cond_rows) == 0) .empty_network_proximity_row() else do.call(rbind, cond_rows)
+    if (store_null) {
+      cond_null_rows <- cond_null_rows[!vapply(cond_null_rows, is.null, logical(1))]
+      null_rows[[cond]] <- if (length(cond_null_rows) == 0) {
+        .empty_network_proximity_null_row()
+      } else {
+        do.call(rbind, cond_null_rows)
+      }
+    }
     proj <- .log_append(
       proj, step = "network_proximity", id = NA_character_,
       message = paste0("condition '", cond, "', disease '", disease, "': proximity computed for ",
@@ -365,6 +412,26 @@ network_proximity <- function(proj, condition = NULL, disease,
   )
 
   patliRResults(proj, "network_proximity") <- result
+
+  ## store_null = FALSE (default): network_proximity_null is not read,
+  ## written, or wiped -- any draws a previous store_null = TRUE call left
+  ## there are untouched by this call.
+  if (store_null) {
+    null_result <- do.call(rbind, null_rows)
+    rownames(null_result) <- NULL
+    ## Re-running for this (condition, disease) replaces only that pair's
+    ## stored draws -- keyed coarser than the main table (no compound_id)
+    ## because every draw for every compound in scope is being recomputed
+    ## together, unlike network_proximity's per-compound touched_keys.
+    null_touched_keys <- data.frame(condition = conditions, disease_id = disease, stringsAsFactors = FALSE)
+    null_result <- .network_upsert(
+      proj, "network_proximity_null", null_result,
+      c("condition", "disease_id"), touched_keys = null_touched_keys
+    )
+    patliRResults(proj, "network_proximity_null") <- null_result
+    .write_results_csv(proj, "network_proximity_null", null_result)
+  }
+
   .write_results_csv(proj, "network_proximity", result)
   .write_log_csv(proj)
   proj
@@ -507,6 +574,18 @@ network_proximity <- function(proj, condition = NULL, disease,
     seed_used = integer(0),
     species = double(0), string_version = character(0), score_threshold = double(0),
     n_tests_in_family = integer(0), p_adjusted = double(0),
+    stringsAsFactors = FALSE
+  )
+}
+
+#' Zero-row constructor for the `network_proximity_null` slot (Phase-0
+#' zero-row invariant -- see `.empty_network_proximity_row()` above)
+#' @keywords internal
+.empty_network_proximity_null_row <- function() {
+  data.frame(
+    condition = character(0), compound_id = character(0), disease_id = character(0),
+    disease_gene_source = character(0),
+    draw = integer(0), d_random = double(0),
     stringsAsFactors = FALSE
   )
 }

@@ -13,7 +13,8 @@ network_proximity(
   version = "12.0",
   score_threshold = 400,
   n_random = 1000,
-  seed = NULL
+  seed = NULL,
+  store_null = FALSE
 )
 }
 \arguments{
@@ -57,6 +58,19 @@ compute the null distribution for the z-score. Default \code{1000}.}
 \item{seed}{\code{NULL} (default) or a single integer, for the random
 resampling. Logged either way (an auto-generated seed if \code{NULL}) so a
 run can be reproduced exactly.}
+
+\item{store_null}{Logical, default \code{FALSE}. When \code{TRUE}, additionally
+writes every individual random draw's \code{d_random} value (the raw
+per-draw distance the loop already computes on the way to
+\code{d_random_mean}/\code{d_random_sd}/\code{z_score} -- nothing new is computed) to
+a separate \code{network_proximity_null} results slot, one row per
+\verb{(compound, disease, draw)}. This is opt-in because it is large: at
+\code{n_random = 1000} and 30 compounds that is ~30,000 rows (~1 MB). It is
+the raw material \link[=plot_proximity]{plot_proximity(view = "null")}
+needs to draw the permutation-histogram figure; when \code{FALSE} (default)
+the \code{network_proximity_null} slot is left untouched -- a prior
+\code{store_null = TRUE} run's stored draws are neither read nor wiped by a
+later \code{store_null = FALSE} call.}
 }
 \value{
 The updated \code{proj}, with a \code{network_proximity} entry in
@@ -73,6 +87,13 @@ another), \code{n_tests_in_family} (the Benjamini-Hochberg family size for
 this call), \code{p_adjusted}), also written to
 \code{results/network_proximity.csv}. Compounds with zero targets mappable
 to the STRING network for \code{species} contribute no row (logged instead).
+When \code{store_null = TRUE}, also a \code{network_proximity_null} entry
+(columns \code{condition}, \code{compound_id}, \code{disease_id},
+\code{disease_gene_source}, \code{draw} (integer, \verb{1..n_random}), \code{d_random}
+(double, the resampled "closest" distance for that draw, \code{NA} when
+that draw's resampled pair had no finite path) -- \code{n_random} rows per
+compound that received a row in \code{network_proximity}), also written to
+\code{results/network_proximity_null.csv}.
 }
 \description{
 For each compound present in a condition's network (\code{\link[=network_build]{network_build()}}),

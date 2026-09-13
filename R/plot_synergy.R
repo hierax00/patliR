@@ -1,32 +1,94 @@
 #' @include AllGenerics.R internal.R network_synergy.R plot-helpers.R
 NULL
 
-#' Volcano-style scatter of `network_synergy()` compound pairs
+#' Cheng et al. (2019) Complementary-Exposure quadrant for `network_synergy()`
 #'
 #' @description
-#' One point per compound pair from `patliRResults(proj, "network_synergy")`:
-#' `complementarity` (targets that differ between the pair -- 0 = same
-#' targets, 1 = fully distinct) on the x-axis, `joint_closeness` (how close
-#' *both* compounds sit to the disease module) on the y-axis, point size/
-#' colour by `synergy_score`. High `synergy_score` needs both distinct
-#' targets *and* both close to the disease module -- not just one of the
-#' two -- so the interesting pairs are the ones in the upper-right, not
-#' just whichever axis is largest alone (see [network_synergy()]'s own
-#' roxygen for why `synergy_score` is built that way). The `top_n` highest-
-#' scoring pairs are labeled by compound name.
+#' One panel per `(condition, disease_id)`. Each point is a compound pair
+#' from `patliRResults(proj, "network_synergy")`, plotted on the
+#' `z_score_a` / `z_score_b` plane of Cheng, Kovacs & Barabasi (2019)
+#' Fig. 2 -- the quantitative version of their six schematic drug-pair
+#' topologies. Every visual channel maps onto one column of
+#' [network_synergy()]'s output:
+#'
+#' - **x / y** -- `z_score_a` / `z_score_b`, but re-ordered *for this plot
+#'   only* so the more disease-proximal compound of the pair (the smaller,
+#'   more negative [network_proximity()] `z_score`) always lands on the
+#'   x-axis. This makes the panel upper-triangular (every point has
+#'   `x <= y`) and roughly halves the visual noise from an otherwise
+#'   arbitrary `a`/`b` labeling. It does **not** change which compound is
+#'   `compound_a` vs. `compound_b` in `patliRResults(proj,
+#'   "network_synergy")` -- only how this one plot's two axes are filled
+#'   in; rows where either `z_score` is `NA` are left unswapped.
+#' - **reference lines and shading** -- `x = 0` / `y = 0` mark
+#'   [network_proximity()]'s proximity threshold; the lower-left quadrant
+#'   (both compounds individually proximal by raw `z < 0`) is shaded
+#'   faintly, since that is the region every `P1`/`P2` pair lives in.
+#' - **colour** -- `separated` (`s_AB >= 0`, Menche et al. (2015)'s sign
+#'   convention), a two-level **manual** scale, deliberately not a
+#'   gradient -- this is the categorical variable Cheng et al.'s whole
+#'   result turns on: whether the two compounds' target modules sit in
+#'   separate neighbourhoods of the interactome. `NA` (`separation =
+#'   "jaccard"`, an unmapped/singleton target set, or a disconnected pair)
+#'   is a distinct grey, drawn, never dropped.
+#' - **shape** -- `cheng_class` (`"P1"`..`"P6"`, plus `NA`), a named shape
+#'   scale. A second facet is deliberately not used for this -- the panel
+#'   grid already carries `(condition, disease_id)`.
+#' - **size** -- `abs(s_ab)` magnitude (how strongly separated or
+#'   overlapping); `NA` maps to the smallest size class rather than
+#'   dropping the point (a continuous `ggplot2` scale would otherwise omit
+#'   `NA` rows with a bare warning).
+#' - **in-plot annotation** -- the `P2` (Complementary Exposure) region
+#'   is labeled with its literal name and the count of `P2` pairs in that
+#'   panel (`cheng_class == "P2"`, i.e. `complementary_exposure`), since
+#'   that is Cheng et al.'s only class shown to correlate with therapeutic
+#'   efficacy.
+#' - **text labels** -- the `top_n` `P2` pairs with the highest
+#'   `synergy_score` (descending, `NA` last -- `synergy_score` is `NA` for
+#'   singleton-flagged `P2` pairs even though they are still classified
+#'   `P2`) are labeled by compound name, via [.plot_label_nodes()].
+#'
+#' @section Requires `separation = "network"` results to show anything but grey:
+#' `cheng_class` / `s_ab` / `separated` are only non-`NA` when
+#' [network_synergy()] was run with `separation = "network"` (the default
+#' since patliR 0.2.0) and the pair's target sets mapped onto the STRING
+#' LCC and were not singleton-flagged into a disconnected component. A
+#' table built entirely with `separation = "jaccard"`, or a legacy table
+#' that predates these columns, still draws the `z_score_a` x
+#' `z_score_b` scatter (colour grey, shape `NA`), but with no `P2` region
+#' to speak of; if **no** row anywhere in scope carries a `cheng_class`,
+#' this function draws a self-explanatory empty panel instead of a
+#' confusing all-grey one.
+#'
+#' @section Companion panel -- `s_AB` distribution:
+#' Also produces (and, when `save = TRUE`, separately saves and logs) a
+#' second figure: a histogram of `s_ab` across every pair in scope, with a
+#' vertical line at `s_AB = 0` -- the direct analogue of Cheng et al.'s
+#' Fig. 1 separation distribution, and the thing that tells the reader
+#' whether *any* pair in this extract is topologically separated at all.
+#' Logged to `patliRResults(proj, "synergy_sab_plot_log")` and saved as
+#' `synergy_sab_<scope>.png` alongside the main `synergy_<scope>.png`.
+#' Only the main scatter is returned by this function; call
+#' `attr(plot_synergy(...), "proj")` and look up `synergy_sab_plot_log`
+#' for the companion file's path.
 #'
 #' @inheritParams network_build
 #' @inheritParams plot_save_params
 #' @param disease Character EFO ID, or `NULL` (default) for every disease
 #'   present (faceted).
-#' @param top_n Integer, default `10`. Number of highest-`synergy_score`
-#'   pairs to label.
+#' @param top_n Integer, default `5`. Number of highest-`synergy_score`
+#'   `P2` (Complementary Exposure) pairs to label by compound name, per
+#'   panel. **Breaking change from patliR <= 0.1.x**: the old default was
+#'   `10`, chosen for the previous complementarity/joint_closeness scatter;
+#'   `5` keeps the new, much more selective `P2`-only label set legible.
 #' @param engine `"static"` (default) or `"ggiraph"`, save/out_dir/width/
 #'   height/dpi -- same as [plot_network_layers()].
 #'
-#' @return A `ggplot` object or `girafe` htmlwidget. If `save = TRUE`
-#'   (default), also writes a PNG and logs it to
-#'   `patliRResults(proj, "synergy_plot_log")`.
+#' @return A `ggplot` object or `girafe` htmlwidget (the main scatter). If
+#'   `save = TRUE` (default), also writes two PNGs (`synergy_<scope>.png`
+#'   and `synergy_sab_<scope>.png`) and logs them to
+#'   `patliRResults(proj, "synergy_plot_log")` /
+#'   `patliRResults(proj, "synergy_sab_plot_log")` respectively.
 #'
 #' @examples
 #' \dontrun{
@@ -46,17 +108,20 @@ NULL
 #'   platform = "superpred"
 #' )
 #' proj <- network_build(proj)
-#' proj <- targets_disease_filter(proj, disease = "type 2 diabetes mellitus")
-#' proj <- network_proximity(
-#'   proj, condition = "FLO-ET",
-#'   disease = unique(patliRResults(proj, "targets_disease")$disease_id)[1]
-#' )
-#' proj <- network_synergy(proj, condition = "FLO-ET")
+#' proj <- disease_genes_fetch(proj, disease = "type 2 diabetes mellitus")
+#' disease_id <- unique(patliRResults(proj, "disease_genes")$disease_id)[1]
+#' proj <- network_proximity(proj, condition = "FLO-ET", disease = disease_id)
+#' proj <- network_synergy(proj, condition = "FLO-ET", disease = disease_id)
 #' plot_synergy(proj, condition = "FLO-ET", save = FALSE)
 #' }
 #'
+#' @references
+#' Cheng, Kovacs & Barabasi (2019), *Nat Commun* 10:1197, Fig. 2,
+#' \doi{10.1038/s41467-019-09186-x}. Menche et al. (2015), *Science*
+#' 347(6224):1257601, \doi{10.1126/science.1257601}.
+#'
 #' @export
-plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 10,
+plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
                           engine = c("static", "ggiraph"), save = TRUE, out_dir = NULL,
                           width = 8, height = 6, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
@@ -76,77 +141,203 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 10,
   if (nrow(dat) == 0) {
     cli::cli_abort("No {.val network_synergy} rows for the requested condition(s)/disease.")
   }
-  ## `synergy_score` is `NA` for every pair that is not Complementary
-  ## Exposure (P2) -- or, in `separation = "network"` mode, whenever the
-  ## proximity BH gate was arithmetically unreachable. An all-NA score
-  ## column would otherwise make every point vanish with a bare ggplot
-  ## warning, so draw a self-explanatory empty panel instead.
-  n_scored <- sum(!is.na(dat$synergy_score))
-  if (n_scored == 0) {
-    cheng <- if ("cheng_class" %in% names(dat)) {
-      tb <- table(dat$cheng_class, useNA = "ifany")
-      paste0(names(tb), " x", as.integer(tb), collapse = ", ")
-    } else NA_character_
+
+  ## Defensive column back-fill: a legacy/fabricated network_synergy table
+  ## (pre-Menche s_AB, or hand-built in a test) may not carry these columns
+  ## at all -- .network_upsert() back-fills NA for a real rerun, but a
+  ## table assigned directly to patliRResults() bypasses that. Treat an
+  ## absent column exactly like an all-NA one.
+  for (col in c("s_ab", "separated", "cheng_class", "complementary_exposure",
+                "synergy_score", "p_adjusted_a", "p_adjusted_b")) {
+    if (is.null(dat[[col]])) {
+      dat[[col]] <- if (col == "cheng_class") NA_character_ else if (col == "separated" || col == "complementary_exposure") NA else NA_real_
+    }
+  }
+
+  dat$panel <- paste(dat$condition, dat$disease_id, sep = " / ")
+
+  ## This plot needs a Cheng classification, not a synergy_score -- a pair
+  ## can carry a real cheng_class (P1..P6) without ever getting a
+  ## synergy_score (that column is gated on complementary_exposure AND not
+  ## singleton-flagged). So the empty-state trigger is "no row anywhere in
+  ## scope has a non-NA cheng_class", not "no row is scored" -- the latter
+  ## is the common, uninteresting case (most pairs are not P2) and would
+  ## make this guard fire on almost every real run.
+  n_class <- sum(!is.na(dat$cheng_class))
+  if (n_class == 0) {
+    n_sab <- sum(!is.na(dat$s_ab))
     msg <- paste0(
-      "No scored compound pairs for ", scope_label, ".\n\n",
-      "synergy_score is only set for Complementary-Exposure (P2) pairs",
-      if (!is.na(cheng)) paste0(".\nCheng classes present: ", cheng) else ".",
-      "\n\nIf network_synergy() warned that the BH-adjusted proximity p\n",
-      "cannot clear alpha, rerun network_proximity() with a larger n_random."
+      "No compound pair in ", scope_label, " has a computed Cheng classification (cheng_class).\n\n",
+      "This plot needs network_synergy(separation = \"network\") results (s_ab / separated /\n",
+      "cheng_class); separation = \"jaccard\" leaves those columns NA, as does a pair whose\n",
+      "target sets did not map onto the STRING LCC.\n\n",
+      "s_ab non-NA count: ", n_sab, " of ", nrow(dat), "."
     )
-    p <- ggplot2::ggplot() +
-      ggplot2::annotate("text", x = 0, y = 0, label = msg, size = 3.4,
-                        colour = "grey25", lineheight = 1.1) +
-      ggplot2::labs(title = paste0("Compound pair synergy -- ", scope_label)) +
-      ggplot2::theme_void() +
-      ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"))
-    return(.plot_finish(
-      proj, p,
-      name = "synergy_plot_log",
-      filename = paste0("synergy_", scope_label, ".png"),
-      log_row = data.frame(condition = scope_label, path = NA_character_, stringsAsFactors = FALSE),
-      key_cols = "condition",
-      engine = engine, save = save, out_dir = out_dir,
-      width = width, height = height, dpi = dpi
+    p_main <- .synergy_empty_panel(msg, paste0("Compound pair Cheng classification -- ", scope_label))
+    p_sab <- .synergy_empty_panel(
+      paste0("No s_AB values available for ", scope_label, "."),
+      paste0("s_AB distribution -- ", scope_label)
+    )
+    return(.synergy_finish_both(proj, p_main, p_sab, scope_label, engine, save, out_dir, width, height, dpi))
+  }
+  if (n_class < nrow(dat)) {
+    cli::cli_inform(c(
+      "i" = "{nrow(dat) - n_class} of {nrow(dat)} pair{?s} {?has/have} no Cheng classification (cheng_class {.val NA}) -- drawn in grey with no shape assigned."
     ))
   }
-  if (n_scored < nrow(dat)) {
-    cli::cli_inform(c(
-      "i" = "{nrow(dat) - n_scored} of {nrow(dat)} pair{?s} {?is/are} unscored ({.field synergy_score} {.val NA}) and {?is/are} not drawn -- only Complementary-Exposure (P2) pairs get a score."
-    ))
+
+  ## Row-wise relabel for THIS PLOT ONLY: put the more proximal compound
+  ## (smaller/more negative z_score) on the x-axis, so the panel is
+  ## upper-triangular. compound_a/compound_b in the underlying data (and in
+  ## `dat` itself) are untouched -- only the *_plot columns feed the
+  ## aes(x=, y=).
+  dat$za_plot <- dat$z_score_a
+  dat$zb_plot <- dat$z_score_b
+  swap <- !is.na(dat$z_score_a) & !is.na(dat$z_score_b) & dat$z_score_a > dat$z_score_b
+  if (any(swap)) {
+    dat$za_plot[swap] <- dat$z_score_b[swap]
+    dat$zb_plot[swap] <- dat$z_score_a[swap]
   }
 
   label_a <- .plot_label_nodes(proj, conditions, dat$compound_a, "compound")
   label_b <- .plot_label_nodes(proj, conditions, dat$compound_b, "compound")
   dat$pair_label <- paste(label_a, "+", label_b)
-  dat$panel <- paste(dat$condition, dat$disease_id, sep = " / ")
-  dat$tooltip <- sprintf("%s\ncomplementarity %.2f, joint closeness %.2f, synergy %.2f", dat$pair_label, dat$complementarity, dat$joint_closeness, dat$synergy_score)
+  dat$tooltip <- sprintf(
+    "%s\nz_a=%.2f  z_b=%.2f\ns_ab=%s (%s)\nclass=%s",
+    dat$pair_label, dat$za_plot, dat$zb_plot,
+    ifelse(is.na(dat$s_ab), "NA", sprintf("%.2f", dat$s_ab)),
+    ifelse(is.na(dat$separated), "NA", ifelse(dat$separated, "separated", "overlapping")),
+    ifelse(is.na(dat$cheng_class), "NA", dat$cheng_class)
+  )
 
-  top <- utils::head(dat[order(-dat$synergy_score), , drop = FALSE], top_n)
+  ## colour: separated, a two-level MANUAL scale (not a gradient) -- see
+  ## roxygen. NA (jaccard mode / unmapped / disconnected) is a distinct grey.
+  dat$separated_f <- factor(dat$separated, levels = c(TRUE, FALSE))
+  ## shape: cheng_class, P1..P6 named + NA.
+  dat$cheng_f <- factor(dat$cheng_class, levels = paste0("P", 1:6))
+  ## size: |s_ab|, NA -> the smallest class (never dropped).
+  dat$s_ab_mag <- abs(dat$s_ab)
+  dat$size_val <- ifelse(is.na(dat$s_ab_mag), 0, dat$s_ab_mag)
 
-  p <- ggplot2::ggplot(dat, ggplot2::aes(x = .data$complementarity, y = .data$joint_closeness, size = .data$synergy_score, colour = .data$synergy_score))
+  ## P2 = Complementary Exposure: separated & proximal_a & proximal_b,
+  ## already computed by network_synergy() as cheng_class == "P2" /
+  ## complementary_exposure. Per-panel count for the in-plot annotation.
+  dat$is_p2 <- dat$cheng_class == "P2" & !is.na(dat$cheng_class)
+  is_p2 <- dat$is_p2
+  ann_p2 <- stats::aggregate(is_p2 ~ panel, data = dat, FUN = sum)
+  names(ann_p2)[2] <- "n_p2"
+  ann_p2$label <- sprintf("Complementary Exposure (P2)\nn = %d", ann_p2$n_p2)
+
+  ## top_n P2 pairs by synergy_score (descending, NA last), per panel.
+  p2_rows <- dat[is_p2, , drop = FALSE]
+  top <- if (nrow(p2_rows) > 0 && top_n > 0) {
+    do.call(rbind, lapply(split(p2_rows, p2_rows$panel), function(d) {
+      d <- d[order(d$synergy_score, decreasing = TRUE, na.last = TRUE), , drop = FALSE]
+      utils::head(d, top_n)
+    }))
+  } else {
+    p2_rows[FALSE, , drop = FALSE]
+  }
+
+  shape_values <- c(P1 = 16, P2 = 17, P3 = 15, P4 = 18, P5 = 3, P6 = 4)
+  sep_colours <- c(`TRUE` = "#2980b9", `FALSE` = "#c0392b")
+
+  p <- ggplot2::ggplot(dat, ggplot2::aes(
+    x = .data$za_plot, y = .data$zb_plot,
+    colour = .data$separated_f, shape = .data$cheng_f, size = .data$size_val
+  ))
+  p <- p +
+    ggplot2::geom_rect(
+      data = data.frame(xmin = -Inf, xmax = 0, ymin = -Inf, ymax = 0),
+      ggplot2::aes(xmin = .data$xmin, xmax = .data$xmax, ymin = .data$ymin, ymax = .data$ymax),
+      inherit.aes = FALSE, fill = "grey40", alpha = 0.08
+    ) +
+    ggplot2::geom_hline(yintercept = 0, colour = "grey60", linetype = "22") +
+    ggplot2::geom_vline(xintercept = 0, colour = "grey60", linetype = "22")
   p <- p + if (engine == "ggiraph" && requireNamespace("ggiraph", quietly = TRUE)) {
     ggiraph::geom_point_interactive(ggplot2::aes(tooltip = .data$tooltip, data_id = .data$pair_label), alpha = 0.75)
   } else {
     ggplot2::geom_point(alpha = 0.75)
   }
   if (nrow(top) > 0) {
-    p <- p + ggplot2::geom_text(data = top, ggplot2::aes(label = .data$pair_label), size = 2.6, colour = "grey15", vjust = -1, show.legend = FALSE)
+    p <- p + ggplot2::geom_text(
+      data = top, ggplot2::aes(x = .data$za_plot, y = .data$zb_plot, label = .data$pair_label),
+      size = 2.6, colour = "grey15", vjust = -1, inherit.aes = FALSE, show.legend = FALSE
+    )
   }
+  p <- p + ggplot2::geom_text(
+    data = ann_p2, ggplot2::aes(x = -Inf, y = -Inf, label = .data$label),
+    hjust = -0.05, vjust = -0.6, size = 3, colour = "grey25", inherit.aes = FALSE
+  )
   p <- p +
-    ggplot2::scale_colour_gradient(low = "grey70", high = "#c0392b", name = "Synergy\nscore") +
-    ggplot2::scale_size(range = c(1.5, 6), guide = "none") +
+    ggplot2::scale_colour_manual(
+      values = sep_colours, na.value = "grey70", drop = FALSE,
+      breaks = c("TRUE", "FALSE"),
+      labels = c("separated (s_AB >= 0)", "overlapping (s_AB < 0)"),
+      name = "Topological separation"
+    ) +
+    ggplot2::scale_shape_manual(values = shape_values, na.value = 8, drop = FALSE, name = "Cheng class") +
+    ggplot2::scale_size(range = c(1.5, 6), name = "|s_AB|\n(NA -> smallest)") +
     ggplot2::labs(
-      title = paste0("Compound pair synergy -- ", scope_label),
-      subtitle = "Top-right = distinct targets (complementarity) AND both close to the disease module (joint_closeness); top pairs labeled",
-      x = "Complementarity (target Jaccard distance)", y = "Joint closeness to disease module"
+      title = paste0("Compound pair Cheng classification -- ", scope_label),
+      subtitle = paste0(
+        "x = z_score (more proximal compound), y = z_score (less proximal); shaded region = both individually proximal (z < 0);\n",
+        "colour = separated (s_AB >= 0, Menche et al. 2015); shape = Cheng class P1-P6 (Cheng, Kovacs & Barabasi 2019); size = |s_AB|"
+      ),
+      x = "z_score (more proximal compound of the pair)",
+      y = "z_score (less proximal compound of the pair)"
     ) +
     ggplot2::theme_minimal() +
-    ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 8, colour = "grey40"))
+    ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"))
   if (length(unique(dat$panel)) > 1) p <- p + ggplot2::facet_wrap(~panel)
 
-  .plot_finish(
-    proj, p,
+  ## Companion panel: s_AB distribution across every pair in scope.
+  n_sab <- sum(!is.na(dat$s_ab))
+  p_sab <- if (n_sab == 0) {
+    .synergy_empty_panel(
+      paste0("No s_AB values available for ", scope_label, " (separation = \"jaccard\", or no pair mapped onto the STRING LCC)."),
+      paste0("s_AB distribution -- ", scope_label)
+    )
+  } else {
+    ps <- ggplot2::ggplot(dat[!is.na(dat$s_ab), , drop = FALSE], ggplot2::aes(x = .data$s_ab)) +
+      ggplot2::geom_histogram(bins = 30, fill = "#2980b9", colour = "white", alpha = 0.85) +
+      ggplot2::geom_vline(xintercept = 0, colour = "#c0392b", linetype = "solid", linewidth = 0.6) +
+      ggplot2::labs(
+        title = paste0("s_AB distribution -- ", scope_label),
+        subtitle = "Menche et al. (2015) network separation across every scored pair; s_AB >= 0 (right of the red line) = topologically separated",
+        x = "s_AB", y = "Pair count"
+      ) +
+      ggplot2::theme_minimal() +
+      ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"))
+    if (length(unique(dat$panel)) > 1) ps <- ps + ggplot2::facet_wrap(~panel)
+    ps
+  }
+
+  .synergy_finish_both(proj, p, p_sab, scope_label, engine, save, out_dir, width, height, dpi)
+}
+
+#' A self-explanatory empty panel for `plot_synergy()`'s two figures
+#' @keywords internal
+.synergy_empty_panel <- function(msg, title) {
+  ggplot2::ggplot() +
+    ggplot2::annotate("text", x = 0, y = 0, label = msg, size = 3.4, colour = "grey25", lineheight = 1.1) +
+    ggplot2::labs(title = title) +
+    ggplot2::theme_void() +
+    ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"))
+}
+
+#' Save/log both `plot_synergy()` figures and chain the returned `proj`
+#'
+#' @description
+#' `.plot_finish()` is written for one figure; `plot_synergy()` produces
+#' two (main scatter + `s_AB` companion). Runs it twice, feeding the `proj`
+#' that the first call attached (when `save = TRUE`) into the second, so
+#' both log rows land in the same project -- then re-attaches the final
+#' `proj` to the main result, which is the only one returned to the caller.
+#' @keywords internal
+.synergy_finish_both <- function(proj, p_main, p_sab, scope_label, engine, save, out_dir, width, height, dpi) {
+  result_main <- .plot_finish(
+    proj, p_main,
     name = "synergy_plot_log",
     filename = paste0("synergy_", scope_label, ".png"),
     log_row = data.frame(condition = scope_label, path = NA_character_, stringsAsFactors = FALSE),
@@ -154,4 +345,16 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 10,
     engine = engine, save = save, out_dir = out_dir,
     width = width, height = height, dpi = dpi
   )
+  proj_next <- if (save) attr(result_main, "proj") else proj
+  result_sab <- .plot_finish(
+    proj_next, p_sab,
+    name = "synergy_sab_plot_log",
+    filename = paste0("synergy_sab_", scope_label, ".png"),
+    log_row = data.frame(condition = scope_label, path = NA_character_, stringsAsFactors = FALSE),
+    key_cols = "condition",
+    engine = "static", save = save, out_dir = out_dir,
+    width = width, height = height, dpi = dpi
+  )
+  if (save) attr(result_main, "proj") <- attr(result_sab, "proj")
+  result_main
 }

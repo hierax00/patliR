@@ -2,13 +2,13 @@
 % Please edit documentation in R/plot_synergy.R
 \name{plot_synergy}
 \alias{plot_synergy}
-\title{Volcano-style scatter of \code{network_synergy()} compound pairs}
+\title{Cheng et al. (2019) Complementary-Exposure quadrant for \code{network_synergy()}}
 \usage{
 plot_synergy(
   proj,
   condition = NULL,
   disease = NULL,
-  top_n = 10,
+  top_n = 5,
   engine = c("static", "ggiraph"),
   save = TRUE,
   out_dir = NULL,
@@ -28,8 +28,11 @@ untouched in \code{patliRResults(proj, "network_edges")}.}
 \item{disease}{Character EFO ID, or \code{NULL} (default) for every disease
 present (faceted).}
 
-\item{top_n}{Integer, default \code{10}. Number of highest-\code{synergy_score}
-pairs to label.}
+\item{top_n}{Integer, default \code{5}. Number of highest-\code{synergy_score}
+\code{P2} (Complementary Exposure) pairs to label by compound name, per
+panel. \strong{Breaking change from patliR <= 0.1.x}: the old default was
+\code{10}, chosen for the previous complementarity/joint_closeness scatter;
+\code{5} keeps the new, much more selective \code{P2}-only label set legible.}
 
 \item{engine}{\code{"static"} (default) or \code{"ggiraph"}, save/out_dir/width/
 height/dpi -- same as \code{\link[=plot_network_layers]{plot_network_layers()}}.}
@@ -47,22 +50,84 @@ disk (in addition to returning it).}
 to \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}.}
 }
 \value{
-A \code{ggplot} object or \code{girafe} htmlwidget. If \code{save = TRUE}
-(default), also writes a PNG and logs it to
-\code{patliRResults(proj, "synergy_plot_log")}.
+A \code{ggplot} object or \code{girafe} htmlwidget (the main scatter). If
+\code{save = TRUE} (default), also writes two PNGs (\verb{synergy_<scope>.png}
+and \verb{synergy_sab_<scope>.png}) and logs them to
+\code{patliRResults(proj, "synergy_plot_log")} /
+\code{patliRResults(proj, "synergy_sab_plot_log")} respectively.
 }
 \description{
-One point per compound pair from \code{patliRResults(proj, "network_synergy")}:
-\code{complementarity} (targets that differ between the pair -- 0 = same
-targets, 1 = fully distinct) on the x-axis, \code{joint_closeness} (how close
-\emph{both} compounds sit to the disease module) on the y-axis, point size/
-colour by \code{synergy_score}. High \code{synergy_score} needs both distinct
-targets \emph{and} both close to the disease module -- not just one of the
-two -- so the interesting pairs are the ones in the upper-right, not
-just whichever axis is largest alone (see \code{\link[=network_synergy]{network_synergy()}}'s own
-roxygen for why \code{synergy_score} is built that way). The \code{top_n} highest-
-scoring pairs are labeled by compound name.
+One panel per \verb{(condition, disease_id)}. Each point is a compound pair
+from \code{patliRResults(proj, "network_synergy")}, plotted on the
+\code{z_score_a} / \code{z_score_b} plane of Cheng, Kovacs & Barabasi (2019)
+Fig. 2 -- the quantitative version of their six schematic drug-pair
+topologies. Every visual channel maps onto one column of
+\code{\link[=network_synergy]{network_synergy()}}'s output:
+\itemize{
+\item \strong{x / y} -- \code{z_score_a} / \code{z_score_b}, but re-ordered \emph{for this plot
+only} so the more disease-proximal compound of the pair (the smaller,
+more negative \code{\link[=network_proximity]{network_proximity()}} \code{z_score}) always lands on the
+x-axis. This makes the panel upper-triangular (every point has
+\code{x <= y}) and roughly halves the visual noise from an otherwise
+arbitrary \code{a}/\code{b} labeling. It does \strong{not} change which compound is
+\code{compound_a} vs. \code{compound_b} in \code{patliRResults(proj, "network_synergy")} -- only how this one plot's two axes are filled
+in; rows where either \code{z_score} is \code{NA} are left unswapped.
+\item \strong{reference lines and shading} -- \code{x = 0} / \code{y = 0} mark
+\code{\link[=network_proximity]{network_proximity()}}'s proximity threshold; the lower-left quadrant
+(both compounds individually proximal by raw \code{z < 0}) is shaded
+faintly, since that is the region every \code{P1}/\code{P2} pair lives in.
+\item \strong{colour} -- \code{separated} (\code{s_AB >= 0}, Menche et al. (2015)'s sign
+convention), a two-level \strong{manual} scale, deliberately not a
+gradient -- this is the categorical variable Cheng et al.'s whole
+result turns on: whether the two compounds' target modules sit in
+separate neighbourhoods of the interactome. \code{NA} (\code{separation = "jaccard"}, an unmapped/singleton target set, or a disconnected pair)
+is a distinct grey, drawn, never dropped.
+\item \strong{shape} -- \code{cheng_class} (\code{"P1"}..\code{"P6"}, plus \code{NA}), a named shape
+scale. A second facet is deliberately not used for this -- the panel
+grid already carries \verb{(condition, disease_id)}.
+\item \strong{size} -- \code{abs(s_ab)} magnitude (how strongly separated or
+overlapping); \code{NA} maps to the smallest size class rather than
+dropping the point (a continuous \code{ggplot2} scale would otherwise omit
+\code{NA} rows with a bare warning).
+\item \strong{in-plot annotation} -- the \code{P2} (Complementary Exposure) region
+is labeled with its literal name and the count of \code{P2} pairs in that
+panel (\code{cheng_class == "P2"}, i.e. \code{complementary_exposure}), since
+that is Cheng et al.'s only class shown to correlate with therapeutic
+efficacy.
+\item \strong{text labels} -- the \code{top_n} \code{P2} pairs with the highest
+\code{synergy_score} (descending, \code{NA} last -- \code{synergy_score} is \code{NA} for
+singleton-flagged \code{P2} pairs even though they are still classified
+\code{P2}) are labeled by compound name, via \code{\link[=.plot_label_nodes]{.plot_label_nodes()}}.
 }
+}
+\section{Requires \code{separation = "network"} results to show anything but grey}{
+
+\code{cheng_class} / \code{s_ab} / \code{separated} are only non-\code{NA} when
+\code{\link[=network_synergy]{network_synergy()}} was run with \code{separation = "network"} (the default
+since patliR 0.2.0) and the pair's target sets mapped onto the STRING
+LCC and were not singleton-flagged into a disconnected component. A
+table built entirely with \code{separation = "jaccard"}, or a legacy table
+that predates these columns, still draws the \code{z_score_a} x
+\code{z_score_b} scatter (colour grey, shape \code{NA}), but with no \code{P2} region
+to speak of; if \strong{no} row anywhere in scope carries a \code{cheng_class},
+this function draws a self-explanatory empty panel instead of a
+confusing all-grey one.
+}
+
+\section{Companion panel -- \code{s_AB} distribution}{
+
+Also produces (and, when \code{save = TRUE}, separately saves and logs) a
+second figure: a histogram of \code{s_ab} across every pair in scope, with a
+vertical line at \code{s_AB = 0} -- the direct analogue of Cheng et al.'s
+Fig. 1 separation distribution, and the thing that tells the reader
+whether \emph{any} pair in this extract is topologically separated at all.
+Logged to \code{patliRResults(proj, "synergy_sab_plot_log")} and saved as
+\verb{synergy_sab_<scope>.png} alongside the main \verb{synergy_<scope>.png}.
+Only the main scatter is returned by this function; call
+\code{attr(plot_synergy(...), "proj")} and look up \code{synergy_sab_plot_log}
+for the companion file's path.
+}
+
 \examples{
 \dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
@@ -81,13 +146,16 @@ proj <- targets_import_batch(
   platform = "superpred"
 )
 proj <- network_build(proj)
-proj <- targets_disease_filter(proj, disease = "type 2 diabetes mellitus")
-proj <- network_proximity(
-  proj, condition = "FLO-ET",
-  disease = unique(patliRResults(proj, "targets_disease")$disease_id)[1]
-)
-proj <- network_synergy(proj, condition = "FLO-ET")
+proj <- disease_genes_fetch(proj, disease = "type 2 diabetes mellitus")
+disease_id <- unique(patliRResults(proj, "disease_genes")$disease_id)[1]
+proj <- network_proximity(proj, condition = "FLO-ET", disease = disease_id)
+proj <- network_synergy(proj, condition = "FLO-ET", disease = disease_id)
 plot_synergy(proj, condition = "FLO-ET", save = FALSE)
 }
 
+}
+\references{
+Cheng, Kovacs & Barabasi (2019), \emph{Nat Commun} 10:1197, Fig. 2,
+\doi{10.1038/s41467-019-09186-x}. Menche et al. (2015), \emph{Science}
+347(6224):1257601, \doi{10.1126/science.1257601}.
 }

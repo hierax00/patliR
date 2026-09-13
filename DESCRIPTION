@@ -113,6 +113,7 @@ Collate:
     'plot_bowtie.R'
     'plot_centrality.R'
     'plot_chemical_space.R'
+    'plot_enrichment.R'
     'plot_gochord.R'
     'plot_heatmap.R'
     'plot_network_layers.R'

@@ -132,6 +132,7 @@ Collate:
     'plot_venn.R'
     'prep_binarize.R'
     'prep_compounds.R'
+    'report_generate.R'
     'targets_import.R'
     'tox_import.R'
     'tox_local.R'

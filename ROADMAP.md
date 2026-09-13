@@ -80,13 +80,19 @@ guessing.
   `plot_rank(view = "heatmap")` (top compounds x most relevant targets,
   delegates to `plot_heatmap()`'s `pheatmap` rendering). `.sdf`/`.smi`
   top-N export reuses `rcdk`/`.parse_smiles_safe()`, no new dependency.
-- **`dock_prepare()` / `dock_parse()`** — compounds -> PDBQT + a search-box
-  config (`box_center` required, no default); parse Vina/DiffDock output
-  back to a data frame. No scoring of its own.
-- **`report_generate()`** — one report per condition: ADME filtering,
-  ranking, bias audit, modular robustness, full decision/parameter/seed
-  log. Docking section only if `dock_results` exists.
-- **`plot_kegg_binding()`** — blocked by `dock_prepare()`/`dock_parse()`.
+- ~~**`dock_prepare()` / `dock_parse()`**~~ — **DROPPED (2026-09-03).**
+  Docking prep is already standardised by mature external tools
+  (Meeko/AutoDockTools, OpenBabel); patliR's only docking-adjacent output is
+  `rank_candidates()`'s `.sdf`/`.smi` top-N export (already built).
+- **`report_generate()` — DONE (Milestone B, 2026-09-13).** One
+  self-contained HTML file per condition (ADME filtering, bias audit,
+  modular robustness, `rank_candidates()` ranking, full decision/parameter/
+  seed log), each section auto-included when its source table exists.
+  Deliberately plain HTML (base R, no `rmarkdown`/`pandoc` -- this
+  environment has no `pandoc` to render/test an `Rmd`-based report with).
+  No docking section, per the drop decision above.
+- ~~**`plot_kegg_binding()`**~~ — **DROPPED (2026-09-03)**, same decision as
+  `dock_prepare()`/`dock_parse()` above (it visualised their output).
 
 ## Network
 

@@ -285,6 +285,11 @@ Each compound is `proximal` when `z_score < 0` **and** `p_adjusted < alpha` from
 **Operation, `view = "heatmap"`:** restricts to the top `top_n_compounds` (by `rra_rank`) and, among their edges only, the `top_n_targets` most relevant targets (`target_relevance = "breadth"` — how many top compounds share it — default, `"weight"`, or `"centrality"`), then renders with the same `pheatmap` machinery `plot_heatmap(what = "compound_target")` uses (factored into a shared `.plot_pheatmap_render()` helper) — no new geometry, answers "which targets do the best compounds actually converge on" where the full every-compound-x-every-target matrix is too dense to read.
 **Design rationale:** `chilcuague-analysis/reviews/rank-candidates-design-spec.md`.
 
+### `report_generate(proj, condition, out_dir = NULL, top_n = 15)`
+**Out:** one self-contained HTML file per condition (`reports/report_<condition>.html`) covering compounds present, ADME filtering, the database-bias audit, modular robustness, `rank_candidates()`'s ranking, and the full `projectLog()`.
+**Operation:** *base-R string templating, not `rmarkdown`.* Each section checks its own source table in `patliRResults(proj)` and either renders it (as a plain HTML `<table>`, cell values HTML-escaped) or shows a one-line "has not been run" placeholder — nothing aborts except the one true prerequisite, `network_build()` (needed to know which compounds are "present" in a condition at all). Deliberately **not** an `Rmd`/`pandoc` report: this development environment has no `pandoc` installed (`rmarkdown::pandoc_available()` returns `FALSE`), so an `Rmd`-based report could not be rendered or tested here even though `rmarkdown`/`knitr` are already `Suggests` for the vignette; and a handful of HTML tables is squarely inside the "reimplement it, don't depend" half of the package's own `DESIGN.md` rule for anything that is layout rather than a non-trivial algorithm.
+**Theory:** none — presentation of already-computed results.
+
 ---
 
 ## `plot_*` — figures

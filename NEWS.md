@@ -1,5 +1,23 @@
 # patliR (development version)
 
+## New `report_generate()` (Milestone B)
+
+- **New `report_generate()`.** One self-contained HTML file per condition
+  (`reports/report_<condition>.html`): compounds present, ADME filtering,
+  the database-bias audit, modular robustness, the `rank_candidates()`
+  ranking, and the full `projectLog()`. Each section auto-includes when its
+  source table exists and shows a one-line "not run" placeholder otherwise
+  -- the same graceful-degradation convention `rank_candidates()` already
+  established, not a hard prerequisite abort (only `network_build()` is
+  required, to know which compounds are "present" per condition).
+  Deliberately plain HTML built with base R string concatenation, **not**
+  `rmarkdown`/`pandoc` -- this environment has no `pandoc`
+  (`rmarkdown::pandoc_available()` is `FALSE` here), so an `Rmd`-based
+  report could not even be rendered or tested; and per `DESIGN.md`'s own
+  "minimal Suggests" philosophy, a handful of HTML tables does not need a
+  heavier dependency anyway. Table cell values are HTML-escaped
+  (`&`/`<`/`>`) before embedding.
+
 ## New `rank_candidates()` / `plot_rank()` (Milestone B)
 
 - **New `rank_candidates()`.** Combines per-compound criteria into one

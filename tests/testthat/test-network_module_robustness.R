@@ -232,7 +232,7 @@ test_that("clustering = 'bipartite' aborts on a non-bipartite graph before touch
   g <- .network_graph(proj, "FLO-ET")
   cmp <- igraph::V(g)$name[!as.logical(igraph::V(g)$type)][1:2]
   g_bad <- igraph::add_edges(g, cmp)
-  saveRDS(g_bad, patliR:::.network_cache_path(proj, "FLO-ET"))
+  .save_cache_graph(g_bad, proj, "FLO-ET")
   expect_error(
     network_module_robustness(proj, condition = "FLO-ET", clustering = "bipartite", seed = 1),
     "two-mode"
@@ -250,7 +250,7 @@ test_that("clustering = 'bipartite' runs end-to-end on a star (1xk) component (B
     g, 3, attr = list(name = c("Cstar", "TstarA", "TstarB"), type = c(FALSE, TRUE, TRUE))
   )
   g2 <- igraph::add_edges(g2, c("Cstar", "TstarA", "Cstar", "TstarB"))
-  saveRDS(g2, patliR:::.network_cache_path(proj, "FLO-ET"))
+  .save_cache_graph(g2, proj, "FLO-ET")
 
   for (cl in c("leiden", "bipartite", "hdbscan")) {
     if (cl == "hdbscan") skip_if_not_installed("dbscan")
@@ -393,7 +393,7 @@ test_that("a mixed project (one < 2-node condition + one normal) does not fail t
     one_node <- igraph::make_empty_graph(n = 1, directed = FALSE)
     one_node <- igraph::set_vertex_attr(one_node, "name", value = "solo")
     one_node <- igraph::set_vertex_attr(one_node, "type", value = FALSE)
-    saveRDS(one_node, patliR:::.network_cache_path(proj, "LEA-AQ"))
+    .save_cache_graph(one_node, proj, "LEA-AQ")
     expect_no_error(
       proj <- network_module_robustness(proj, clustering = cl, seed = 1)
     )

@@ -64,3 +64,23 @@
     }
   )
 }
+
+## Save a hand-modified igraph object directly to a condition's cache slot
+## so a test can exercise network_module_robustness()/etc. on a synthetic
+## graph without a full network_build() rebuild. .network_graph() (since
+## the network_build.R cache-staleness fix) only trusts a cached graph
+## whose edges_nrow/edges_checksum attrs match the project's CURRENT
+## network_edges for that condition -- an unstamped saveRDS() is treated as
+## stale and silently rebuilt from network_edges, discarding the
+## hand-edited graph entirely. Stamping against the *unchanged* edges
+## table (rather than deriving from `g` itself) keeps the cache "fresh"
+## from that check's point of view while still letting the test's `g`
+## differ structurally from what network_build() would produce.
+.save_cache_graph <- function(g, proj, condition) {
+  edges_all <- patliRResults(proj, "network_edges")
+  edges <- edges_all[edges_all$condition == condition, , drop = FALSE]
+  attr(g, "edges_nrow") <- nrow(edges)
+  attr(g, "edges_checksum") <- patliR:::.network_edges_checksum(edges)
+  saveRDS(g, patliR:::.network_cache_path(proj, condition))
+  invisible(g)
+}

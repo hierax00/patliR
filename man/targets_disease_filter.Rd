@@ -68,9 +68,15 @@ Looks up, for every distinct UniProt ID already present in
 to a single disease/phenotype in the Open Targets Platform (target-disease
 association, aggregated across all of Open Targets' evidence types --
 genetic association, known drug, literature, etc.). This is an optional,
-enrichment-only step: nothing else in \code{patliR} requires it to run, but
-\code{network_proximity()} (network family, not implemented yet) will require
-its output once that function exists.
+enrichment-only step -- nothing else in \code{patliR} requires it to run.
+
+\strong{Not a disease gene set for \code{\link[=network_proximity]{network_proximity()}}.} This function only
+annotates UniProt IDs that are already predicted targets of the compounds
+under study, so its output is by construction a subset of those
+compounds' own targets. Using it as the "disease module" would make
+\code{\link[=network_proximity]{network_proximity()}}'s z-score circular (it would measure set membership,
+not topology) -- use \code{\link[=disease_genes_fetch]{disease_genes_fetch()}} / \code{\link[=disease_genes_import]{disease_genes_import()}}
+instead, which build the disease gene set independently.
 
 \code{targets_disease_filter()} never predicts targets itself and never touches
 \code{\link[=compounds]{compounds()}} -- it only annotates the UniProt IDs already imported via

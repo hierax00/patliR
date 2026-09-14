@@ -71,8 +71,8 @@ NULL
 #'     and 4 (optimum 1-3).
 #' }
 #' None of these route flags are a formulation or regulatory
-#' recommendation -- see `rank_candidates()` (not yet implemented) for the
-#' disclaimer that always accompanies them in a report.
+#' recommendation -- treat them as a coarse physicochemical compatibility
+#' screen, not a delivery-route decision.
 #'
 #' @inheritParams compounds
 #' @param compound_ids Character vector of `compounds(proj)$id`, or `NULL`

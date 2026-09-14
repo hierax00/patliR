@@ -14,9 +14,15 @@ NULL
 #' to a single disease/phenotype in the Open Targets Platform (target-disease
 #' association, aggregated across all of Open Targets' evidence types --
 #' genetic association, known drug, literature, etc.). This is an optional,
-#' enrichment-only step: nothing else in `patliR` requires it to run, but
-#' `network_proximity()` (network family, not implemented yet) will require
-#' its output once that function exists.
+#' enrichment-only step -- nothing else in `patliR` requires it to run.
+#'
+#' **Not a disease gene set for [network_proximity()].** This function only
+#' annotates UniProt IDs that are already predicted targets of the compounds
+#' under study, so its output is by construction a subset of those
+#' compounds' own targets. Using it as the "disease module" would make
+#' [network_proximity()]'s z-score circular (it would measure set membership,
+#' not topology) -- use [disease_genes_fetch()] / [disease_genes_import()]
+#' instead, which build the disease gene set independently.
 #'
 #' `targets_disease_filter()` never predicts targets itself and never touches
 #' [compounds()] -- it only annotates the UniProt IDs already imported via

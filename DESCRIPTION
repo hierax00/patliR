@@ -3,7 +3,8 @@ Type: Package
 Title: Reproducible Network Pharmacology Analysis for Natural Product Extracts
 Version: 0.2.0
 Authors@R: person(given = "Edgard Uriel", family = "López Chablé",
-    email = "uriel.chable18@gmail.com", role = c("aut", "cre"))
+    email = "uriel.chable18@gmail.com", role = c("aut", "cre"),
+    comment = c(ORCID = "0009-0009-6452-0850"))
 Description: A field-to-report pipeline for network pharmacology analysis of
     natural product extracts and compound mixtures. Provides functions to
     import and validate compound identity from PubChem CIDs or SMILES,

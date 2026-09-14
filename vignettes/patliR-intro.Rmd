@@ -1,0 +1,177 @@
+---
+title: "Introduction to patliR: from a compound list to a ranked candidate table"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Introduction to patliR: from a compound list to a ranked candidate table}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(patliR)
+```
+
+This vignette runs the closed loop of patliR end to end -- a compound list to
+a ranked candidate table and a report -- using only the small example dataset
+bundled with the package (`system.file("extdata", ..., package = "patliR")`),
+so every chunk below runs offline, with no internet access and no optional
+Bioconductor/STRINGdb dependency. It is not a real analysis (six compounds,
+two conditions) -- it exists to show the shape of the pipeline and let you
+confirm your own install works before pointing it at real data.
+
+Every step below is a pure transformation: `proj <- some_step(proj, ...)`.
+`proj` is an immutable S4 object, but the durable source of truth is always a
+plain CSV written to the project directory -- `patliR_load()` can rebuild the
+whole project from those CSVs alone, in a fresh R session or on another
+machine. See `vignette(package = "patliR")`'s companion documents --
+`METHODS.md` (what every function computes, with citations) and `DESIGN.md`
+(the cross-cutting design decisions) -- for the full detail this vignette
+only summarizes.
+
+## 1. Get compounds in
+
+```{r}
+proj <- patliR_project(tempfile("patliR_vignette_"))
+
+compound_list <- read.csv(
+  system.file("extdata", "input_compound_list.csv", package = "patliR")
+)
+proj <- prep_compounds(proj, compound_list, identifier = "pubchem")
+compounds(proj)
+```
+
+`prep_compounds()` validates every SMILES with the CDK toolkit and assigns a
+canonical form -- a compound whose structure does not parse is logged and
+dropped, never silently kept.
+
+A GC-MS abundance matrix (replicates x conditions) turns into a
+presence/absence call per condition via `prep_binarize()`:
+
+```{r}
+abundance <- read.csv(
+  system.file("extdata", "input_abundance_matrix.csv", package = "patliR"),
+  check.names = FALSE
+)
+proj <- prep_binarize(proj, abundance)
+binarizedMatrix(proj)
+```
+
+A compound is called present in a condition when its averaged abundance is
+above that condition's own first quartile (Q1) of non-zero values -- a
+simple detection threshold, not a statistical test; see `METHODS.md` for the
+exact rule.
+
+## 2. ADME and toxicity screening (fully local, no internet)
+
+```{r}
+proj <- adme_local(proj)
+proj <- adme_filter(proj, rules = c("ro5", "veber", "ghose", "egan", "oprea"))
+proj <- tox_local(proj, alert_sets = c("pains", "brenk"))
+
+report <- tox_report(proj)
+report$summary
+```
+
+None of `adme_local()`'s five rules, or `tox_local()`'s PAINS/Brenk
+substructure alerts, is a verdict -- they flag a compound as physicochemically
+atypical or structurally alert-prone, never as "bad". `tox_report()` always
+attaches the same disclaimer for exactly this reason.
+
+## 3. Bring in predicted targets and build the network
+
+```{r}
+proj <- targets_import_batch(
+  proj,
+  system.file("extdata", "import_targets", package = "patliR"),
+  platform = "superpred"
+)
+proj <- network_build(proj)
+patliRResults(proj, "network_edges")
+```
+
+`network_build()` constructs one bipartite compound-target graph per
+condition -- compounds on one side, predicted targets on the other, an edge
+where a prediction platform (here: SuperPred exports) says a compound likely
+hits that target. Every later `network_*` function reads this graph; none of
+them rebuild it.
+
+## 4. Network analysis (offline pieces only)
+
+```{r}
+proj <- network_centrality(proj)
+proj <- network_hub_penalty(proj)
+proj <- network_module_robustness(proj, seed = 1)
+
+patliRResults(proj, "network_centrality")
+patliRResults(proj, "network_module_robustness")
+```
+
+`network_centrality()`'s `degree_norm`/`betweenness_norm` are comparable
+between a compound and a target of the *same* condition (Borgatti & Everett,
+1997) -- not across conditions of different size.
+`network_module_robustness()` clusters the graph (Leiden by default) and
+simulates removing its highest-degree nodes one at a time, reporting an
+R-index of how much of the module stays connected.
+
+A handful of `network_*` functions need external resources this vignette
+deliberately does not call (real STRING/Open Targets/Bioconductor
+dependencies), so they are shown for reference, not run here:
+
+```{r, eval = FALSE}
+# needs internet + STRINGdb
+proj <- disease_genes_fetch(proj, disease = "type 2 diabetes mellitus")
+disease_id <- unique(patliRResults(proj, "disease_genes")$disease_id)[1]
+proj <- network_proximity(proj, disease = disease_id)
+proj <- network_synergy(proj, disease = disease_id)
+
+# needs clusterProfiler + org.Hs.eg.db (+ ReactomePA for db = "reactome")
+proj <- network_enrich(proj, db = "go")
+```
+
+## 5. Rank candidates and generate a report
+
+`rank_candidates()` needs the `RobustRankAggreg` package (a `Suggests`, not
+required to install `patliR` itself) -- this chunk only runs if it is
+present:
+
+```{r, eval = requireNamespace("RobustRankAggreg", quietly = TRUE)}
+proj <- rank_candidates(proj, condition = "FLO-ET")
+patliRResults(proj, "rank_candidates")
+```
+
+`rank_candidates()` combines every criterion that has data (here: ADME pass
+fraction and network centrality -- the two mandatory ones; module robustness
+and hub penalty auto-detected since they were just computed) via Robust Rank
+Aggregation (Kolde et al. 2012) -- comparing each criterion's *rank*, not its
+raw value, so no single criterion's scale can dominate the combined score.
+Every raw value, its per-criterion rank, and the final `rra_rank` are all
+kept in the output table -- never collapsed to one opaque number.
+
+```{r}
+proj <- report_generate(proj, condition = "FLO-ET")
+patliRResults(proj, "report_log")
+```
+
+`report_generate()` writes one self-contained HTML file summarizing every
+step above for that condition -- open the path in `report_log` in a browser.
+A step that was never run (e.g. `network_synergy()` in this vignette) shows
+as a clearly labelled placeholder in the report, not a gap you have to
+notice yourself.
+
+## Where to go next
+
+- `METHODS.md` -- what every function computes, its formula, and its
+  citation, in plain language.
+- `DESIGN.md` -- the package's cross-cutting design decisions (why an
+  immutable project object, why CSV as the source of truth, when a
+  `Suggests` dependency is added vs. hand-rolled).
+- `ROADMAP.md` -- what is designed but not yet built.
+- Every function's own help page (`?rank_candidates`, `?network_proximity`,
+  ...) documents its exact arguments, return schema, and references.

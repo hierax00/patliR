@@ -57,22 +57,29 @@ flowchart TD
     PAC --> NB
     TI --> NB["<b>network_build</b><br/>compound–target graph / condition"]
 
+    DG["<b>disease_genes_fetch</b><br/>independent disease module<br/>(Open Targets, min_score = 0.4)"]
+
     subgraph net ["network pharmacology"]
-        NE["<b>network_enrich</b><br/>GO · Reactome · KEGG"]
+        NE["<b>network_enrich</b><br/>GO · Reactome · KEGG (universe = project)"]
         NC["<b>network_centrality</b> · <b>hub_penalty</b>"]
         NMR["<b>module_robustness</b><br/>R-index percolation"]
         NM["<b>network_motifs</b> · <b>degeneracy</b>"]
         NP["<b>network_proximity</b><br/>distance to disease module"]
-        NS["<b>network_synergy</b>"]
+        NS["<b>network_synergy</b><br/>Cheng P1-P6"]
         NBT["<b>network_bowtie</b>"]
     end
     NB --> NE --> NC --> NMR --> NM
+    DG --> NP
     NB --> NP --> NS
     NB --> NBT
 
     NE & NC & NMR & NP --> PLOTS["<b>plot_*</b><br/>16 publication figures<br/>+ 3-axis chemical space"]
     TR --> BIAS["<b>bias_audit</b><br/>database-bias flag"]
     RDB --> BIAS
+
+    NC & NMR & NP & NS & AF --> RC["<b>rank_candidates</b><br/>Robust Rank Aggregation"]
+    RC --> PR["<b>plot_rank</b><br/>Pareto · heatmap"]
+    RC --> RG["<b>report_generate</b><br/>one HTML per condition"]
 ```
 
 Two entry points: a **curated compound list** (`prep_compounds`) or a **raw
@@ -128,6 +135,11 @@ proj <- network_module_robustness(proj, condition = "Chilcuague", seed = 42)
 
 plot_network_layers(proj, condition = "Chilcuague")
 plot_chemical_space(proj, dims = 3, color_by = "family", engine = "plotly")
+
+## close the loop: one ranked table + one report, combining everything above
+proj <- rank_candidates(proj, condition = "Chilcuague", export = "sdf")
+plot_rank(proj, condition = "Chilcuague", view = "pareto")
+proj <- report_generate(proj, condition = "Chilcuague")
 ```
 
 A worked end-to-end script against a real dataset lives in
@@ -143,9 +155,12 @@ A worked end-to-end script against a real dataset lives in
 | `adme_*` | local drug-/lead-likeness rules + BOILED-Egg; import from external platforms; rule filtering; SMILES export bridge |
 | `tox_*` | PAINS/Brenk structural alerts; target-level safety panel; import; per-compound report — **never a pass/fail verdict** |
 | `targets_*` | import predicted targets; disease-association filtering (Open Targets) |
+| `disease_genes_*` | independent disease gene module for `network_proximity()` (Open Targets, or a curated import) |
 | `network_*` | build, enrich, centrality/hub-penalty, module robustness, motifs, degeneracy, proximity, synergy, bow-tie, KEGG pathview, proteome filter |
 | `plot_*` | 16 static/interactive figures for every result above |
 | `bias_*` | MAD-based "promiscuous compound/target" flag against the reference DB |
+| `rank_candidates()` / `plot_rank()` | Robust Rank Aggregation over ADME + network criteria into one ranked table, with Pareto/heatmap views |
+| `report_generate()` | one self-contained HTML report per condition |
 | `patliR_export_llm()` | flat-text dump of a whole project for an LLM to read |
 
 Everything is documented on its own help page.

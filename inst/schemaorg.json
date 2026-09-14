@@ -1,0 +1,38 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "type": "SoftwareSourceCode",
+      "author": {
+        "id": "https://orcid.org/0009-0009-6452-0850",
+        "type": "Person",
+        "email": "uriel.chable18@gmail.com",
+        "familyName": "López Chablé",
+        "givenName": "Edgard Uriel"
+      },
+      "codeRepository": "https://github.com/hierax00/patliR",
+      "description": "A field-to-report pipeline for network pharmacology analysis of natural product extracts and compound mixtures. Provides functions to import and validate compound identity from PubChem CIDs or SMILES, integrate physicochemical (ADME) properties and structural toxicity alerts, import or predict protein targets, build and analyze compound-target-pathway networks (centrality, modular robustness, network proximity to disease modules, synergy), audit database bias in network pharmacology results, and generate transparent, fully-logged reports. The pipeline is built around an immutable S4 project object: every step is a pure transformation (input project -> output project), and every intermediate result is written to a plain CSV file that acts as the durable, portable source of truth, independent of any R-specific binary format.",
+      "license": "https://spdx.org/licenses/MIT",
+      "name": "patliR: Reproducible Network Pharmacology Analysis for Natural Product Extracts",
+      "programmingLanguage": {
+        "type": "ComputerLanguage",
+        "name": "R",
+        "url": "https://r-project.org"
+      },
+      "runtimePlatform": "R version 4.5.2 (2025-10-31 ucrt)",
+      "version": "0.2.0"
+    },
+    {
+      "type": "SoftwareSourceCode",
+      "author": {
+        "id": "https://orcid.org/0009-0009-6452-0850",
+        "type": "Person",
+        "email": "uriel.chable18@gmail.com",
+        "familyName": "López Chablé",
+        "givenName": "Edgard Uriel"
+      },
+      "description": "R package version 0.2.0",
+      "name": "patliR: Reproducible Network Pharmacology Analysis for Natural Product Extracts"
+    }
+  ]
+}

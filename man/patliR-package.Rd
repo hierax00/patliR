@@ -39,11 +39,11 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Edgard Uriel López Chablé \email{uriel.chable18@gmail.com}
+\strong{Maintainer}: Edgard Uriel López Chablé \email{uriel.chable18@gmail.com} (\href{https://orcid.org/0009-0009-6452-0850}{ORCID})
 
 Authors:
 \itemize{
-  \item Edgard Uriel López Chablé \email{uriel.chable18@gmail.com}
+  \item Edgard Uriel López Chablé \email{uriel.chable18@gmail.com} (\href{https://orcid.org/0009-0009-6452-0850}{ORCID})
 }
 
 }

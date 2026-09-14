@@ -49,9 +49,9 @@ Thin wrapper: same as `prep_compounds()` for a single row.
 
 ### `refdb_build(proj, sources = c("pubchem", "chembl"))`
 **In:** the compound list. **Out:** `reference_compounds.csv` (identity: which PubChem / ChEMBL entry each compound is) and `reference_bioactivity.csv` (measured activities pulled from ChEMBL).
-**Operation:** *look-up and download, no modelling.* For each compound it queries PubChem (by CID) and ChEMBL (by structure) and stores whatever comes back. A compound with no ChEMBL entry (most natural-product metabolites) is logged, not an error. Re-running replaces that compound's rows rather than duplicating them.
+**Operation:** *look-up and a deterministic identity chain, no modelling.* For each compound it queries PubChem (by CID). ChEMBL identity is resolved by a chain, never a similarity search: PubChem CID → standard InChIKey (batched) → ChEMBL `standard_inchi_key` exact match (batched) → InChIKey-skeleton (14-character) fallback → SMILES `flexmatch` → give up — each step only runs if the previous one found nothing, and every row records which `match_type` it landed on. A compound with no ChEMBL entry at all (common for natural-product metabolites) is logged, not an error. Re-running replaces that compound's rows rather than duplicating them.
 **Theory:** none. This table is the "background" that `bias_audit()` and `network_degeneracy()` later treat as "the known universe" for these compounds.
-**Known limitation:** ChEMBL matching currently uses a 100%-similarity search, which is not the same as identity and can pick a wrong molecule for long chains / stereoisomers — see `ROADMAP.md`.
+**Fixed (commit `8cdfe36`):** ChEMBL matching used to run a 100%-Tanimoto *similarity* search, which is not the same as identity and could pick the wrong molecule for long chains or stereoisomers. The identity chain above replaced it; `match_type` on each `reference_compounds` row tells you how confident that particular match is (exact InChIKey is strongest, `smiles_flexmatch` weakest before giving up).
 
 ### `refdb_update(proj, compound_ids)`
 Same as `refdb_build()` but only for the named compounds — use after adding compounds.

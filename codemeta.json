@@ -1,0 +1,498 @@
+{
+  "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
+  "@type": "SoftwareSourceCode",
+  "identifier": "patliR",
+  "description": "A field-to-report pipeline for network pharmacology analysis of natural product extracts and compound mixtures. Provides functions to import and validate compound identity from PubChem CIDs or SMILES, integrate physicochemical (ADME) properties and structural toxicity alerts, import or predict protein targets, build and analyze compound-target-pathway networks (centrality, modular robustness, network proximity to disease modules, synergy), audit database bias in network pharmacology results, and generate transparent, fully-logged reports. The pipeline is built around an immutable S4 project object: every step is a pure transformation (input project -> output project), and every intermediate result is written to a plain CSV file that acts as the durable, portable source of truth, independent of any R-specific binary format.",
+  "name": "patliR: Reproducible Network Pharmacology Analysis for Natural Product Extracts",
+  "codeRepository": "https://github.com/hierax00/patliR",
+  "issueTracker": "https://github.com/hierax00/patliR/issues",
+  "license": "https://spdx.org/licenses/MIT",
+  "version": "0.2.0",
+  "programmingLanguage": {
+    "@type": "ComputerLanguage",
+    "name": "R",
+    "url": "https://r-project.org"
+  },
+  "runtimePlatform": "R version 4.5.2 (2025-10-31 ucrt)",
+  "author": [
+    {
+      "@type": "Person",
+      "givenName": "Edgard Uriel",
+      "familyName": "López Chablé",
+      "email": "uriel.chable18@gmail.com",
+      "@id": "https://orcid.org/0009-0009-6452-0850"
+    }
+  ],
+  "maintainer": [
+    {
+      "@type": "Person",
+      "givenName": "Edgard Uriel",
+      "familyName": "López Chablé",
+      "email": "uriel.chable18@gmail.com",
+      "@id": "https://orcid.org/0009-0009-6452-0850"
+    }
+  ],
+  "softwareSuggestions": [
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "testthat",
+      "name": "testthat",
+      "version": ">= 3.0.0",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=testthat"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "parallel",
+      "name": "parallel"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "knitr",
+      "name": "knitr",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=knitr"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "rmarkdown",
+      "name": "rmarkdown",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=rmarkdown"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "webchem",
+      "name": "webchem",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=webchem"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "httr2",
+      "name": "httr2",
+      "version": ">= 1.1.0",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=httr2"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "ggplot2",
+      "name": "ggplot2",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=ggplot2"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "ggiraph",
+      "name": "ggiraph",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=ggiraph"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "clusterProfiler",
+      "name": "clusterProfiler",
+      "provider": {
+        "@id": "https://www.bioconductor.org",
+        "@type": "Organization",
+        "name": "Bioconductor",
+        "url": "https://www.bioconductor.org"
+      },
+      "sameAs": "https://bioconductor.org/packages/release/bioc/html/clusterProfiler.html"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "ReactomePA",
+      "name": "ReactomePA",
+      "provider": {
+        "@id": "https://www.bioconductor.org",
+        "@type": "Organization",
+        "name": "Bioconductor",
+        "url": "https://www.bioconductor.org"
+      },
+      "sameAs": "https://bioconductor.org/packages/release/bioc/html/ReactomePA.html"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "GOSemSim",
+      "name": "GOSemSim",
+      "provider": {
+        "@id": "https://www.bioconductor.org",
+        "@type": "Organization",
+        "name": "Bioconductor",
+        "url": "https://www.bioconductor.org"
+      },
+      "sameAs": "https://bioconductor.org/packages/release/bioc/html/GOSemSim.html"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "org.Hs.eg.db",
+      "name": "org.Hs.eg.db"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "reactome.db",
+      "name": "reactome.db"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "dbscan",
+      "name": "dbscan",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=dbscan"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "bipartite",
+      "name": "bipartite",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=bipartite"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "STRINGdb",
+      "name": "STRINGdb",
+      "provider": {
+        "@id": "https://www.bioconductor.org",
+        "@type": "Organization",
+        "name": "Bioconductor",
+        "url": "https://www.bioconductor.org"
+      },
+      "sameAs": "https://bioconductor.org/packages/release/bioc/html/STRINGdb.html"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "ggalluvial",
+      "name": "ggalluvial",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=ggalluvial"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "ggVennDiagram",
+      "name": "ggVennDiagram",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=ggVennDiagram"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "patchwork",
+      "name": "patchwork",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=patchwork"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "pheatmap",
+      "name": "pheatmap",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=pheatmap"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "GOplot",
+      "name": "GOplot",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=GOplot"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "png",
+      "name": "png",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=png"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "umap",
+      "name": "umap",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=umap"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "pathview",
+      "name": "pathview",
+      "provider": {
+        "@id": "https://www.bioconductor.org",
+        "@type": "Organization",
+        "name": "Bioconductor",
+        "url": "https://www.bioconductor.org"
+      },
+      "sameAs": "https://bioconductor.org/packages/release/bioc/html/pathview.html"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "shiny",
+      "name": "shiny",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=shiny"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "DT",
+      "name": "DT",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=DT"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "fingerprint",
+      "name": "fingerprint",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=fingerprint"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "ChemmineR",
+      "name": "ChemmineR",
+      "provider": {
+        "@id": "https://www.bioconductor.org",
+        "@type": "Organization",
+        "name": "Bioconductor",
+        "url": "https://www.bioconductor.org"
+      },
+      "sameAs": "https://bioconductor.org/packages/release/bioc/html/ChemmineR.html"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "plotly",
+      "name": "plotly",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=plotly"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "htmlwidgets",
+      "name": "htmlwidgets",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=htmlwidgets"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "RobustRankAggreg",
+      "name": "RobustRankAggreg",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=RobustRankAggreg"
+    }
+  ],
+  "softwareRequirements": {
+    "1": {
+      "@type": "SoftwareApplication",
+      "identifier": "R",
+      "name": "R",
+      "version": ">= 4.3.0"
+    },
+    "2": {
+      "@type": "SoftwareApplication",
+      "identifier": "methods",
+      "name": "methods"
+    },
+    "3": {
+      "@type": "SoftwareApplication",
+      "identifier": "stats",
+      "name": "stats"
+    },
+    "4": {
+      "@type": "SoftwareApplication",
+      "identifier": "utils",
+      "name": "utils"
+    },
+    "5": {
+      "@type": "SoftwareApplication",
+      "identifier": "tools",
+      "name": "tools"
+    },
+    "6": {
+      "@type": "SoftwareApplication",
+      "identifier": "graphics",
+      "name": "graphics"
+    },
+    "7": {
+      "@type": "SoftwareApplication",
+      "identifier": "grDevices",
+      "name": "grDevices"
+    },
+    "8": {
+      "@type": "SoftwareApplication",
+      "identifier": "cli",
+      "name": "cli",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=cli"
+    },
+    "9": {
+      "@type": "SoftwareApplication",
+      "identifier": "rcdk",
+      "name": "rcdk",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=rcdk"
+    },
+    "10": {
+      "@type": "SoftwareApplication",
+      "identifier": "rlang",
+      "name": "rlang",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=rlang"
+    },
+    "11": {
+      "@type": "SoftwareApplication",
+      "identifier": "igraph",
+      "name": "igraph",
+      "version": ">= 2.0.0",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=igraph"
+    },
+    "SystemRequirements": "Java (>= 8) (required by rcdk / rJava for cheminformatics\n    routines; see INSTALL file)"
+  },
+  "fileSize": "1780.014KB",
+  "citation": [
+    {
+      "@type": "SoftwareSourceCode",
+      "datePublished": "2026",
+      "author": [
+        {
+          "@type": "Person",
+          "givenName": "Edgard Uriel",
+          "familyName": "López Chablé",
+          "email": "uriel.chable18@gmail.com",
+          "@id": "https://orcid.org/0009-0009-6452-0850"
+        }
+      ],
+      "name": "patliR: Reproducible Network Pharmacology Analysis for Natural Product Extracts",
+      "url": "https://github.com/hierax00/patliR",
+      "description": "R package version 0.2.0"
+    }
+  ],
+  "releaseNotes": "https://github.com/hierax00/patliR/blob/main/NEWS.md"
+}

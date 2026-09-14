@@ -1,0 +1,22 @@
+citHeader("To cite patliR in publications, use:")
+
+bibentry(
+  bibtype  = "Manual",
+  title    = "patliR: Reproducible Network Pharmacology Analysis for Natural Product Extracts",
+  author   = person(given = "Edgard Uriel", family = "López Chablé",
+                     email = "uriel.chable18@gmail.com",
+                     comment = c(ORCID = "0009-0009-6452-0850")),
+  year     = "2026",
+  note     = sprintf("R package version %s", meta$Version),
+  url      = "https://github.com/hierax00/patliR",
+  textVersion = paste0(
+    "López Chablé, E.U. (2026). patliR: Reproducible Network Pharmacology ",
+    "Analysis for Natural Product Extracts. R package version ", meta$Version,
+    ". https://github.com/hierax00/patliR"
+  )
+)
+
+citFooter(
+  "This is a software-only citation -- no accompanying paper has been",
+  "published yet. Check back for an updated CITATION once one is."
+)

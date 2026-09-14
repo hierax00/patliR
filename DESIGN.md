@@ -119,7 +119,12 @@ graph, not for any masking reason. `dbscan` (for `clustering =
   metabolomics; patliR starts from a compound x condition matrix the user
   has already assembled.
 - Molecular dynamics.
-- A docking engine or 3D viewer of its own. `dock_prepare()` /
-  `dock_parse()` (planned, see `ROADMAP.md`) stay engine-agnostic.
+- A docking engine or 3D viewer of its own. `dock_prepare()` / `dock_parse()`
+  were considered and dropped (2026-09-03, see `ROADMAP.md`): docking prep is
+  already standardised by mature external tools (Meeko/AutoDockTools,
+  OpenBabel), so reimplementing that step would just be worse-maintained
+  duplication. `rank_candidates(export = "sdf"/"smi")` is the package's only
+  docking-adjacent output — a clean top-N structure export, no prep of its
+  own.
 - Binding-pocket prediction (P2RANK/fpocket) — `box_center` is the user's
   to provide.

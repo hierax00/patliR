@@ -135,16 +135,19 @@ computed would be a silent no-op dressed up as data). A table that
 exists but lacks a value for one particular compound (e.g. a mono-target
 compound with no \code{\link[=network_synergy]{network_synergy()}} partner) gets \strong{worst-rank
 imputation} on that one criterion -- the standard convention for
-incomplete rank lists under RRA, implemented via
-\code{order(..., na.last = TRUE)} so the compound is tied last on that axis
-rather than silently dropped. \code{n_criteria_used} records, per compound,
+incomplete rank lists under RRA. Every missing value receives rank \code{N}
+(relative rank \code{1}), where \code{N} is the number of compounds in the condition,
+so missing evidence cannot improve its rank. \code{n_criteria_used} records, per compound,
 how many criteria it had a \emph{real} (non-imputed) value for.
 }
 
 \section{Output columns not otherwise documented above}{
 
 \verb{rank_<criterion>} -- one per \verb{crit_*} column actually used for this
-condition, 1 = best, direction already normalised. \code{rra_score} --
+condition, 1 = best, direction already normalised. Exact ties share the
+average of their occupied positions (possibly fractional), independent
+of compound IDs and input order. These ranks divided by \code{N} are supplied
+to RRA as a numeric matrix. \code{rra_score} --
 \code{RobustRankAggreg::aggregateRanks()}'s output (lower = more robustly
 top-ranked across every criterion used). \code{rra_rank} --
 \code{rank(rra_score, ties.method = "min")}, the table's primary sort key.

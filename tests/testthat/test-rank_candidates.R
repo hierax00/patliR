@@ -66,8 +66,8 @@ test_that("rank_candidates() with only mandatory criteria produces a well-formed
   ) %in% names(rc)))
   expect_false(any(c("crit_hub_penalty", "crit_proximity_z", "crit_synergy_best", "crit_module_r_index") %in% names(rc)))
   expect_true(all(rc$n_criteria_used == 2L))
-  expect_setequal(rc$rank_adme_pass_frac, seq_along(cps))
-  expect_setequal(rc$rank_centrality, seq_along(cps))
+  expect_equal(rc$rank_adme_pass_frac, rank(-rc$crit_adme_pass_frac, ties.method = "average"))
+  expect_equal(rc$rank_centrality, rank(-rc$crit_centrality, ties.method = "average"))
   expect_true(all(rc$pareto_front >= 1L))
   expect_true(all(is.na(rc$n_p2_partners)))
 })
@@ -224,4 +224,46 @@ test_that(".rank_pareto_front() identifies non-dominated tiers correctly", {
   ), ncol = 2, byrow = TRUE)
   front <- patliR:::.rank_pareto_front(mat)
   expect_equal(front, c(2L, 1L, 1L, 3L))
+})
+
+test_that("rank_candidates() ties are invariant to compound renaming and input order", {
+  testthat::skip_if_not_installed("RobustRankAggreg")
+  run_fixture <- function(ids, row_order = seq_along(ids), proximity = c(-2, -2, NA, NA)) {
+    proj <- .test_project()
+    edges <- data.frame(condition = "test", compound_id = ids,
+                        uniprot_id = paste0("T", seq_along(ids)), weight = 1)
+    adme <- data.frame(compound_id = ids, pass = c(TRUE, TRUE, TRUE, FALSE))
+    cent <- data.frame(condition = "test", node_type = "target",
+                       node_id = edges$uniprot_id, degree_norm = c(1, 1, 1, 0))
+    prox <- data.frame(condition = "test", compound_id = ids,
+                       disease_id = "D1", z_score = proximity)
+    patliRResults(proj, "network_edges") <- edges[row_order, ]
+    patliRResults(proj, "adme_filtered") <- adme[row_order, ]
+    patliRResults(proj, "network_centrality") <- cent[row_order, ]
+    patliRResults(proj, "network_proximity") <- prox[row_order, ]
+    proj <- rank_candidates(proj, condition = "test",
+                            criteria = c("adme", "centrality", "proximity"))
+    out <- patliRResults(proj, "rank_candidates")
+    out <- out[match(ids, out$compound_id), ]
+    rownames(out) <- NULL
+    out
+  }
+  original <- run_fixture(c("a", "b", "c", "d"))
+  reordered <- run_fixture(c("a", "b", "c", "d"), c(4, 2, 1, 3))
+  renamed <- run_fixture(c("z", "x", "y", "w"), c(3, 1, 4, 2))
+  columns <- setdiff(names(original), "compound_id")
+  expect_equal(reordered[columns], original[columns])
+  expect_equal(renamed[columns], original[columns])
+  expect_equal(renamed$rra_rank[1:3], original$rra_rank[1:3])
+  expect_equal(original$rank_adme_pass_frac, c(2, 2, 2, 4))
+  expect_equal(original$rank_centrality, c(2, 2, 2, 4))
+  expect_equal(original$rank_proximity_z, c(1.5, 1.5, 4, 4))
+  expect_equal(original$n_criteria_used, c(3, 3, 2, 2))
+  expect_equal(original$rra_score[1], original$rra_score[2])
+  expect_equal(original$rra_rank[1], original$rra_rank[2])
+
+  all_missing <- run_fixture(c("a", "b", "c", "d"), proximity = rep(NA_real_, 4))
+  expect_equal(all_missing$rank_proximity_z, rep(4, 4))
+  expect_equal(all_missing$n_criteria_used, rep(2, 4))
+  expect_true(all(is.finite(all_missing$rra_score)))
 })

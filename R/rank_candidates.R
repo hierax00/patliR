@@ -13,10 +13,9 @@ NULL
 ## null model is a closed-form beta-distribution order-statistic correction,
 ## not geometry -- the same "depend for algorithms" argument DESIGN.md
 ## already makes for `bipartite`'s Barber's Q_B optimisation (piece 13).
-## `full = TRUE` is deliberate and verified live against the installed
-## package (not assumed): every criterion's ranking already covers every
-## compound (worst-rank imputation via `order(..., na.last = TRUE)`), so
-## `aggregateRanks()` must not apply its own partial-list adjustment on top.
+## Supply normalised ranks directly via `rmat`: rows are compounds and
+## columns are criteria, with average ranks for ties and missing values
+## imputed to relative rank 1. No ordered-list conversion is needed.
 ## Toxicity and bias_reweighted were both considered as criteria and
 ## deliberately dropped (user's call, 2026-09-13) -- not offered even as an
 ## opt-in override in this version.
@@ -96,14 +95,17 @@ NULL
 #' exists but lacks a value for one particular compound (e.g. a mono-target
 #' compound with no [network_synergy()] partner) gets **worst-rank
 #' imputation** on that one criterion -- the standard convention for
-#' incomplete rank lists under RRA, implemented via
-#' `order(..., na.last = TRUE)` so the compound is tied last on that axis
-#' rather than silently dropped. `n_criteria_used` records, per compound,
+#' incomplete rank lists under RRA. Every missing value receives rank `N`
+#' (relative rank `1`), where `N` is the number of compounds in the condition,
+#' so missing evidence cannot improve its rank. `n_criteria_used` records, per compound,
 #' how many criteria it had a *real* (non-imputed) value for.
 #'
 #' @section Output columns not otherwise documented above:
 #' `rank_<criterion>` -- one per `crit_*` column actually used for this
-#' condition, 1 = best, direction already normalised. `rra_score` --
+#' condition, 1 = best, direction already normalised. Exact ties share the
+#' average of their occupied positions (possibly fractional), independent
+#' of compound IDs and input order. These ranks divided by `N` are supplied
+#' to RRA as a numeric matrix. `rra_score` --
 #' `RobustRankAggreg::aggregateRanks()`'s output (lower = more robustly
 #' top-ranked across every criterion used). `rra_rank` --
 #' `rank(rra_score, ties.method = "min")`, the table's primary sort key.
@@ -306,19 +308,21 @@ rank_candidates <- function(proj, condition = NULL, disease = NULL,
 
     n_criteria_used <- rowSums(!is.na(mat_raw))
 
-    glist <- vector("list", ncol(mat_dir))
-    names(glist) <- colnames(mat_dir)
+    rmat <- matrix(NA_real_, nrow(mat_dir), ncol(mat_dir), dimnames = dimnames(mat_dir))
     rank_cols <- vector("list", ncol(mat_dir))
     names(rank_cols) <- colnames(mat_dir)
     for (j in seq_len(ncol(mat_dir))) {
-      ord <- order(mat_dir[, j], decreasing = TRUE, na.last = TRUE)
-      ordered_ids <- compound_ids[ord]
-      glist[[j]] <- ordered_ids
-      rank_cols[[j]] <- match(compound_ids, ordered_ids)
+      ranks <- rank(-mat_dir[, j], ties.method = "average", na.last = "keep")
+      ## Missing evidence always gets the worst rank, not an average of
+      ## trailing positions: multiple missing values must not improve each
+      ## other's ranks or acquire arbitrary ordering from compound IDs.
+      ranks[is.na(ranks)] <- length(compound_ids)
+      rank_cols[[j]] <- ranks
+      rmat[, j] <- ranks / length(compound_ids)
     }
 
     rra <- RobustRankAggreg::aggregateRanks(
-      glist = glist, N = length(compound_ids), method = "RRA", full = TRUE
+      rmat = rmat, method = "RRA"
     )
     rra_score <- unname(stats::setNames(rra$Score, rra$Name)[compound_ids])
     rra_rank <- rank(rra_score, ties.method = "min")

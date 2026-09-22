@@ -200,8 +200,10 @@ prep_compounds <- function(proj, data,
   proj
 }
 
-#' @keywords internal
+#' Fetch missing SMILES from PubChem by CID, preferring the modern
+#' stereo-bearing response key
 #'
+#' @description
 #' PubChem renamed its PUG-REST SMILES properties (2025): the old
 #' `CanonicalSMILES` now comes back as `ConnectivitySMILES` and the
 #' stereo-bearing `IsomericSMILES` as the unqualified `SMILES`. The old
@@ -210,6 +212,7 @@ prep_compounds <- function(proj, data,
 #' `NULL`. We request the new names and read whichever column is present,
 #' preferring the stereo-bearing one, and fall back to the legacy keys so a
 #' future revert cannot silently break this again.
+#' @keywords internal
 .fetch_smiles_from_pubchem <- function(pubchem_ids, cache_dir, fetch_mode) {
   pick_smiles <- function(res) {
     for (col in c("SMILES", "IsomericSMILES", "ConnectivitySMILES", "CanonicalSMILES")) {

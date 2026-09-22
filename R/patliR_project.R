@@ -101,8 +101,17 @@ patliR_load <- function(project_dir, cache_dir = NULL) {
     result_files <- list.files(results_dir, pattern = "\\.csv$", full.names = TRUE)
     for (f in result_files) {
       entry_name <- tools::file_path_sans_ext(basename(f))
+      ## read.csv() silently ignores a colClasses name that is one of
+      ## several column names present in the file, but warns
+      ## "not all columns named in 'colClasses' exist" when NONE of them
+      ## are (e.g. disease_genes.csv, which has neither string_version nor
+      ## condition) -- harmless, but noisy on every patliR_load() of such a
+      ## table. Pre-filtering to the header's actual names avoids it
+      ## without changing which columns get pinned.
+      header <- names(utils::read.csv(f, nrows = 0, check.names = FALSE))
+      colclasses <- .patliR_results_colclasses[names(.patliR_results_colclasses) %in% header]
       patliRResults(proj, entry_name) <- utils::read.csv(
-        f, stringsAsFactors = FALSE, colClasses = .patliR_results_colclasses
+        f, stringsAsFactors = FALSE, colClasses = colclasses
       )
     }
   }

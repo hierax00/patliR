@@ -214,6 +214,11 @@ network_enrich <- function(proj, condition = NULL,
   ## concepts mean the same thing across the package. See the "Background
   ## universe" @section above for why this exists.
   universe_entrez <- NULL
+  ## What actually ends up passed to the enrichment call -- may fall back
+  ## to "genome" below even when the caller asked for "project"; the
+  ## per-condition result rows must record this effective value, not the
+  ## raw argument, or a fallback would be invisible in the durable table.
+  universe_effective <- universe
   if (universe == "project") {
     ti <- patliRResults(proj, "targets_imported")
     proj_uni <- if (!is.null(ti) && nrow(ti) > 0) unique(ti$uniprot_id) else unique(edges_all$uniprot_id)
@@ -224,6 +229,7 @@ network_enrich <- function(proj, condition = NULL,
         "i" = "Falling back to no background restriction for this call (equivalent to {.code universe = \"genome\"})."
       ))
       universe_entrez <- NULL
+      universe_effective <- "genome"
     } else {
       proj <- .log_append(
         proj, step = "network_enrich", id = NA_character_,
@@ -325,7 +331,7 @@ network_enrich <- function(proj, condition = NULL,
     result_list[[cond]] <- if (nrow(df) == 0) {
       .empty_network_enrichment_row()
     } else {
-      .network_enrich_result_df(df, cond, db, universe)
+      .network_enrich_result_df(df, cond, db, universe_effective)
     }
   }
 

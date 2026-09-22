@@ -159,6 +159,27 @@ test_that("network_enrich() resolves universe = 'project' to a non-NULL Entrez b
   expect_null(captured[[2]])
 })
 
+test_that("network_enrich() records the EFFECTIVE universe ('genome'), not the requested one, when universe = 'project' resolves to 0 Entrez genes (regression: label used to stay 'project' after the fallback)", {
+  testthat::skip_if_not_installed("clusterProfiler")
+  testthat::skip_if_not_installed("org.Hs.eg.db")
+  skip_on_cran()
+
+  proj <- .network_enrich_test_setup()
+  testthat::local_mocked_bindings(.network_uniprot_to_entrez = function(...) character(0))
+
+  expect_warning(
+    out <- network_enrich(proj, condition = "FLO-ET", db = "go", simplify_go = FALSE, universe = "project"),
+    "resolved to 0 Entrez-mapped gene"
+  )
+
+  res <- patliRResults(out, "network_enrichment")
+  ## the background restriction actually applied was NULL (equivalent to
+  ## "genome"), so the durable row must say "genome", not the "project"
+  ## the caller asked for -- provenance must reflect what happened, not
+  ## what was requested.
+  expect_true(all(res$universe == "genome"))
+})
+
 test_that("network_enrich() universe = 'project' background is smaller than universe = 'genome' (BgRatio denominator, real clusterProfiler call)", {
   testthat::skip_if_not_installed("clusterProfiler")
   testthat::skip_if_not_installed("org.Hs.eg.db")

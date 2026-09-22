@@ -228,21 +228,22 @@ network_build <- function(proj, condition = NULL,
   g
 }
 
-#' Cheap, `digest`-free checksum over a condition's `network_edges` rows --
-#' provenance stamped on the cached `igraph` object so `.network_graph()`
-#' can tell a hand-edited CSV apart from the graph that was cached for it
+#' Content hash over a condition's `network_edges` rows -- provenance
+#' stamped on the cached `igraph` object so `.network_graph()` can tell a
+#' hand-edited CSV apart from the graph that was cached for it
 #' @details
-#' Not cryptographically strong -- deliberately so, per DESIGN.md's minimal
-#' dependency principle (no new package needed) -- but sensitive enough to
-#' catch the kind of edit this guards against (a handful of edges added,
-#' removed, or reweighted). `nrow()` is checked separately
-#' (`attr(g, "edges_nrow")`) so this only needs to catch same-`nrow` edits.
-#' @return `numeric(1)`.
+#' Uses `rlang::hash()` (already an Imports dependency, so this needs no
+#' new package) over the sorted `compound_id`/`uniprot_id`/`weight` triples
+#' -- a real content hash, not a length-based proxy: two edge sets with the
+#' same row count and total string length but different content, e.g. a
+#' single reweighted edge, must not collide. `nrow()` is checked separately
+#' (`attr(g, "edges_nrow")`) as a cheap first filter before this runs.
+#' @return `character(1)`.
 #' @keywords internal
 .network_edges_checksum <- function(edges) {
-  if (nrow(edges) == 0) return(0)
+  if (nrow(edges) == 0) return(rlang::hash(character(0)))
   key <- paste(edges$compound_id, edges$uniprot_id, edges$weight, sep = "\x01")
-  sum(nchar(paste(sort(key), collapse = "")))
+  rlang::hash(sort(key))
 }
 
 #' Node "mode" labels for a bipartite compound-target graph

@@ -293,6 +293,22 @@ test_that(".network_graph() rebuilds when the cache's edge CONTENT disagrees wit
   expect_false(identical(attr(g2, "edges_checksum"), checksum_before)) ## but rebuilt, not served stale
 })
 
+test_that(".network_edges_checksum() distinguishes edge sets with identical row count and total string length (regression: length-sum was not a real hash)", {
+  ## Two single-edge tables with the SAME total character count (same nrow,
+  ## same combined nchar across compound_id/uniprot_id/weight) but
+  ## different content -- a length-based "checksum" collides on these;
+  ## a real content hash must not.
+  edges_a <- data.frame(compound_id = "C0001", uniprot_id = "P12345",
+                         weight = 0.1, stringsAsFactors = FALSE)
+  edges_b <- data.frame(compound_id = "C0001", uniprot_id = "P67890",
+                         weight = 0.9, stringsAsFactors = FALSE)
+
+  expect_false(identical(
+    patliR:::.network_edges_checksum(edges_a),
+    patliR:::.network_edges_checksum(edges_b)
+  ))
+})
+
 test_that(".network_upsert() back-fills a purely-added column as NA on pre-existing rows (S1: legacy CSV migration)", {
   proj <- .test_project()
   ## a pre-Phase-1 table with no `disease_gene_source` / `n_overlap`

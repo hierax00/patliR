@@ -2,25 +2,26 @@
 % Please edit documentation in R/network_build.R
 \name{.network_edges_checksum}
 \alias{.network_edges_checksum}
-\title{Cheap, \code{digest}-free checksum over a condition's \code{network_edges} rows --
-provenance stamped on the cached \code{igraph} object so \code{.network_graph()}
-can tell a hand-edited CSV apart from the graph that was cached for it}
+\title{Content hash over a condition's \code{network_edges} rows -- provenance
+stamped on the cached \code{igraph} object so \code{.network_graph()} can tell a
+hand-edited CSV apart from the graph that was cached for it}
 \usage{
 .network_edges_checksum(edges)
 }
 \value{
-\code{numeric(1)}.
+\code{character(1)}.
 }
 \description{
-Cheap, \code{digest}-free checksum over a condition's \code{network_edges} rows --
-provenance stamped on the cached \code{igraph} object so \code{.network_graph()}
-can tell a hand-edited CSV apart from the graph that was cached for it
+Content hash over a condition's \code{network_edges} rows -- provenance
+stamped on the cached \code{igraph} object so \code{.network_graph()} can tell a
+hand-edited CSV apart from the graph that was cached for it
 }
 \details{
-Not cryptographically strong -- deliberately so, per DESIGN.md's minimal
-dependency principle (no new package needed) -- but sensitive enough to
-catch the kind of edit this guards against (a handful of edges added,
-removed, or reweighted). \code{nrow()} is checked separately
-(\code{attr(g, "edges_nrow")}) so this only needs to catch same-\code{nrow} edits.
+Uses \code{rlang::hash()} (already an Imports dependency, so this needs no
+new package) over the sorted \code{compound_id}/\code{uniprot_id}/\code{weight} triples
+-- a real content hash, not a length-based proxy: two edge sets with the
+same row count and total string length but different content, e.g. a
+single reweighted edge, must not collide. \code{nrow()} is checked separately
+(\code{attr(g, "edges_nrow")}) as a cheap first filter before this runs.
 }
 \keyword{internal}

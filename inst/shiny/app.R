@@ -347,6 +347,11 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
   rv <- reactiveValues(proj = NULL)
+  ## tox_report() returns list(summary=, note=), not a PatliRProject -- it
+  ## must never be assigned through run_step()'s `rv$proj <- fun()` (that
+  ## would silently replace the project object with a plain list and break
+  ## every step after it). Its summary table lives here instead.
+  tox_report_summary <- reactiveVal(NULL)
 
   output$project_status <- renderText({
     if (is.null(rv$proj)) return("Ningún proyecto cargado todavía.")
@@ -477,11 +482,15 @@ server <- function(input, output, session) {
   })
   observeEvent(input$btn_tox_report, {
     req(rv$proj)
-    run_step(rv, function() patliR::tox_report(rv$proj), "Reporte de toxicidad generado.")
+    tryCatch({
+      report <- patliR::tox_report(rv$proj) ## returns list(summary=, note=); proj is untouched
+      tox_report_summary(report$summary)
+      .notify_ok("Reporte de toxicidad generado.")
+    }, error = function(e) .notify_err(e))
   })
   render_table_server(output, "tox_table", function() {
     req(rv$proj)
-    res <- patliR::patliRResults(rv$proj, "tox_report")
+    res <- tox_report_summary()
     if (is.null(res)) res <- patliR::patliRResults(rv$proj, "tox_local")
     req(res)
     res

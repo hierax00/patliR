@@ -387,7 +387,10 @@ those CSVs in a fresh R session, on another machine, with no R-specific
 binary format. Every step appends to a run log, so every filtering
 decision, random seed, and data source is traceable after the fact.
 External services (PubChem, ChEMBL, KEGG, STRING, …) all go through one
-retry/cache wrapper and never break the pipeline when they fail.
+cache/fallback wrapper (`.fetch_external()`) with a documented failure
+policy per call site (`abort` or `warn_and_cache`), so a failed request
+never breaks the pipeline silently -- it either stops loudly or falls back
+to the last cached result. It does not retry a failed request itself.
 
 ## Bundled reference data
 

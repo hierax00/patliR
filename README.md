@@ -67,13 +67,18 @@ flowchart TD
         NP["<b>network_proximity</b><br/>distance to disease module"]
         NS["<b>network_synergy</b><br/>Cheng P1-P6"]
         NBT["<b>network_bowtie</b>"]
+        NKT["<b>network_kegg_topology</b><br/>directed KGML relations"]
     end
     NB --> NE --> NC --> NMR --> NM
     DG --> NP
     NB --> NP --> NS
     NB --> NBT
+    NE --> NKT
 
-    NE & NC & NMR & NP --> PLOTS["<b>plot_*</b><br/>16 publication figures<br/>+ 3-axis chemical space"]
+    TDP["<b>targets_disease_profile</b><br/>every target's disease landscape<br/>(Open Targets)"]
+    TI --> TDP --> DNET["<b>plot_disease_network</b><br/>disease nodes as hulled blocks"]
+
+    NE & NC & NMR & NP --> PLOTS["<b>plot_*</b><br/>20 publication figures<br/>+ 3-axis chemical space"]
     TR --> BIAS["<b>bias_audit</b><br/>database-bias flag"]
     RDB --> BIAS
 
@@ -156,7 +161,8 @@ A worked end-to-end script against a real dataset lives in
 | `tox_*` | PAINS/Brenk structural alerts; target-level safety panel; import; per-compound report — **never a pass/fail verdict** |
 | `targets_*` | import predicted targets; disease-association filtering (Open Targets) |
 | `disease_genes_*` | independent disease gene module for `network_proximity()` (Open Targets, or a curated import) |
-| `network_*` | build, enrich, centrality/hub-penalty, module robustness, motifs, degeneracy, proximity, synergy, bow-tie, KEGG pathview, proteome filter |
+| `targets_disease_profile()` / `plot_disease_network()` | every target's Open Targets disease landscape (one named disease, or each target's top-N); compound-target-disease network with disease nodes as hulled blocks |
+| `network_*` | build, enrich, centrality/hub-penalty, module robustness, motifs, degeneracy, proximity, synergy, bow-tie, KEGG pathview + directed KEGG topology, proteome filter |
 | `plot_*` | 16 static/interactive figures for every result above |
 | `bias_*` | MAD-based "promiscuous compound/target" flag against the reference DB |
 | `rank_candidates()` / `plot_rank()` | Robust Rank Aggregation over ADME + network criteria into one ranked table, with Pareto/heatmap views |

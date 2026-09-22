@@ -66,7 +66,9 @@ Suggests:
     ChemmineR,
     plotly,
     htmlwidgets,
-    RobustRankAggreg
+    RobustRankAggreg,
+    KEGGREST,
+    xml2
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 SystemRequirements: Java (>= 8) (required by rcdk / rJava for cheminformatics
@@ -101,6 +103,7 @@ Collate:
     'network_enrich.R'
     'network_filter_proteome.R'
     'network_hub_penalty.R'
+    'network_kegg_topology.R'
     'network_motifs.R'
     'network_pathview.R'
     'network_synergy.R'
@@ -115,10 +118,12 @@ Collate:
     'plot_bowtie.R'
     'plot_centrality.R'
     'plot_chemical_space.R'
+    'plot_network_layers.R'
+    'targets_disease.R'
+    'plot_disease_network.R'
     'plot_enrichment.R'
     'plot_gochord.R'
     'plot_heatmap.R'
-    'plot_network_layers.R'
     'plot_network_degeneracy.R'
     'plot_proximity.R'
     'rank_candidates.R'
@@ -129,7 +134,6 @@ Collate:
     'plot_synergy.R'
     'plot_target_chord.R'
     'plot_upset.R'
-    'targets_disease.R'
     'plot_venn.R'
     'prep_binarize.R'
     'prep_compounds.R'

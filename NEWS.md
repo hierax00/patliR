@@ -1,5 +1,41 @@
 # patliR (development version)
 
+## New `targets_disease_profile()` / `plot_disease_network()`, and `network_kegg_topology()`
+
+- **New `targets_disease_profile()`.** Organizes every predicted target's
+  Open Targets disease associations, resolving the disease **display name**
+  (`targets_disease_filter()` stores only the EFO/MONDO ID). Two modes:
+  `disease = NULL` (default, explore mode) takes each target's top
+  `top_n_diseases` associated diseases with no disease fixed in advance, so
+  you see the landscape of diseases a compound's target set is actually
+  implicated in; `disease = "<name or ID>"` (single-disease mode, same
+  resolution rules as `targets_disease_filter()`) queries every target
+  against just that one disease. Writes a new `targets_disease_profile`
+  slot, distinct from and independent of `targets_disease_filter()`'s
+  `targets_disease` table.
+- **New `plot_disease_network()`.** Draws the compound-target-disease
+  network from `targets_disease_profile()`'s output: compounds and targets
+  at the usual small point size (same palette as `plot_network_layers()`),
+  disease nodes drawn substantially larger with a translucent convex-hull
+  halo over every target associated with that disease -- reuses the exact
+  `grDevices::chull()` + `geom_polygon()` pattern `plot_chemical_space()`
+  already established for its per-family halos, rather than inventing a new
+  one.
+- **New `network_kegg_topology()`.** Closes the `network_kegg_complete()`
+  ROADMAP item: fetches KGML for each condition's KEGG-enriched pathways
+  (`network_enrich(db = "kegg")`, or an explicit `pathway_ids=`) and parses
+  `<relation>` elements -- directed, typed gene-gene relations (PPrel/
+  GErel/ECrel/PCrel: activation, inhibition, binding, phosphorylation, ...)
+  -- into UniProt-keyed edges (`KEGGREST` fetch + bulk `keggConv()` ID
+  mapping, `xml2` parse; both new `Suggests`, deliberately lightweight --
+  `KEGGgraph`/Rgraphviz were not used for the same handful of XML tags this
+  reads directly, same "depend for algorithms, not for a few tags" judgment
+  as `bipartite`/`STRINGdb`). `restrict_to_network = TRUE` (default) keeps
+  only relations between two of the condition's own predicted targets --
+  directly usable to annotate the existing compound-target graph with
+  directionality/mechanism, not a disconnected topology dump; `FALSE` keeps
+  the pathway's full topology.
+
 ## New `report_generate()` (Milestone B)
 
 - **New `report_generate()`.** One self-contained HTML file per condition

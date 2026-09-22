@@ -142,6 +142,12 @@ The toxicity-side counterpart of `adme_export_smiles()`.
 **Theory:** Open Targets aggregates genetic, expression, pathway and literature evidence into a single 0–1 target–disease association score.
 **Note:** this is a *target → disease* lookup — it only ever annotates UniProt IDs that are already predicted targets, so its output is a subset of the compounds' own targets. It is **not** a disease gene set for `network_proximity()`; use `disease_genes_*` for that.
 
+### `targets_disease_profile(proj, disease = NULL, top_n_diseases = 5)`
+**In:** the imported targets. **Out:** `targets_disease_profile.csv` — every target's disease associations, with the disease **name** resolved (not just its ID, unlike `targets_disease_filter()` above).
+**Operation:** *external database query, two modes.* `disease = NULL` (default, **explore mode**): for every target, takes its top `top_n_diseases` Open Targets associations — no disease chosen in advance, so this surfaces the landscape of diseases a compound's target set is actually implicated in. `disease = "<name>"` (**single-disease mode**): every target queried against just that one disease, same result shape as `targets_disease_filter()` but with the name attached.
+**Theory:** same Open Targets aggregated association score as `targets_disease_filter()`. Same circularity caveat: not a disease module for `network_proximity()`.
+**Companion:** `plot_disease_network()`, below.
+
 ---
 
 ## `disease_genes_*` — an independent disease gene set
@@ -247,6 +253,11 @@ Each compound is `proximal` when `z_score < 0` **and** `p_adjusted < alpha` from
 **Operation:** *rendering.* Calls `pathview::pathview()`, which downloads each pathway's KEGG map and colours it. The gene score is, per target, the highest prediction probability among the compounds hitting it (`"max_weight"`). `ok` requires the expected PNG to actually exist on disk, not just the absence of an R error (`pathview()` can warn and return without writing anything — no mappable nodes, or a KGML/PNG download that silently returns an HTML error page). Targets with an `NA` weight are explicitly dropped from the colour vector and logged (`aggregate()`'s implicit `na.action = na.omit` used to do this silently); if every target's weight is `NA` the function aborts with a clear message instead of handing `pathview()` an empty vector. A `cli_warn` fires if any score exceeds 1 before the `[0, 1]` colour clamp — the clamp assumes `targets_import()`'s `"96.5%"` → `0.965` convention, which a platform reporting raw 0–100 percentages would silently violate.
 **Theory:** none — visualisation of the enrichment result.
 
+### `network_kegg_topology(proj, condition, pathway_ids = NULL, restrict_to_network = TRUE)`
+**In:** a condition's KEGG-enriched pathways (`network_enrich(db = "kegg")`), or an explicit `pathway_ids`. **Out:** `network_kegg_topology.csv` — directed, typed gene-gene relations from each pathway's KGML, mapped to UniProt.
+**Operation:** *download + XML parse, no modelling.* Fetches each pathway's KGML (`KEGGREST::keggGet(id, "kgml")`) and parses its `<relation>` elements (`PPrel`/`GErel`/`ECrel`/`PCrel` — protein-protein/gene-expression/enzyme-catalysis/protein-compound; the `subtype` carries the mechanism, e.g. activation/inhibition/binding/phosphorylation, plus KGML's own arrow-style code kept verbatim, e.g. `"-->"`/`"--|"`). A KGML entry can bundle several KEGG gene IDs (an ortholog/paralog box); a relation between two such entries is cartesian-expanded over every gene pair. KEGG gene IDs are mapped to UniProt in one bulk call per species (`KEGGREST::keggConv("uniprot", species)`), not per gene. `restrict_to_network = TRUE` (default) keeps only relations where **both** endpoints are already among the condition's own predicted targets — directly annotates the existing compound-target graph with mechanism/directionality; `FALSE` keeps the pathway's full topology regardless of what this project's compounds happen to target.
+**Theory:** none new — the relations are KEGG's own curated pathway topology; this function only fetches and reshapes them. Fills the `network_kegg_complete()` gap `network_pathview()` (above) leaves: that function only ever renders KEGG's pre-made diagram images, it never parses topology.
+
 ### `network_filter_proteome(proj, proteome, proteome_label = NULL)`
 **Out:** `network_edges` filtered to a user-supplied list of UniProt IDs, plus `proteome_label` (auto-derived from a hash of the sorted proteome if not given) and `n_proteome`.
 **Operation:** *a filter.* Row-subset, nothing else. Deliberately does not feed back into the other `network_*` functions. `proteome_label` is part of the upsert key alongside `condition`, so two different proteomes filtered against the same condition are both kept, not overwritten. A `cli_warn` fires when `proteome` matches nothing in `network_edges` and fewer than half its entries look like UniProt accessions — the usual cause is passing gene symbols by mistake.
@@ -294,7 +305,7 @@ Each compound is `proximal` when `z_score < 0` **and** `p_adjusted < alpha` from
 
 ## `plot_*` — figures
 
-All 16 take `proj` and return a plot object; most also write a PNG. They
+All 20 take `proj` and return a plot object; most also write a PNG. They
 **compute nothing new** beyond layout — they read a `*_results` table and
 draw it. A few do a small transform for display:
 
@@ -304,6 +315,7 @@ draw it. A few do a small transform for display:
 | `plot_boiled_egg` | scatter of (TPSA, WLogP) over the two published ellipses |
 | `plot_chemical_space` | **PCA** (`prcomp`, scaled) or UMAP of the `adme_local` descriptors to 2 or 3 axes; convex-hull "halos" per chemical family |
 | `plot_network_layers` | force-directed layout (`igraph::layout_with_fr`) of the layered graph; only hub nodes labelled |
+| `plot_disease_network` | same force-directed layout restricted to disease-relevant targets; disease nodes enlarged, convex-hull halo (`grDevices::chull`, same method as `plot_chemical_space`) over each disease's targets |
 | `plot_network_degeneracy` | the same layout + one arc per degenerate compound pair |
 | `plot_heatmap` | `pheatmap` — hierarchical clustering on both axes |
 | `plot_gochord` | `GOplot::GOChord` ribbon diagram, genes ↔ GO terms |

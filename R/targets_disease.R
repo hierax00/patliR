@@ -208,6 +208,244 @@ targets_disease_filter <- function(proj, disease, source = c("open_targets"),
   proj
 }
 
+#' Organize every predicted target's Open Targets disease profile -- one
+#' named disease, or an unfiltered top-N landscape per target
+#'
+#' @description
+#' For every distinct UniProt ID in `patliRResults(proj, "targets_imported")`,
+#' queries the Open Targets Platform for its disease associations and
+#' resolves each disease's **display name** (not just its EFO ID -- a gap
+#' [targets_disease_filter()] has: it stores `disease_id` only). Two modes,
+#' picked by whether `disease` is supplied:
+#'
+#' - `disease = NULL` (default, **explore mode**): no disease is fixed in
+#'   advance. For each target, takes its top `top_n_diseases` associated
+#'   diseases (Open Targets' own score ordering), so you see the landscape
+#'   of diseases a compound's target set is actually implicated in, not just
+#'   one you already picked.
+#' - `disease = "<name or ID>"` (**single-disease mode**, same resolution
+#'   rules as [targets_disease_filter()]'s `disease` argument): every target
+#'   is queried against that one disease only (`top_n_diseases` is ignored),
+#'   same shape as [targets_disease_filter()] but with the name resolved too.
+#'
+#' Companion to [plot_disease_network()], which reads this table's output to
+#' draw the compound-target-disease network. This function does not touch
+#' [network_proximity()]/[network_synergy()] or their prerequisites at all --
+#' it is a separate, purely descriptive/organizational view, not a disease
+#' module (see [disease_genes_fetch()] for that, and the circularity note on
+#' [targets_disease_filter()] -- it applies here identically).
+#'
+#' @inheritParams targets_disease_filter
+#' @param disease `NULL` (default, explore every target's top diseases) or a
+#'   single disease name/ID (same resolution as [targets_disease_filter()]).
+#' @param top_n_diseases Integer, default `5`. Only used in explore mode
+#'   (`disease = NULL`) -- how many top-scoring diseases to keep per target.
+#'
+#' @return The updated `proj`, with a `targets_disease_profile` entry in
+#'   [patliRResults()] (columns `compound_id`, `target_id` (UniProt),
+#'   `disease_id`, `disease_name`, `association_score`, `evidence`, `rank`
+#'   (1 = highest-scoring disease for that target; always `1` in
+#'   single-disease mode), `mode` (`"explore"` or `"single"`)), also written
+#'   to `results/targets_disease_profile.csv`. Distinct from, and does not
+#'   modify, the `targets_disease` slot [targets_disease_filter()] writes.
+#'
+#' @examples
+#' \dontrun{
+#' proj <- patliR_project(tempfile("patliR_demo_"))
+#' compound_list <- read.csv(
+#'   system.file("extdata", "input_compound_list.csv", package = "patliR")
+#' )
+#' proj <- prep_compounds(proj, compound_list, identifier = "pubchem")
+#' proj <- targets_import(
+#'   proj,
+#'   system.file("extdata", "import_targets", "Targets5280443.csv", package = "patliR"),
+#'   platform = "superpred"
+#' )
+#' proj <- targets_disease_profile(proj, top_n_diseases = 5) # needs internet
+#' patliRResults(proj, "targets_disease_profile")
+#' }
+#'
+#' @seealso [plot_disease_network()], [targets_disease_filter()]
+#' @export
+targets_disease_profile <- function(proj, disease = NULL, top_n_diseases = 5,
+                                     source = c("open_targets"), min_score = NULL,
+                                     fetch_mode = c("warn_and_cache", "abort")) {
+  stopifnot(is(proj, "PatliRProject"))
+  source <- match.arg(source)
+  fetch_mode <- match.arg(fetch_mode)
+  stopifnot(is.numeric(top_n_diseases), length(top_n_diseases) == 1, top_n_diseases >= 1)
+  if (!is.null(disease)) {
+    stopifnot(is.character(disease), length(disease) == 1, nzchar(disease))
+  }
+  if (!is.null(min_score) && (!is.numeric(min_score) || length(min_score) != 1 || min_score < 0 || min_score > 1)) {
+    cli::cli_abort("{.arg min_score} must be a single number in [0, 1], or NULL.")
+  }
+
+  imported <- patliRResults(proj, "targets_imported")
+  if (is.null(imported) || nrow(imported) == 0) {
+    cli::cli_abort(c(
+      "No {.val targets_imported} entry in {.arg proj}.",
+      "i" = "Run {.fn targets_import} or {.fn targets_import_batch} first."
+    ))
+  }
+
+  mode <- if (is.null(disease)) "explore" else "single"
+  efo_id <- NULL
+  if (mode == "single") {
+    efo_id <- .fetch_external(
+      fetch_fun = function() .open_targets_resolve_disease(disease),
+      cache_dir = cacheDir(proj), cache_key = paste0("opentargets_disease_", .cache_key_slug(disease)),
+      mode = fetch_mode
+    )
+    if (is.null(efo_id)) {
+      cli::cli_warn("Could not resolve {.val {disease}} to an Open Targets disease ID; nothing to do.")
+      return(proj)
+    }
+  }
+
+  uniprot_ids <- sort(unique(imported$uniprot_id))
+  rows <- vector("list", length(uniprot_ids))
+  names(rows) <- uniprot_ids
+
+  for (u in uniprot_ids) {
+    ensembl_id <- .fetch_external(
+      fetch_fun = function() .open_targets_map_id(u, entity = "target"),
+      cache_dir = cacheDir(proj), cache_key = paste0("opentargets_target_", .cache_key_slug(u)),
+      mode = fetch_mode
+    )
+    if (is.null(ensembl_id)) {
+      proj <- .log_append(
+        proj, step = "targets_disease_profile", id = u,
+        message = paste0("targets_disease_profile_unresolved_target: could not map UniProt ID '", u, "' to an Open Targets target ID")
+      )
+      next
+    }
+
+    cache_key <- if (mode == "single") {
+      paste0("opentargets_topdis_", .cache_key_slug(ensembl_id), "_", .cache_key_slug(efo_id))
+    } else {
+      paste0("opentargets_topdis_", .cache_key_slug(ensembl_id), "_top", top_n_diseases)
+    }
+    top <- .fetch_external(
+      fetch_fun = function() .open_targets_target_top_diseases(ensembl_id, top_n = top_n_diseases, efo_id = efo_id),
+      cache_dir = cacheDir(proj), cache_key = cache_key, mode = fetch_mode
+    )
+    if (is.null(top) || nrow(top) == 0) {
+      proj <- .log_append(
+        proj, step = "targets_disease_profile", id = u,
+        message = "targets_disease_profile_no_association: Open Targets reports no disease association for this target; dropped"
+      )
+      next
+    }
+    rows[[u]] <- data.frame(target_id = u, top, stringsAsFactors = FALSE)
+  }
+
+  scores <- do.call(rbind, rows[!vapply(rows, is.null, logical(1))])
+  if (is.null(scores)) scores <- .empty_targets_disease_profile_scores()
+
+  if (!is.null(min_score) && nrow(scores) > 0) {
+    below <- scores$association_score < min_score
+    if (any(below)) {
+      proj <- .log_append(
+        proj, step = "targets_disease_profile", id = scores$target_id[below],
+        message = paste0(
+          "targets_disease_profile_below_min_score: association_score ",
+          format(round(scores$association_score[below], 4), nsmall = 4),
+          " < min_score ", min_score
+        )
+      )
+    }
+    scores <- scores[!below, , drop = FALSE]
+  }
+
+  merged <- merge(
+    imported[, c("compound_id", "uniprot_id")], scores,
+    by.x = "uniprot_id", by.y = "target_id", all = FALSE
+  )
+  result <- data.frame(
+    compound_id = merged$compound_id, target_id = merged$uniprot_id,
+    disease_id = merged$disease_id, disease_name = merged$disease_name,
+    association_score = merged$association_score, evidence = merged$evidence,
+    rank = merged$rank, mode = mode, stringsAsFactors = FALSE
+  )
+  result <- unique(result)
+
+  patliRResults(proj, "targets_disease_profile") <- result
+  .write_results_csv(proj, "targets_disease_profile", result)
+  .write_log_csv(proj)
+  proj
+}
+
+#' @keywords internal
+.empty_targets_disease_profile_scores <- function() {
+  data.frame(
+    target_id = character(), disease_id = character(), disease_name = character(),
+    association_score = double(), evidence = character(), rank = integer(),
+    stringsAsFactors = FALSE
+  )
+}
+
+#' Query a target's top-N associated diseases (explore mode), or one named
+#' disease with its name resolved (single-disease mode)
+#'
+#' @param ensembl_id Open Targets target (Ensembl gene) ID.
+#' @param top_n Requested page size when `efo_id` is `NULL` (explore mode --
+#'   `associatedDiseases` is already returned in descending-score order by
+#'   Open Targets, so a plain first-`top_n` page is the top-N).
+#' @param efo_id `NULL` (explore mode) or a single resolved EFO/MONDO ID
+#'   (single-disease mode, `Bs` filters server-side to just that one disease,
+#'   same as [.open_targets_target_disease_score()] but with `disease.name`
+#'   also requested).
+#' @return A `data.frame(disease_id, disease_name, association_score,
+#'   evidence, rank)`, or `NULL` if Open Targets reports nothing.
+#' @keywords internal
+.open_targets_target_top_diseases <- function(ensembl_id, top_n = NULL, efo_id = NULL) {
+  single <- !is.null(efo_id)
+  vars <- list(ensemblId = ensembl_id, size = if (single) 1L else as.integer(top_n))
+  query_string <- if (single) {
+    vars$efoIds <- list(efo_id)
+    "
+      query TopDiseases($ensemblId: String!, $size: Int!, $efoIds: [String!]) {
+        target(ensemblId: $ensemblId) {
+          associatedDiseases(Bs: $efoIds, page: {index: 0, size: $size}) {
+            rows { score disease { id name } datatypeScores { id score } }
+          }
+        }
+      }
+    "
+  } else {
+    "
+      query TopDiseases($ensemblId: String!, $size: Int!) {
+        target(ensemblId: $ensemblId) {
+          associatedDiseases(page: {index: 0, size: $size}) {
+            rows { score disease { id name } datatypeScores { id score } }
+          }
+        }
+      }
+    "
+  }
+  data <- .open_targets_graphql(query_string, vars)
+  rows <- data$target$associatedDiseases$rows
+  if (length(rows) == 0) return(NULL)
+
+  out <- do.call(rbind, lapply(seq_along(rows), function(i) {
+    r <- rows[[i]]
+    dt <- r$datatypeScores
+    evidence <- if (length(dt) > 0) {
+      paste(vapply(dt, function(x) paste0(x$id, "=", round(x$score, 3)), character(1)), collapse = "; ")
+    } else {
+      NA_character_
+    }
+    data.frame(
+      disease_id = r$disease$id %||% (if (single) efo_id else NA_character_),
+      disease_name = r$disease$name %||% NA_character_,
+      association_score = r$score, evidence = evidence, rank = i,
+      stringsAsFactors = FALSE
+    )
+  }))
+  out
+}
+
 #' @keywords internal
 .empty_targets_disease_scores <- function() {
   data.frame(target_id = character(), disease_id = character(),

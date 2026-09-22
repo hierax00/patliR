@@ -96,8 +96,24 @@ guessing.
 
 ## Network
 
-- **`network_kegg_complete()`** — add KEGG's directed topology to the
-  network. Deferred on time budget.
+- ~~**`network_kegg_complete()`**~~ — **DONE (2026-09-21)**, as
+  `network_kegg_topology()`. Fetches each condition's KEGG-enriched
+  pathways' KGML, parses `<relation>` elements (PPrel/GErel/ECrel/PCrel,
+  directed, typed activation/inhibition/binding/...) into UniProt-keyed
+  edges via `KEGGREST` + `xml2` (new `Suggests`, both lightweight --
+  `KEGGgraph`/Rgraphviz deliberately not used for the same handful of XML
+  tags). `restrict_to_network = TRUE` default keeps only relations between
+  two of the condition's own predicted targets.
+- **`targets_disease_profile()` / `plot_disease_network()`** — **DONE
+  (2026-09-21).** Organizes every predicted target's Open Targets disease
+  associations -- either one named disease (with the display name resolved,
+  which `targets_disease_filter()` does not do) or, in explore mode
+  (`disease = NULL`), each target's top-N associated diseases with no
+  disease fixed in advance. `plot_disease_network()` draws the resulting
+  compound-target-disease network with disease nodes enlarged and a
+  convex-hull halo (same `grDevices::chull()` pattern as
+  `plot_chemical_space()`'s family halos) over the targets belonging to
+  each disease.
 - **`network_hub_penalty()` scoring** — `d * log(N/d)` is non-monotone
   (peaks at `d = N/e`), so a moderately promiscuous target can outrank a
   selective one. Decide whether "intermediate-specificity emphasis" is

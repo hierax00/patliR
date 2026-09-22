@@ -310,12 +310,19 @@ network_build <- function(proj, condition = NULL,
 #' DESIGN.md's contract is "the CSV is truth, the `.rds` is a disposable
 #' cache" -- but a cache returned whenever present, only rebuilt when
 #' absent, silently ignores a hand-edited `results/network_edges.csv` (e.g.
-#' a user removing low-confidence rows directly in the CSV). Every cached
-#' graph is stamped with `attr(g, "edges_nrow")` and `attr(g,
-#' "edges_checksum")` (see `.network_edges_checksum()`) for the condition's
-#' rows at the time it was written; a cache whose stamp disagrees with -- or
-#' was written before this check existed and so carries no stamp at all --
-#' the *current* `network_edges` rows for `condition` is rebuilt instead of
+#' a user removing low-confidence rows directly in the CSV), or a
+#' `binarizedMatrix()` that changed which compounds are present for
+#' `condition` without `network_edges` itself changing (a compound with no
+#' targets in `targets_imported` moving in or out of presence never shows
+#' up as an edge, but does change the graph's isolated-vertex set -- every
+#' `present_ids` entry becomes a vertex in [.network_build_igraph()],
+#' whether or not it has any edges). Every cached graph is stamped with
+#' `attr(g, "edges_nrow")`, `attr(g, "edges_checksum")` (see
+#' `.network_edges_checksum()`), and `attr(g, "present_ids_hash")` for the
+#' condition's rows/presence set at the time it was written; a cache whose
+#' stamp disagrees with -- or was written before this check existed and so
+#' carries no stamp at all -- the *current* `network_edges` rows and
+#' `binarizedMatrix()` presence for `condition` is rebuilt instead of
 #' trusted.
 #' @return An `igraph` object.
 #' @keywords internal
@@ -339,28 +346,32 @@ network_build <- function(proj, condition = NULL,
   }
   edges <- edges_all[edges_all$condition == condition, , drop = FALSE]
 
+  bin <- binarizedMatrix(proj)
+  if (!condition %in% names(bin)) {
+    cli::cli_abort("Condition {.val {condition}} not found in {.fn binarizedMatrix}; cannot rebuild its graph.")
+  }
+  present_ids <- bin$compound_id[!is.na(bin[[condition]]) & bin[[condition]] == 1]
+  present_ids_hash <- rlang::hash(sort(present_ids))
+
   if (file.exists(cache_path)) {
     g_cached <- readRDS(cache_path)
     cached_nrow <- attr(g_cached, "edges_nrow")
     cached_checksum <- attr(g_cached, "edges_checksum")
-    if (!is.null(cached_nrow) && !is.null(cached_checksum) &&
+    cached_present_hash <- attr(g_cached, "present_ids_hash")
+    if (!is.null(cached_nrow) && !is.null(cached_checksum) && !is.null(cached_present_hash) &&
         identical(cached_nrow, nrow(edges)) &&
-        identical(cached_checksum, .network_edges_checksum(edges))) {
+        identical(cached_checksum, .network_edges_checksum(edges)) &&
+        identical(cached_present_hash, present_ids_hash)) {
       return(g_cached)
     }
     ## Cache present but stale (or from before this provenance check
     ## existed, so unstamped) -- fall through and rebuild.
   }
 
-  bin <- binarizedMatrix(proj)
-  if (!condition %in% names(bin)) {
-    cli::cli_abort("Condition {.val {condition}} not found in {.fn binarizedMatrix}; cannot rebuild its graph.")
-  }
-  present_ids <- bin$compound_id[!is.na(bin[[condition]]) & bin[[condition]] == 1]
-
   g <- .network_build_igraph(present_ids, edges)
   attr(g, "edges_nrow") <- nrow(edges)
   attr(g, "edges_checksum") <- .network_edges_checksum(edges)
+  attr(g, "present_ids_hash") <- present_ids_hash
   saveRDS(g, cache_path)
   g
 }

@@ -79,8 +79,11 @@
 .save_cache_graph <- function(g, proj, condition) {
   edges_all <- patliRResults(proj, "network_edges")
   edges <- edges_all[edges_all$condition == condition, , drop = FALSE]
+  bin <- binarizedMatrix(proj)
+  present_ids <- bin$compound_id[!is.na(bin[[condition]]) & bin[[condition]] == 1]
   attr(g, "edges_nrow") <- nrow(edges)
   attr(g, "edges_checksum") <- patliR:::.network_edges_checksum(edges)
+  attr(g, "present_ids_hash") <- rlang::hash(sort(present_ids))
   saveRDS(g, patliR:::.network_cache_path(proj, condition))
   invisible(g)
 }

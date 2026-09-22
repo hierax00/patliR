@@ -293,6 +293,34 @@ test_that(".network_graph() rebuilds when the cache's edge CONTENT disagrees wit
   expect_false(identical(attr(g2, "edges_checksum"), checksum_before)) ## but rebuilt, not served stale
 })
 
+test_that(".network_graph() rebuilds when binarizedMatrix()'s presence changed for the condition even though network_edges itself is untouched (regression: only edges_nrow/edges_checksum were stamped, never presence)", {
+  proj <- .network_test_setup()
+  proj <- network_build(proj, condition = "FLO-ET")
+
+  g1 <- patliR:::.network_graph(proj, "FLO-ET")
+  edges_before <- patliRResults(proj, "network_edges")
+
+  ## Flip one currently-absent compound to present for FLO-ET, WITHOUT
+  ## re-running network_build() -- network_edges stays byte-identical
+  ## (same nrow, same checksum), but .network_build_igraph() adds every
+  ## present compound as a vertex regardless of whether it has any edges,
+  ## so the graph itself must change: a new isolated compound vertex.
+  bm <- binarizedMatrix(proj)
+  absent_idx <- which(bm[["FLO-ET"]] == 0)
+  testthat::skip_if(length(absent_idx) == 0, "no currently-absent compound in this fixture for FLO-ET")
+  flipped_id <- bm$compound_id[absent_idx[1]]
+  bm[["FLO-ET"]][absent_idx[1]] <- 1
+  binarizedMatrix(proj) <- bm
+
+  edges_after <- patliRResults(proj, "network_edges")
+  expect_equal(edges_after[edges_after$condition == "FLO-ET", ], edges_before[edges_before$condition == "FLO-ET", ]) ## network_edges genuinely untouched
+
+  g2 <- patliR:::.network_graph(proj, "FLO-ET")
+  expect_gt(igraph::vcount(g2), igraph::vcount(g1)) ## gained the newly-present, edge-less vertex
+  expect_true(flipped_id %in% igraph::V(g2)$name)
+  expect_false(flipped_id %in% igraph::V(g1)$name)
+})
+
 test_that(".network_edges_checksum() distinguishes edge sets with identical row count and total string length (regression: length-sum was not a real hash)", {
   ## Two single-edge tables with the SAME total character count (same nrow,
   ## same combined nchar across compound_id/uniprot_id/weight) but

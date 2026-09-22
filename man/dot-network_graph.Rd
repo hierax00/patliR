@@ -25,11 +25,19 @@ as \code{refdb_rebuild_cache()}.
 DESIGN.md's contract is "the CSV is truth, the \code{.rds} is a disposable
 cache" -- but a cache returned whenever present, only rebuilt when
 absent, silently ignores a hand-edited \code{results/network_edges.csv} (e.g.
-a user removing low-confidence rows directly in the CSV). Every cached
-graph is stamped with \code{attr(g, "edges_nrow")} and \code{attr(g, "edges_checksum")} (see \code{.network_edges_checksum()}) for the condition's
-rows at the time it was written; a cache whose stamp disagrees with -- or
-was written before this check existed and so carries no stamp at all --
-the \emph{current} \code{network_edges} rows for \code{condition} is rebuilt instead of
+a user removing low-confidence rows directly in the CSV), or a
+\code{binarizedMatrix()} that changed which compounds are present for
+\code{condition} without \code{network_edges} itself changing (a compound with no
+targets in \code{targets_imported} moving in or out of presence never shows
+up as an edge, but does change the graph's isolated-vertex set -- every
+\code{present_ids} entry becomes a vertex in \code{\link[=.network_build_igraph]{.network_build_igraph()}},
+whether or not it has any edges). Every cached graph is stamped with
+\code{attr(g, "edges_nrow")}, \code{attr(g, "edges_checksum")} (see
+\code{.network_edges_checksum()}), and \code{attr(g, "present_ids_hash")} for the
+condition's rows/presence set at the time it was written; a cache whose
+stamp disagrees with -- or was written before this check existed and so
+carries no stamp at all -- the \emph{current} \code{network_edges} rows and
+\code{binarizedMatrix()} presence for \code{condition} is rebuilt instead of
 trusted.
 }
 

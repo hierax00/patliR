@@ -73,6 +73,68 @@ test_that(".network_kegg_parse_kgml() returns an empty relations frame with the 
   expect_setequal(names(parsed$relations), c("from_kegg", "to_kegg", "relation_type", "relation_subtype", "relation_value"))
 })
 
+.kegg_fixture_kgml_groups <- function() {
+  '<?xml version="1.0"?>
+<pathway name="path:hsa00000" org="hsa" number="00000" title="Test Pathway With Groups">
+    <entry id="1" name="hsa:100" type="gene">
+        <graphics name="GENE1" type="rectangle" x="10" y="10" width="20" height="10"/>
+    </entry>
+    <entry id="2" name="hsa:200" type="gene">
+        <graphics name="GENE2" type="rectangle" x="30" y="10" width="20" height="10"/>
+    </entry>
+    <entry id="3" name="hsa:300" type="gene">
+        <graphics name="GENE3" type="rectangle" x="50" y="50" width="20" height="10"/>
+    </entry>
+    <entry id="4" type="group">
+        <graphics type="rectangle" x="10" y="10" width="20" height="10"/>
+        <component id="1"/>
+        <component id="2"/>
+    </entry>
+    <relation entry1="4" entry2="3" type="PPrel">
+        <subtype name="phosphorylation" value="+p"/>
+        <subtype name="activation" value="--&gt;"/>
+    </relation>
+</pathway>'
+}
+
+test_that(".network_kegg_parse_kgml() resolves a type=\"group\" (complex) entry to the union of its members' genes", {
+  testthat::skip_if_not_installed("xml2")
+  parsed <- patliR:::.network_kegg_parse_kgml(.kegg_fixture_kgml_groups(), "PPrel")
+  rel <- parsed$relations
+  ## entry1="4" is the group {entry 1, entry 2} = {hsa:100, hsa:200}; without
+  ## group resolution this relation would be dropped entirely (entry "4" is
+  ## not a type="gene" entry, so it would fail the is_gene_pair check).
+  expect_setequal(unique(rel$from_kegg), c("hsa:100", "hsa:200"))
+  expect_true(all(rel$to_kegg == "hsa:300"))
+})
+
+test_that(".network_kegg_parse_kgml() keeps every <subtype> of a relation, not just the first (regression: xml_find_first used to drop the rest)", {
+  testthat::skip_if_not_installed("xml2")
+  parsed <- patliR:::.network_kegg_parse_kgml(.kegg_fixture_kgml_groups(), "PPrel")
+  rel <- parsed$relations
+  ## 2 genes in the group x 1 target gene x 2 subtypes = 4 rows; both
+  ## subtypes of the single <relation> must survive, for every expanded
+  ## gene pair.
+  expect_equal(nrow(rel), 4)
+  expect_setequal(rel$relation_subtype, c("phosphorylation", "activation"))
+  expect_setequal(rel$relation_value, c("+p", "-->"))
+  for (g in c("hsa:100", "hsa:200")) {
+    subtypes_for_g <- rel$relation_subtype[rel$from_kegg == g]
+    expect_setequal(subtypes_for_g, c("phosphorylation", "activation"))
+  }
+})
+
+test_that("network_kegg_topology() warns that PCrel relations always get dropped (never resolves type=\"compound\" entries)", {
+  proj <- .network_stats_test_setup()
+  expect_warning(
+    expect_error(
+      network_kegg_topology(proj, condition = "FLO-ET", relation_types = "PCrel"),
+      "network_enrich"
+    ),
+    "PCrel"
+  )
+})
+
 test_that("network_kegg_topology() requires network_build() to have run first", {
   proj <- .test_project()
   proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")

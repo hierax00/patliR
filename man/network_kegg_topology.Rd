@@ -9,7 +9,7 @@ network_kegg_topology(
   condition = NULL,
   pathway_ids = NULL,
   species = "hsa",
-  relation_types = c("PPrel", "GErel", "ECrel", "PCrel"),
+  relation_types = c("PPrel", "GErel", "ECrel"),
   restrict_to_network = TRUE
 )
 }
@@ -28,9 +28,18 @@ KEGG pathway IDs (e.g. \code{c("hsa04151", "hsa04010")}).}
 what \code{\link[=network_enrich]{network_enrich()}}/\code{\link[=network_pathview]{network_pathview()}} were run against.}
 
 \item{relation_types}{Character vector of KGML relation \code{type}s to keep.
-Default \code{c("PPrel", "GErel", "ECrel", "PCrel")} (every gene-gene/gene-
-compound relation type KGML defines); \code{"maplink"} (link to another
-pathway diagram, not a biological relation) is never included.}
+Default \code{c("PPrel", "GErel", "ECrel")} -- every gene-gene relation type
+KGML defines. \code{"PCrel"} (protein-compound) is a valid value you can
+pass explicitly, but is not in the default: this function only ever
+resolves \verb{<entry type="gene">} (and, as of the group-entry fix, the
+\code{type="group"} complexes built from them) to UniProt IDs, never
+\verb{<entry type="compound">} -- so a \code{PCrel} relation's compound-side
+endpoint can never resolve and that relation is always dropped as an
+unmapped pair. Kept as an explicit opt-in (rather than removed
+outright) so a future patch that does add compound-entry resolution
+doesn't need to change this argument's contract, only what happens
+when it's used. \code{"maplink"} (link to another pathway diagram, not a
+biological relation) is never included.}
 
 \item{restrict_to_network}{Logical, default \code{TRUE}. See the section above.}
 }
@@ -48,12 +57,15 @@ UniProt accession are logged and excluded, never silently dropped.
 For each KEGG pathway in scope, downloads its KGML (KEGG Markup
 Language) file and parses the \verb{<relation>} elements -- directed,
 typed gene-gene relations (\code{PPrel} protein-protein, e.g. activation/
-inhibition/binding; \code{GErel} gene expression; \code{ECrel} enzyme-catalysis;
-\code{PCrel} protein-compound) -- into UniProt-keyed edges. This is the
-piece \code{\link[=network_pathview]{network_pathview()}} does not provide: that function only renders
-KEGG's own pre-made pathway diagrams (via the \code{pathview} package),
-it never parses topology; nothing else in \code{patliR} reads a KGML file
-before this function.
+inhibition/binding; \code{GErel} gene expression; \code{ECrel} enzyme-catalysis)
+-- into UniProt-keyed edges, including relations between \code{type="group"}
+entries (protein complexes), resolved to the union of their member
+genes. This is the piece \code{\link[=network_pathview]{network_pathview()}} does not provide: that
+function only renders KEGG's own pre-made pathway diagrams (via the
+\code{pathview} package), it never parses topology; nothing else in
+\code{patliR} reads a KGML file before this function. \code{PCrel}
+(protein-compound) relations are parsed but always dropped -- see
+\code{relation_types} below for why.
 }
 \section{Where the pathway list comes from}{
 

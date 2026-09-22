@@ -20,12 +20,19 @@ NULL
 ## writing this parser:
 ##   <entry id="6" name="hsa:1977 hsa:253314 hsa:9470" type="gene" ...>
 ##     (an entry can bundle several KEGG gene IDs -- an ortholog/paralog box)
+##   <entry id="12" type="group" ...>
+##     <component id="10"/><component id="11"/>
+##   </entry>
+##     (a complex -- its own "genes" are the union of its components',
+##     each of which is itself a type="gene" entry elsewhere in the file)
 ##   <relation entry1="95" entry2="43" type="PPrel">
 ##     <subtype name="activation" value="--&gt;"/>
 ##   </relation>
+##     (a relation can carry more than one <subtype>; each becomes its own
+##     output row rather than being collapsed to just the first)
 ## entry1/entry2 are KGML-internal entry IDs, not gene IDs -- must be
 ## resolved via the entry table first, then expanded (cartesian product)
-## when either side bundles multiple genes.
+## when either side bundles multiple genes (directly, or via a group).
 
 #' Fetch and add KEGG's directed pathway topology to the network
 #'
@@ -33,12 +40,15 @@ NULL
 #' For each KEGG pathway in scope, downloads its KGML (KEGG Markup
 #' Language) file and parses the `<relation>` elements -- directed,
 #' typed gene-gene relations (`PPrel` protein-protein, e.g. activation/
-#' inhibition/binding; `GErel` gene expression; `ECrel` enzyme-catalysis;
-#' `PCrel` protein-compound) -- into UniProt-keyed edges. This is the
-#' piece [network_pathview()] does not provide: that function only renders
-#' KEGG's own pre-made pathway diagrams (via the `pathview` package),
-#' it never parses topology; nothing else in `patliR` reads a KGML file
-#' before this function.
+#' inhibition/binding; `GErel` gene expression; `ECrel` enzyme-catalysis)
+#' -- into UniProt-keyed edges, including relations between `type="group"`
+#' entries (protein complexes), resolved to the union of their member
+#' genes. This is the piece [network_pathview()] does not provide: that
+#' function only renders KEGG's own pre-made pathway diagrams (via the
+#' `pathview` package), it never parses topology; nothing else in
+#' `patliR` reads a KGML file before this function. `PCrel`
+#' (protein-compound) relations are parsed but always dropped -- see
+#' `relation_types` below for why.
 #'
 #' @section Where the pathway list comes from:
 #' `pathway_ids = NULL` (default) pulls every KEGG pathway ID already found
@@ -64,9 +74,18 @@ NULL
 #' @param species KEGG organism code, default `"hsa"` (human) -- must match
 #'   what [network_enrich()]/[network_pathview()] were run against.
 #' @param relation_types Character vector of KGML relation `type`s to keep.
-#'   Default `c("PPrel", "GErel", "ECrel", "PCrel")` (every gene-gene/gene-
-#'   compound relation type KGML defines); `"maplink"` (link to another
-#'   pathway diagram, not a biological relation) is never included.
+#'   Default `c("PPrel", "GErel", "ECrel")` -- every gene-gene relation type
+#'   KGML defines. `"PCrel"` (protein-compound) is a valid value you can
+#'   pass explicitly, but is not in the default: this function only ever
+#'   resolves `<entry type="gene">` (and, as of the group-entry fix, the
+#'   `type="group"` complexes built from them) to UniProt IDs, never
+#'   `<entry type="compound">` -- so a `PCrel` relation's compound-side
+#'   endpoint can never resolve and that relation is always dropped as an
+#'   unmapped pair. Kept as an explicit opt-in (rather than removed
+#'   outright) so a future patch that does add compound-entry resolution
+#'   doesn't need to change this argument's contract, only what happens
+#'   when it's used. `"maplink"` (link to another pathway diagram, not a
+#'   biological relation) is never included.
 #' @param restrict_to_network Logical, default `TRUE`. See the section above.
 #'
 #' @return The updated `proj`, with a `network_kegg_topology` entry in
@@ -91,12 +110,18 @@ NULL
 #' @export
 network_kegg_topology <- function(proj, condition = NULL, pathway_ids = NULL,
                                    species = "hsa",
-                                   relation_types = c("PPrel", "GErel", "ECrel", "PCrel"),
+                                   relation_types = c("PPrel", "GErel", "ECrel"),
                                    restrict_to_network = TRUE) {
   stopifnot(is(proj, "PatliRProject"))
   stopifnot(is.character(species), length(species) == 1, nzchar(species))
   stopifnot(is.logical(restrict_to_network), length(restrict_to_network) == 1, !is.na(restrict_to_network))
   relation_types <- match.arg(relation_types, c("PPrel", "GErel", "ECrel", "PCrel"), several.ok = TRUE)
+  if ("PCrel" %in% relation_types) {
+    cli::cli_warn(c(
+      "!" = "{.code relation_types} includes {.val PCrel}, but {.fn network_kegg_topology} never resolves {.code entry type=\"compound\"} to a UniProt ID.",
+      "i" = "Every {.val PCrel} relation will be dropped as unmapped; see {.arg relation_types}' documentation."
+    ))
+  }
 
   if (!requireNamespace("KEGGREST", quietly = TRUE) || !requireNamespace("xml2", quietly = TRUE)) {
     cli::cli_abort(c(
@@ -251,6 +276,31 @@ network_kegg_topology <- function(proj, condition = NULL, pathway_ids = NULL,
     xml2::xml_attr(entries, "id")
   )
 
+  ## `type="group"` entries (protein complexes) have no `name` of their
+  ## own -- KGML lists their members as <component id="..."/> children,
+  ## each referencing a type="gene" entry elsewhere in this same document.
+  ## A relation naming a complex as entry1/entry2 (common for receptor
+  ## complexes) would otherwise never resolve to any gene and be silently
+  ## dropped by the `is_gene_pair` check below. Resolve each group to the
+  ## union of its members' KEGG gene IDs and fold it into the same lookup
+  ## table, keyed by the group's own entry id, so the rest of this
+  ## function needs no group-specific branch.
+  group_entries <- xml2::xml_find_all(doc, "//entry[@type='group']")
+  if (length(group_entries) > 0) {
+    group_genes <- stats::setNames(
+      lapply(group_entries, function(g) {
+        comp_ids <- xml2::xml_attr(xml2::xml_find_all(g, "component"), "id")
+        ## A component id not found in entry_genes (e.g. a nested group,
+        ## against spec but not worth erroring over) is dropped, not an
+        ## error -- unlist() on a NULL element contributes nothing.
+        unlist(entry_genes[comp_ids], use.names = FALSE)
+      }),
+      xml2::xml_attr(group_entries, "id")
+    )
+    group_genes <- group_genes[lengths(group_genes) > 0]
+    entry_genes <- c(entry_genes, group_genes)
+  }
+
   rel_nodes <- xml2::xml_find_all(doc, "//relation")
   if (length(rel_nodes) == 0) {
     return(list(title = title, relations = .network_kegg_empty_relations()))
@@ -266,21 +316,35 @@ network_kegg_topology <- function(proj, condition = NULL, pathway_ids = NULL,
 
   e1 <- xml2::xml_attr(rel_nodes, "entry1")
   e2 <- xml2::xml_attr(rel_nodes, "entry2")
-  subtypes <- lapply(rel_nodes, function(r) xml2::xml_find_first(r, "subtype"))
-  sub_name <- vapply(subtypes, function(s) if (is.na(s)) NA_character_ else xml2::xml_attr(s, "name"), character(1))
-  sub_value <- vapply(subtypes, function(s) if (is.na(s)) NA_character_ else xml2::xml_attr(s, "value"), character(1))
-
   is_gene_pair <- e1 %in% names(entry_genes) & e2 %in% names(entry_genes)
   if (!any(is_gene_pair)) {
     return(list(title = title, relations = .network_kegg_empty_relations()))
   }
 
+  ## A <relation> can carry more than one <subtype> (e.g. a PPrel with
+  ## both "phosphorylation" and "activation" stacked) -- xml_find_first()
+  ## used to keep only the first and silently drop the rest. One output
+  ## row per subtype now (falling back to a single NA-subtype row when a
+  ## relation has none, same as before), cartesian-expanded against the
+  ## from/to gene sets exactly like the multi-gene-entry case already was.
   idx <- which(is_gene_pair)
   out <- do.call(rbind, lapply(idx, function(i) {
-    g <- expand.grid(from_kegg = entry_genes[[e1[i]]], to_kegg = entry_genes[[e2[i]]], stringsAsFactors = FALSE)
+    subtype_nodes <- xml2::xml_find_all(rel_nodes[[i]], "subtype")
+    if (length(subtype_nodes) == 0) {
+      sub_name <- NA_character_
+      sub_value <- NA_character_
+    } else {
+      sub_name <- xml2::xml_attr(subtype_nodes, "name")
+      sub_value <- xml2::xml_attr(subtype_nodes, "value")
+    }
+    g <- expand.grid(
+      from_kegg = entry_genes[[e1[i]]], to_kegg = entry_genes[[e2[i]]],
+      subtype_idx = seq_along(sub_name), stringsAsFactors = FALSE
+    )
     data.frame(
       from_kegg = g$from_kegg, to_kegg = g$to_kegg,
-      relation_type = rel_type[i], relation_subtype = sub_name[i], relation_value = sub_value[i],
+      relation_type = rel_type[i],
+      relation_subtype = sub_name[g$subtype_idx], relation_value = sub_value[g$subtype_idx],
       stringsAsFactors = FALSE
     )
   }))

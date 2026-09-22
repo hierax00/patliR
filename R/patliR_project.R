@@ -68,17 +68,25 @@ patliR_load <- function(project_dir, cache_dir = NULL) {
 
   compounds_path <- file.path(project_dir, "01_compounds.csv")
   if (file.exists(compounds_path)) {
-    compounds(proj) <- utils::read.csv(compounds_path, stringsAsFactors = FALSE)
+    compounds(proj) <- utils::read.csv(
+      compounds_path, stringsAsFactors = FALSE, colClasses = .patliR_compounds_colclasses
+    )
   }
 
   matrix_raw_path <- file.path(project_dir, "02_matrix_raw.csv")
   if (file.exists(matrix_raw_path)) {
-    matrixRaw(proj) <- utils::read.csv(matrix_raw_path, stringsAsFactors = FALSE, check.names = FALSE)
+    matrixRaw(proj) <- utils::read.csv(
+      matrix_raw_path, stringsAsFactors = FALSE, check.names = FALSE,
+      colClasses = .patliR_compound_id_colclass
+    )
   }
 
   binarized_path <- file.path(project_dir, "03_binarized.csv")
   if (file.exists(binarized_path)) {
-    binarizedMatrix(proj) <- utils::read.csv(binarized_path, stringsAsFactors = FALSE, check.names = FALSE)
+    binarizedMatrix(proj) <- utils::read.csv(
+      binarized_path, stringsAsFactors = FALSE, check.names = FALSE,
+      colClasses = .patliR_compound_id_colclass
+    )
   }
 
   log_path <- file.path(project_dir, "patliR_log.csv")
@@ -121,6 +129,39 @@ patliR_load <- function(project_dir, cache_dir = NULL) {
   string_version = "character",
   condition      = "character"
 )
+
+#' Identifier columns of `01_compounds.csv` that must survive
+#' [patliR_load()] as `character`, never re-typed by `read.csv()`'s value
+#' inference
+#'
+#' @description
+#' All six are validated as required by [`PatliRProject-class`] and every
+#' one of them can look purely numeric for a given project and so get
+#' silently re-typed on reload if not pinned: `pubchem_id` is usually all
+#' digits (becomes `integer`, dropping any leading zero a source database
+#' used), and `name`/`smiles`/`canonical_smiles`/`source` are free text
+#' that *happens* to contain no compound named e.g. `"TRUE"`/`"2e5"` only
+#' by chance for a given dataset -- `read.csv()` infers a column's type
+#' from the values actually present, not from any contract on what the
+#' column is supposed to hold. `id` (`"C0001"`-style, see
+#' `.next_compound_ids()`) never collides with a purely-numeric parse
+#' because of its letter prefix, but is included here too so this list is
+#' the full, load-bearing schema rather than "whatever happened not to
+#' need it yet".
+#' @keywords internal
+.patliR_compounds_colclasses <- c(
+  id = "character", pubchem_id = "character", name = "character",
+  smiles = "character", canonical_smiles = "character", source = "character"
+)
+
+#' `compound_id` in `02_matrix_raw.csv`/`03_binarized.csv` must survive
+#' [patliR_load()] as `character` for the same reason as
+#' `.patliR_compounds_colclasses()` -- these two tables otherwise have
+#' one column per experimental *condition* (user-chosen names,
+#' `check.names = FALSE` on purpose), so only the one column name common
+#' to every project can be pinned generically here.
+#' @keywords internal
+.patliR_compound_id_colclass <- c(compound_id = "character")
 
 .patliR_version <- function() {
   tryCatch(as.character(utils::packageVersion("patliR")), error = function(e) "0.0.0.dev")

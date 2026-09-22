@@ -198,11 +198,27 @@
 #'
 #' @description
 #' The structure-identity key is a CDK canonical SMILES (`Canonical` +
-#' `UseAromaticSymbols` flavor), not an InChIKey -- `rcdk` on CRAN has no
-#' InChIKey function. Deterministic within CDK, but **not** guaranteed to
-#' match the canonical SMILES another toolkit (RDKit, OpenBabel, PubChem,
-#' ChEMBL) produces for the same molecule; cross-platform joins
-#' (`adme_import()`, `refdb_build()`) account for this. See `DESIGN.md`.
+#' `UseAromaticSymbols` + `Stereo` flavor), not an InChIKey -- `rcdk` on
+#' CRAN has no InChIKey function. Deterministic within CDK, but **not**
+#' guaranteed to match the canonical SMILES another toolkit (RDKit,
+#' OpenBabel, PubChem, ChEMBL) produces for the same molecule;
+#' cross-platform joins (`adme_import()`, `refdb_build()`) account for
+#' this. See `DESIGN.md`.
+#'
+#' @section Stereochemistry is part of the identity key:
+#' The `Stereo` flavor bit is required, not optional -- without it, CDK's
+#' SMILES writer drops chirality (`@`/`@@`) and double-bond geometry
+#' (`/`/`\\`) markers, so two true enantiomers (or E/Z isomers) parse to
+#' the *same* canonical SMILES and [prep_compounds()]'s
+#' `duplicated(canonical_smiles)` dedup (`dedup = TRUE`, the default)
+#' silently drops one of them as if it were the same compound. Confirmed
+#' directly with CDK: `(R)`-2-chlorobutane and `(S)`-2-chlorobutane both
+#' canonicalize to `"ClC(C)CC"` without `Stereo`; with it, to
+#' `"CC[C@H](C)Cl"` / `"CC[C@@@@H](C)Cl"`. This key still does not
+#' distinguish isotopes, salts, or protonation states -- those are a
+#' separate, still-open question of what "same molecule" should mean for
+#' deduplication (see `DESIGN.md`/`ROADMAP.md`); this fix only restores
+#' the two stereo descriptors CDK is capable of writing.
 #'
 #' Also keeps the *real* rcdk/rJava error message instead of collapsing
 #' every failure into a generic "invalid" flag -- silently swallowing the
@@ -214,7 +230,7 @@
 #'   otherwise the actual condition message from rcdk/rJava).
 #' @keywords internal
 .check_structures <- function(smiles) {
-  flavor <- rcdk::smiles.flavors(c("Canonical", "UseAromaticSymbols"))
+  flavor <- rcdk::smiles.flavors(c("Canonical", "UseAromaticSymbols", "Stereo"))
   rows <- lapply(smiles, function(s) {
     if (is.na(s) || !nzchar(s)) {
       return(data.frame(valid = FALSE, canonical_smiles = NA_character_, error = "empty SMILES", stringsAsFactors = FALSE))

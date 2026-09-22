@@ -34,6 +34,24 @@ test_that("canonical_smiles is deterministic across two equivalent SMILES for th
   expect_equal(nrow(compounds(proj)), 1)
 })
 
+test_that("prep_compounds() keeps two enantiomers as distinct compounds under dedup = TRUE (regression: missing Stereo flavor used to collapse them)", {
+  proj <- .test_project()
+  ## (R)- and (S)-2-chlorobutane: same connectivity, genuinely different
+  ## molecules. Before .check_structures() included the CDK `Stereo`
+  ## flavor bit, both canonicalized to the same achiral SMILES and the
+  ## second was silently dropped here as a "duplicate" of the first.
+  enantiomers <- data.frame(
+    Name = c("(R)-2-chlorobutane", "(S)-2-chlorobutane"), CAS = NA,
+    PubChemCID = c("999901", "999902"),
+    SMILES = c("CC[C@H](C)Cl", "CC[C@@H](C)Cl"), stringsAsFactors = FALSE
+  )
+  proj <- prep_compounds(proj, enantiomers, identifier = "pubchem", dedup = TRUE)
+
+  cmp <- compounds(proj)
+  expect_equal(nrow(cmp), 2)
+  expect_false(identical(cmp$canonical_smiles[1], cmp$canonical_smiles[2]))
+})
+
 test_that("duplicate compounds (same canonical SMILES) are logged and dropped", {
   proj <- .test_project()
   one <- .test_single_compound()

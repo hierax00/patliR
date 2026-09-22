@@ -13,15 +13,33 @@ otherwise the actual condition message from rcdk/rJava).
 }
 \description{
 The structure-identity key is a CDK canonical SMILES (\code{Canonical} +
-\code{UseAromaticSymbols} flavor), not an InChIKey -- \code{rcdk} on CRAN has no
-InChIKey function. Deterministic within CDK, but \strong{not} guaranteed to
-match the canonical SMILES another toolkit (RDKit, OpenBabel, PubChem,
-ChEMBL) produces for the same molecule; cross-platform joins
-(\code{adme_import()}, \code{refdb_build()}) account for this. See \code{DESIGN.md}.
+\code{UseAromaticSymbols} + \code{Stereo} flavor), not an InChIKey -- \code{rcdk} on
+CRAN has no InChIKey function. Deterministic within CDK, but \strong{not}
+guaranteed to match the canonical SMILES another toolkit (RDKit,
+OpenBabel, PubChem, ChEMBL) produces for the same molecule;
+cross-platform joins (\code{adme_import()}, \code{refdb_build()}) account for
+this. See \code{DESIGN.md}.
+}
+\section{Stereochemistry is part of the identity key}{
+
+The \code{Stereo} flavor bit is required, not optional -- without it, CDK's
+SMILES writer drops chirality (\code{@}/\code{@}) and double-bond geometry
+(\code{/}/\verb{\\\\}) markers, so two true enantiomers (or E/Z isomers) parse to
+the \emph{same} canonical SMILES and \code{\link[=prep_compounds]{prep_compounds()}}'s
+\code{duplicated(canonical_smiles)} dedup (\code{dedup = TRUE}, the default)
+silently drops one of them as if it were the same compound. Confirmed
+directly with CDK: \code{(R)}-2-chlorobutane and \code{(S)}-2-chlorobutane both
+canonicalize to \code{"ClC(C)CC"} without \code{Stereo}; with it, to
+\code{"CC[C@H](C)Cl"} / \code{"CC[C@@H](C)Cl"}. This key still does not
+distinguish isotopes, salts, or protonation states -- those are a
+separate, still-open question of what "same molecule" should mean for
+deduplication (see \code{DESIGN.md}/\code{ROADMAP.md}); this fix only restores
+the two stereo descriptors CDK is capable of writing.
 
 Also keeps the \emph{real} rcdk/rJava error message instead of collapsing
 every failure into a generic "invalid" flag -- silently swallowing the
 underlying Java exception is exactly what made the InChIKey bug above
 impossible to diagnose from the log alone.
 }
+
 \keyword{internal}

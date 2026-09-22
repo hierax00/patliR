@@ -38,6 +38,33 @@ test_that(".fetch_external() still surfaces a plain (brace-free) failure message
   expect_null(result)
 })
 
+test_that(".check_structures() keeps stereochemistry in the canonical SMILES -- regression: the CDK flavor used to omit `Stereo`, so true enantiomers collapsed to an identical structure-identity key", {
+  ## (R)- and (S)-2-chlorobutane: same connectivity, genuinely different
+  ## molecules (opposite optical rotation, can have different
+  ## pharmacology). Without the `Stereo` SMILES flavor bit, CDK's writer
+  ## drops the `@`/`@@` chirality marker and both canonicalize to
+  ## "ClC(C)CC" -- identical keys, so prep_compounds()'s
+  ## duplicated(canonical_smiles) dedup would silently drop one as if it
+  ## were the same compound as the other.
+  s_r <- "CC[C@H](C)Cl"
+  s_s <- "CC[C@@H](C)Cl"
+
+  out <- patliR:::.check_structures(c(s_r, s_s))
+  expect_true(all(out$valid))
+  expect_false(identical(out$canonical_smiles[1], out$canonical_smiles[2]))
+})
+
+test_that(".check_structures() keeps double-bond (E/Z) geometry in the canonical SMILES", {
+  ## (E)- and (Z)-2-butene: same reasoning as the chirality case above,
+  ## for the `/`/`\\` geometry markers instead of `@`/`@@`.
+  s_e <- "C/C=C/C"
+  s_z <- "C/C=C\\C"
+
+  out <- patliR:::.check_structures(c(s_e, s_z))
+  expect_true(all(out$valid))
+  expect_false(identical(out$canonical_smiles[1], out$canonical_smiles[2]))
+})
+
 test_that(".match_column_flexible() prefers an exact match", {
   available <- c("Probability", "probability_2", "*Probability")
   expect_equal(patliR:::.match_column_flexible(available, "Probability"), "Probability")

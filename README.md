@@ -163,7 +163,7 @@ A worked end-to-end script against a real dataset lives in
 | `disease_genes_*` | independent disease gene module for `network_proximity()` (Open Targets, or a curated import) |
 | `targets_disease_profile()` / `plot_disease_network()` | every target's Open Targets disease landscape (one named disease, or each target's top-N); compound-target-disease network with disease nodes as hulled blocks |
 | `network_*` | build, enrich, centrality/hub-penalty, module robustness, motifs, degeneracy, proximity, synergy, bow-tie, KEGG pathview + directed KEGG topology, proteome filter |
-| `plot_*` | 16 static/interactive figures for every result above |
+| `plot_*` | 20 static/interactive figures for every result above |
 | `bias_*` | MAD-based "promiscuous compound/target" flag against the reference DB |
 | `rank_candidates()` / `plot_rank()` | Robust Rank Aggregation over ADME + network criteria into one ranked table, with Pareto/heatmap views |
 | `report_generate()` | one self-contained HTML report per condition |

@@ -16,6 +16,14 @@ Productos Naturales, UAQ.
 
 ## The pipeline
 
+Three stages, each a short chain of pure functions. Two entry points feed
+stage 1: a **curated compound list** (`prep_compounds`) or a **raw abundance
+matrix** (`prep_binarize`). Everything downstream is shared. The network
+layer keys off one graph per experimental *condition*; with a plain list,
+`prep_as_condition()` makes the whole list a single condition.
+
+### 1. Compounds to triage
+
 ```mermaid
 flowchart TD
     subgraph input [" "]
@@ -24,73 +32,76 @@ flowchart TD
     end
 
     L --> PC["<b>prep_compounds</b><br/>validate structures"]
-    M --> PB["<b>prep_binarize</b><br/>average replicates → presence/absence"]
-    L -.list-only.-> PAC["<b>prep_as_condition</b><br/>list = one extract"]
+    M --> PB["<b>prep_binarize</b><br/>presence/absence"]
+    L -.list-only.-> PAC["<b>prep_as_condition</b>"]
     PC --> PAC
 
     subgraph chem ["identity & chemistry"]
         RDB["<b>refdb_build</b><br/>PubChem · ChEMBL"]
-        CL["<b>compounds_classify</b><br/>NPClassifier family"]
-        S2D["<b>prep_structure2d</b>"]
+        CL["<b>compounds_classify</b><br/>NPClassifier"]
         SIM["<b>compounds_similarity</b>"]
     end
-    PC --> RDB & CL & S2D & SIM
+    PC --> RDB & CL & SIM
 
-    subgraph pk ["physchem · ADME · toxicity"]
-        AL["<b>adme_local</b><br/>Ro5 · Veber · Ghose · Egan · Oprea · BOILED-Egg"]
+    subgraph pk ["ADME · toxicity"]
+        AL["<b>adme_local</b><br/>Ro5 · BOILED-Egg"]
         AF["<b>adme_filter</b>"]
-        AI["<b>adme_import</b> ← SwissADME / ADMETlab"]
         TL["<b>tox_local</b><br/>PAINS · Brenk"]
-        TS["<b>tox_safetyome</b><br/>500-gene safety panel"]
         TR["<b>tox_report</b>"]
     end
     PC --> AL --> AF
-    AI --> AF
     PC --> TL --> TR
-    TS --> TR
 
     TR --> CSV[["triage CSV<br/><i>pick the shortlist here</i>"]]
     AF --> CSV
+```
 
-    CSV --> TI["<b>targets_import</b> ← SuperPred / SwissTarget"]
-    PB --> NB
-    PAC --> NB
+*(Import bridges not shown: `adme_import()`/`tox_import()` bring in
+SwissADME/ADMETlab results, `tox_safetyome()` adds the 500-gene safety
+panel, `prep_structure2d()` renders 2-D depictions.)*
+
+### 2. Targets to network
+
+```mermaid
+flowchart TD
+    CSV[["triage CSV<br/><i>shortlist from stage 1</i>"]] --> TI["<b>targets_import</b><br/>← SuperPred / SwissTarget"]
+    PB["prep_binarize"] & PAC["prep_as_condition"] --> NB
     TI --> NB["<b>network_build</b><br/>compound–target graph / condition"]
 
-    DG["<b>disease_genes_fetch</b><br/>independent disease module<br/>(Open Targets, min_score = 0.4)"]
+    DG["<b>disease_genes_fetch</b><br/>independent disease module<br/>(Open Targets)"]
 
     subgraph net ["network pharmacology"]
-        NE["<b>network_enrich</b><br/>GO · Reactome · KEGG (universe = project)"]
-        NC["<b>network_centrality</b> · <b>hub_penalty</b>"]
-        NMR["<b>module_robustness</b><br/>R-index percolation"]
-        NM["<b>network_motifs</b> · <b>degeneracy</b>"]
-        NP["<b>network_proximity</b><br/>distance to disease module"]
+        NE["<b>network_enrich</b><br/>GO · Reactome · KEGG"]
+        NC["<b>network_centrality</b> + <b>hub_penalty</b>"]
+        NMR["<b>module_robustness</b>"]
+        NM["<b>network_motifs</b> + <b>degeneracy</b>"]
+        NP["<b>network_proximity</b><br/>to disease module"]
         NS["<b>network_synergy</b><br/>Cheng P1-P6"]
         NBT["<b>network_bowtie</b>"]
-        NKT["<b>network_kegg_topology</b><br/>directed KGML relations"]
+        NKT["<b>network_kegg_topology</b>"]
     end
     NB --> NE --> NC --> NMR --> NM
     DG --> NP
     NB --> NP --> NS
     NB --> NBT
     NE --> NKT
+```
 
-    TDP["<b>targets_disease_profile</b><br/>every target's disease landscape<br/>(Open Targets)"]
-    TI --> TDP --> DNET["<b>plot_disease_network</b><br/>disease nodes as hulled blocks"]
+### 3. Disease profile, ranking & report
 
-    NE & NC & NMR & NP --> PLOTS["<b>plot_*</b><br/>20 publication figures<br/>+ 3-axis chemical space"]
-    TR --> BIAS["<b>bias_audit</b><br/>database-bias flag"]
-    RDB --> BIAS
+```mermaid
+flowchart TD
+    TI["targets_import"] --> TDP["<b>targets_disease_profile</b><br/>each target's disease landscape"]
+    TDP --> DNET["<b>plot_disease_network</b><br/>disease nodes as hulled blocks"]
 
-    NC & NMR & NP & NS & AF --> RC["<b>rank_candidates</b><br/>Robust Rank Aggregation"]
+    NC["network_centrality"] & NMR["module_robustness"] & NP["network_proximity"] --> PLOTS["<b>plot_*</b><br/>20 figures"]
+
+    TR["tox_report"] & RDB["refdb_build"] --> BIAS["<b>bias_audit</b>"]
+
+    NC & NMR & NP & NS["network_synergy"] & AF["adme_filter"] --> RC["<b>rank_candidates</b><br/>Robust Rank Aggregation"]
     RC --> PR["<b>plot_rank</b><br/>Pareto · heatmap"]
     RC --> RG["<b>report_generate</b><br/>one HTML per condition"]
 ```
-
-Two entry points: a **curated compound list** (`prep_compounds`) or a **raw
-abundance matrix** (`prep_binarize`). Everything downstream is shared. The
-network layer keys off one graph per experimental *condition*; with a plain
-list, `prep_as_condition()` makes the whole list a single condition.
 
 ## Install
 
@@ -174,6 +185,198 @@ Everything is documented on its own help page.
 actually computes and the theory behind it. For the cross-cutting design
 decisions see [`DESIGN.md`](DESIGN.md); for what is designed but not yet
 built see [`ROADMAP.md`](ROADMAP.md).
+
+## Command reference
+
+Every exported function with its configurable parameters (defaults shown).
+`proj` is always the `PatliRProject` object returned by the previous step.
+
+```r
+# prep_*
+prep_compounds(proj, data, identifier = c("pubchem", "smiles"), id_col = NULL,
+                name_col = NULL, dedup = TRUE,
+                on_missing_smiles = c("abort", "fetch", "drop"),
+                fetch_mode = c("warn_and_cache", "abort"))
+prep_binarize(proj, data, id_col = "Name", average_replicates = TRUE, q = 0.25)
+prep_as_condition(proj, condition = "all", compound_ids = NULL)
+prep_structure2d(proj, engine = c("rcdk", "chemminer"), out_dir = NULL)
+
+# refdb_*
+refdb_build(proj, sources = c("pubchem", "chembl"), compound_ids = NULL,
+            fetch_mode = c("warn_and_cache", "abort"))
+refdb_update(proj, compound_ids, sources = c("pubchem", "chembl"),
+             fetch_mode = c("warn_and_cache", "abort"))
+refdb_rebuild_cache(proj)
+
+# compounds_*
+compounds_classify(proj, compound_ids = NULL,
+                    fetch_mode = c("warn_and_cache", "abort"))
+compounds_similarity(proj, compound_ids = NULL,
+                      fingerprint_type = c("standard", "extended", "circular",
+                                            "maccs", "pubchem"),
+                      method = c("tanimoto", "dice", "cosine"))
+
+# adme_*
+adme_local(proj, compound_ids = NULL,
+           routes = c("oral", "topical", "ophthalmic", "injectable"))
+adme_filter(proj, rules = c("ro5", "veber", "ghose", "egan", "oprea", "route"),
+            source = c("local", "imported"), hard_cutoff = FALSE,
+            ask = interactive())
+adme_import(proj, path, platform = c("swissadme", "admetlab", "other"),
+            column_map = NULL, mapping_file = NULL)
+adme_export_smiles(proj, compound_ids = NULL, out_file = NULL)
+
+# tox_*
+tox_local(proj, compound_ids = NULL, alert_sets = c("pains", "brenk"))
+tox_safetyome(proj, compound_ids = NULL)
+tox_import(proj, path, platform = c("admetlab", "swissadme", "other"),
+           column_map = NULL, mapping_file = NULL)
+tox_export_smiles(proj, compound_ids = NULL, out_file = NULL)
+tox_report(proj)
+
+# targets_* / disease_genes_*
+targets_import(proj, path,
+                platform = c("swisstargetprediction", "superpred", "other"),
+                target_col = NULL, probability_col = NULL,
+                confidence_col = NULL, id_from = c("filename", "column"),
+                compound_col = NULL)
+targets_import_batch(proj, dir,
+                      platform = c("swisstargetprediction", "superpred", "other"),
+                      target_col = NULL, probability_col = NULL,
+                      confidence_col = NULL)
+targets_disease_filter(proj, disease, source = c("open_targets"),
+                        min_score = NULL,
+                        fetch_mode = c("warn_and_cache", "abort"))
+targets_disease_profile(proj, disease = NULL, top_n_diseases = 5,
+                         source = c("open_targets"), min_score = NULL,
+                         fetch_mode = c("warn_and_cache", "abort"))
+disease_genes_fetch(proj, disease, source = c("open_targets"),
+                     min_score = 0.4,
+                     fetch_mode = c("warn_and_cache", "abort"))
+disease_genes_import(proj, table, disease_id, disease_name = NULL,
+                      source = "manual", uniprot_col = NULL,
+                      gene_symbol_col = NULL, score_col = NULL,
+                      map_symbols = FALSE)
+
+# network_*
+network_build(proj, condition = NULL,
+              target_source = c("imported", "consensus", "bipartite"),
+              min_score = NULL)
+network_enrich(proj, condition = NULL, db = c("reactome", "go", "kegg"),
+               ont = c("BP", "MF", "CC", "ALL"),
+               universe = c("project", "genome"), pvalueCutoff = 0.05,
+               qvalueCutoff = 0.2, pAdjustMethod = "BH",
+               simplify_go = TRUE, simplify_cutoff = 0.7)
+network_centrality(proj, condition = NULL,
+                    measures = c("degree", "betweenness", "hub_score"),
+                    normalize = TRUE)
+network_hub_penalty(proj, condition = NULL)
+network_module_robustness(proj, condition = NULL,
+                           clustering = c("leiden", "bipartite", "hdbscan"),
+                           attack = c("targeted", "random", "both"),
+                           resolution = 1, n_iterations = 5L,
+                           min_module_size = 2, min_component_size = 3L,
+                           n_random = 20L, seed = NULL)
+network_motifs(proj, condition = NULL, n_cores = 1L, pathway_db = NULL)
+network_degeneracy(proj, condition = NULL,
+                    annotation = c("direct", "enriched", "jaccard"),
+                    ont = c("BP", "MF", "CC"),
+                    measure = c("Wang", "Resnik", "Lin", "Rel", "Jiang"),
+                    combine = c("BMA", "max", "avg", "rcmax"), drop = "IEA",
+                    universe = c("project", "condition", "genome"),
+                    n_random = 200, seed = NULL, pathway_db = NULL)
+network_proximity(proj, condition = NULL, disease,
+                   disease_genes = c("disease_genes", "targets_disease"),
+                   species = 9606, version = "12.0", score_threshold = 400,
+                   n_random = 1000, seed = NULL, store_null = FALSE)
+network_synergy(proj, condition = NULL, disease,
+                 pairs = c("rank_top", "all"), top_n = 10,
+                 separation = c("network", "jaccard"), alpha = 0.05,
+                 species = 9606, version = "12.0", score_threshold = 400,
+                 disease_gene_source = c("disease_genes", "targets_disease"))
+network_bowtie(proj, condition = NULL, species = 9606, version = "12.0",
+               actions_version = "11.0", actions_score_threshold = 400)
+network_kegg_topology(proj, condition = NULL, pathway_ids = NULL,
+                       species = "hsa",
+                       relation_types = c("PPrel", "GErel", "ECrel", "PCrel"),
+                       restrict_to_network = TRUE)
+network_filter_proteome(proj, proteome, condition = NULL,
+                         proteome_label = NULL)
+network_pathview(proj, condition = NULL,
+                  gene_score = c("max_weight", "mean_weight", "n_compounds"),
+                  pathway_id = NULL, top_n_pathways = 10, low = "white",
+                  mid = "yellow", high = "red", out_dir = NULL,
+                  kegg_dir = NULL)
+
+# bias_*
+bias_audit(proj, check_homogeneity = TRUE, mad_threshold = 2.5,
+           categories = NULL)
+bias_report(proj)
+bias_reweight(proj)
+
+# rank_candidates() / report_generate()
+rank_candidates(proj, condition = NULL, disease = NULL, criteria = NULL,
+                 roll_up = c("weighted_mean", "mean", "max"), top_n = 15,
+                 export = c("none", "sdf", "smi"))
+report_generate(proj, condition = NULL, out_dir = NULL, top_n = 15)
+
+# plot_* (all share save = TRUE, out_dir = NULL, width/height, dpi = 150)
+plot_chemical_space(proj, condition = NULL, compound_ids = NULL, dims = 2,
+                     method = c("pca", "umap"), color_by = "family",
+                     show_hulls = TRUE, seed = NULL,
+                     engine = c("ggiraph", "static", "plotly"), ...)
+plot_disease_network(proj, condition = NULL, disease = NULL, max_rank = NULL,
+                      compound_ids = NULL, engine = c("static", "ggiraph"), ...)
+plot_network_layers(proj, condition = NULL, engine = c("static", "ggiraph"),
+                     layout = c("fr", "kk", "drl", "bipartite"),
+                     colour_by = c("layer", "module", "node_type"),
+                     top_hub_n = 15, seed = 1,
+                     layers = c("compound", "target"), max_pathways = 30,
+                     pathway_db = NULL, ...)
+plot_network_degeneracy(proj, condition = NULL, engine = c("static", "ggiraph"),
+                         layout = c("fr", "kk", "drl", "bipartite"),
+                         colour_by = c("layer", "module", "node_type"),
+                         top_hub_n = 15, seed = 1,
+                         filter = c("p_adjusted", "score"),
+                         min_degeneracy = 0.3, alpha = 0.05, ...)
+plot_centrality(proj, condition = NULL,
+                 measure = c("degree", "betweenness", "hub_score",
+                              "degree_norm", "betweenness_norm"),
+                 node_type = c("both", "compound", "target"), top_n = 20,
+                 engine = c("static", "ggiraph"), ...)
+plot_robustness(proj, condition = NULL, module_id = NULL,
+                 engine = c("static", "ggiraph"), ...)
+plot_proximity(proj, condition = NULL, disease = NULL,
+               view = c("z", "null"), top_n = 12,
+               engine = c("static", "ggiraph"), ...)
+plot_synergy(proj, condition = NULL, disease = NULL, top_n = 5,
+             engine = c("static", "ggiraph"), ...)
+plot_bowtie(proj, condition = NULL, top_n_compounds = NULL, ...)
+plot_target_chord(proj, condition = NULL, actions_score_threshold = 400,
+                   top_n_labels = 15, engine = c("static", "ggiraph"), ...)
+plot_gochord(proj, condition = NULL, db = NULL, top_n_terms = 10,
+             engine = c("static", "ggiraph"), ...)
+plot_enrichment(proj, condition = NULL, db = NULL, top_n = 20,
+                 engine = c("static", "ggiraph"), ...)
+plot_heatmap(proj, condition = NULL,
+             what = c("compound_target", "compound_condition"), ...)
+plot_rank(proj, condition = NULL, view = c("pareto", "heatmap"), x = NULL,
+          y = NULL, top_n_compounds = 15, top_n_targets = 20,
+          target_relevance = c("breadth", "weight", "centrality"),
+          engine = c("static", "ggiraph"), ...)
+plot_structure2d(proj, compound_ids = NULL, ncol = 4, ...)
+plot_boiled_egg(proj, compound_ids = NULL, engine = c("ggiraph", "static"), ...)
+plot_admet_radar(proj, compound_ids = NULL, engine = c("ggiraph", "static"), ...)
+plot_adme_upset(proj, top_n = 15, ...)
+plot_upset(proj, condition = NULL, top_n = 15, ...)
+plot_venn(proj, condition = NULL, disease = NULL,
+          sets = c("compound_targets", "disease_targets"), ...)
+
+# project-level utilities
+patliR_project(project_dir, cache_dir = NULL)
+patliR_load(project_dir, cache_dir = NULL)
+patliR_export_llm(proj, out_file = NULL, max_rows = 200)
+```
 
 ## Design in one paragraph
 

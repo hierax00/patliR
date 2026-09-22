@@ -149,7 +149,8 @@ ui <- fluidPage(
             column(4,
               wellPanel(
                 h4("refdb_build()"),
-                checkboxGroupInput("refdb_sources", "Fuentes", c("pubchem", "chembl", "coconut"), selected = "pubchem"),
+                ## Add coconut when refdb_build() supports it.
+                checkboxGroupInput("refdb_sources", "Fuentes", c("pubchem", "chembl"), selected = "pubchem"),
                 selectInput("refdb_fetch_mode", "Modo de búsqueda externa", c("warn_and_cache", "abort")),
                 actionButton("btn_refdb_build", "Construir base de referencia", class = "btn-primary")
               )
@@ -227,12 +228,20 @@ ui <- fluidPage(
                 fileInput("tgt_file", "Predicción de blancos (CSV)", accept = ".csv"),
                 selectInput("tgt_platform", "Plataforma", c("swisstargetprediction", "superpred", "other")),
                 selectInput("tgt_id_from", "Compuesto identificado por", c("filename", "column")),
+                textInput("tgt_target_col", "Columna de blanco (UniProt ID)", value = ""),
+                textInput("tgt_probability_col", "Columna de probabilidad", value = ""),
+                textInput("tgt_confidence_col", "Columna de confianza (opcional)", value = ""),
+                helpText("Blanco y probabilidad son obligatorios para SwissTargetPrediction/Other. SuperPred usa valores predeterminados si se dejan vacíos."),
                 actionButton("btn_targets_import", "Importar blancos (1 archivo)", class = "btn-primary")
               ),
               wellPanel(
                 h4("targets_import_batch()"),
                 textInput("tgt_batch_dir", "Carpeta con varios archivos (ruta en el servidor)", value = ""),
                 selectInput("tgt_batch_platform", "Plataforma", c("swisstargetprediction", "superpred", "other")),
+                textInput("tgt_batch_target_col", "Columna de blanco (UniProt ID)", value = ""),
+                textInput("tgt_batch_probability_col", "Columna de probabilidad", value = ""),
+                textInput("tgt_batch_confidence_col", "Columna de confianza (opcional)", value = ""),
+                helpText("Blanco y probabilidad son obligatorios para SwissTargetPrediction/Other. SuperPred usa valores predeterminados si se dejan vacíos."),
                 actionButton("btn_targets_import_batch", "Importar blancos (carpeta)")
               ),
               wellPanel(
@@ -458,9 +467,9 @@ server <- function(input, output, session) {
   })
   render_table_server(output, "adme_table", function() {
     req(rv$proj)
-    res <- patliR::patliRResults(rv$proj, "adme_local")
+    res <- patliR::patliRResults(rv$proj, "adme_filtered")
+    if (is.null(res)) res <- patliR::patliRResults(rv$proj, "adme_local")
     if (is.null(res)) res <- patliR::patliRResults(rv$proj, "adme_imported")
-    if (is.null(res)) res <- patliR::patliRResults(rv$proj, "adme_filtered")
     req(res)
     res
   })
@@ -499,16 +508,35 @@ server <- function(input, output, session) {
   ## 7. Blancos ------------------------------------------------------------
   observeEvent(input$btn_targets_import, {
     req(rv$proj, input$tgt_file)
+    target_col <- if (nzchar(input$tgt_target_col)) input$tgt_target_col else NULL
+    probability_col <- if (nzchar(input$tgt_probability_col)) input$tgt_probability_col else NULL
+    confidence_col <- if (nzchar(input$tgt_confidence_col)) input$tgt_confidence_col else NULL
     run_step(rv, function() {
+      path <- input$tgt_file$datapath
+      if (input$tgt_id_from == "filename") {
+        ## Shiny's datapath has a generated name; preserve the uploaded CID.
+        upload_dir <- tempfile("patliR_targets_")
+        if (!dir.create(upload_dir)) stop("No se pudo crear la carpeta temporal de blancos.")
+        on.exit(unlink(upload_dir, recursive = TRUE), add = TRUE)
+        path <- file.path(upload_dir, basename(input$tgt_file$name))
+        if (!file.copy(input$tgt_file$datapath, path)) stop("No se pudo copiar el archivo de blancos.")
+      }
       patliR::targets_import(
-        rv$proj, input$tgt_file$datapath, platform = input$tgt_platform, id_from = input$tgt_id_from
+        rv$proj, path, platform = input$tgt_platform, id_from = input$tgt_id_from,
+        target_col = target_col, probability_col = probability_col, confidence_col = confidence_col
       )
     }, "Blancos importados.")
   })
   observeEvent(input$btn_targets_import_batch, {
     req(rv$proj, nzchar(input$tgt_batch_dir))
+    target_col <- if (nzchar(input$tgt_batch_target_col)) input$tgt_batch_target_col else NULL
+    probability_col <- if (nzchar(input$tgt_batch_probability_col)) input$tgt_batch_probability_col else NULL
+    confidence_col <- if (nzchar(input$tgt_batch_confidence_col)) input$tgt_batch_confidence_col else NULL
     run_step(rv, function() {
-      patliR::targets_import_batch(rv$proj, input$tgt_batch_dir, platform = input$tgt_batch_platform)
+      patliR::targets_import_batch(
+        rv$proj, input$tgt_batch_dir, platform = input$tgt_batch_platform,
+        target_col = target_col, probability_col = probability_col, confidence_col = confidence_col
+      )
     }, "Blancos importados (carpeta).")
   })
   observeEvent(input$btn_targets_disease, {

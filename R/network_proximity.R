@@ -401,14 +401,12 @@ network_proximity <- function(proj, condition = NULL, disease,
     result$n_tests_in_family <- nrow(result)
     result$p_adjusted <- stats::p.adjust(result$p_empirical, method = "BH")
   }
-  ## Every (condition, compound) pair attempted this call is a recomputed
-  ## slot -- pass them explicitly so a compound that now yields no row
-  ## (e.g. it lost its last STRING-mappable target) drops its stale row.
-  touched_keys <- unique(edges_all[edges_all$condition %in% conditions, c("condition", "compound_id"), drop = FALSE])
-  touched_keys$disease_id <- disease
+  ## Recompute the whole condition/disease, including compounds that lost
+  ## every edge and therefore no longer occur in the current edge table.
+  touched_keys <- data.frame(condition = conditions, disease_id = disease, stringsAsFactors = FALSE)
   result <- .network_upsert(
     proj, "network_proximity", result,
-    c("condition", "disease_id", "compound_id"), touched_keys = touched_keys
+    c("condition", "disease_id"), touched_keys = touched_keys
   )
 
   patliRResults(proj, "network_proximity") <- result

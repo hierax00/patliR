@@ -384,6 +384,38 @@ test_that(".network_upsert() back-fills the new proximity provenance columns on 
   expect_true(all(c("X", "Y") %in% merged$condition))
 })
 
+test_that("network_proximity() drops stale scores after a compound loses all edges", {
+  skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  edges <- patliRResults(proj, "network_edges")
+  ids <- unique(edges$uniprot_id)
+  proj <- disease_genes_import(
+    proj, data.frame(uniprot_id = ids),
+    disease_id = "D_RERUN", disease_name = "synthetic", source = "synthetic"
+  )
+  fake <- .fake_string_db(ids)
+  local_mocked_bindings(.network_stringdb = function(...) fake, .package = "patliR")
+  proj <- network_proximity(proj, condition = c("FLO-ET", "LEA-ET"),
+                            disease = "D_RERUN", n_random = 12, seed = 1)
+  before <- patliRResults(proj, "network_proximity")
+  removed <- before$compound_id[before$condition == "FLO-ET"][1]
+  other_disease <- before[before$condition == "FLO-ET", , drop = FALSE]
+  other_disease$disease_id <- "D_OTHER"
+  patliRResults(proj, "network_proximity") <- rbind(before, other_disease)
+  patliRResults(proj, "network_edges") <- edges[
+    !(edges$condition == "FLO-ET" & edges$compound_id == removed), , drop = FALSE]
+
+  proj <- network_proximity(proj, condition = "FLO-ET", disease = "D_RERUN",
+                            n_random = 12, seed = 1)
+  after <- patliRResults(proj, "network_proximity")
+  current <- after[after$condition == "FLO-ET" & after$disease_id == "D_RERUN", ]
+  expect_false(removed %in% current$compound_id)
+  expect_equal(nrow(current), sum(before$condition == "FLO-ET") - 1L)
+  expect_equal(after$z_score[after$condition == "LEA-ET"],
+               before$z_score[before$condition == "LEA-ET"])
+  expect_equal(after$compound_id[after$disease_id == "D_OTHER"], other_disease$compound_id)
+})
+
 test_that("network_proximity() end-to-end is not exercised automatically -- needs a real STRING download", {
   testthat::skip_if_not_installed("STRINGdb")
   skip_on_cran()

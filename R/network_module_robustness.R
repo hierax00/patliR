@@ -309,7 +309,9 @@ network_module_robustness <- function(proj, condition = NULL,
         )
       }
       if (attack %in% c("random", "both")) {
-        perc_r <- .network_percolate_random(sub_g, seed = .derive_seed(seed, 1000 * i), n_random = n_random)
+        ## Reserve enough seeds for every replicate: a fixed stride of
+        ## 1000 reused the preceding module's draws when n_random > 1000.
+        perc_r <- .network_percolate_random(sub_g, seed = .derive_seed(seed, max(1000, n_random) * i), n_random = n_random)
         r_index_random <- perc_r$r_index
         strat_curves$random <- data.frame(
           n_removed = seq_along(perc_r$curve) - 1L,

@@ -281,6 +281,30 @@ test_that("a near-.Machine$integer.max seed does not overflow the random sub-see
   )
 })
 
+test_that("random robustness does not reuse replicate seeds across modules above 1000 draws", {
+  proj <- .network_stats_test_setup()
+  .save_cache_graph(.two_k33(bridge = FALSE), proj, "FLO-ET")
+  seeds <- integer(0)
+  with_seed <- patliR:::.with_seed
+  local_mocked_bindings(
+    .with_seed = function(seed) {
+      seeds <<- c(seeds, seed)
+      with_seed(seed)
+    },
+    .package = "patliR"
+  )
+  proj <- network_module_robustness(
+    proj, condition = "FLO-ET", attack = "random", min_component_size = 7L,
+    n_random = 1001L, seed = .Machine$integer.max - 3L
+  )
+  result <- patliRResults(proj, "network_module_robustness")
+  expect_equal(nrow(result), 2L)
+  ## One clustering seed, then 1001 independent draws for each module.
+  expect_length(seeds, 2003L)
+  expect_equal(anyDuplicated(seeds[-1]), 0L)
+  expect_true(all(is.finite(result$r_index_random)))
+})
+
 test_that("network_module_robustness() rejects n_random < 2 for a random attack (S3)", {
   proj <- .network_stats_test_setup()
   expect_error(

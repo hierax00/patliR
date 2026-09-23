@@ -366,7 +366,7 @@ targets_disease_profile <- function(proj, disease = NULL, top_n_diseases = 5,
     compound_id = merged$compound_id, target_id = merged$uniprot_id,
     disease_id = merged$disease_id, disease_name = merged$disease_name,
     association_score = merged$association_score, evidence = merged$evidence,
-    rank = merged$rank, mode = mode, stringsAsFactors = FALSE
+    rank = merged$rank, mode = rep(mode, nrow(merged)), stringsAsFactors = FALSE
   )
   result <- unique(result)
 

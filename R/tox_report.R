@@ -69,7 +69,8 @@ tox_report <- function(proj) {
   safetyome_res <- patliRResults(proj, "tox_safetyome")
   imported_res <- patliRResults(proj, "tox_imported")
 
-  if (is.null(local_res) && is.null(safetyome_res) && is.null(imported_res)) {
+  if (all(vapply(list(local_res, safetyome_res, imported_res),
+                 function(x) is.null(x) || nrow(x) == 0, logical(1)))) {
     cli::cli_warn(paste(
       "No {.val tox_local}, {.val tox_safetyome}, or {.val tox_imported}",
       "results found; run {.fn tox_local}, {.fn tox_safetyome}, and/or",

@@ -102,7 +102,7 @@ tox_local <- function(proj, compound_ids = NULL, alert_sets = c("pains", "brenk"
     }
     matched <- vapply(alerts$smarts, function(sm) {
       res <- tryCatch(rcdk::matches(sm, mol), error = function(e) NA)
-      isTRUE(res[1])
+      if (length(res) == 0 || is.na(res[1])) NA else isTRUE(res[1])
     }, logical(1))
     data.frame(
       compound_id = id, alert_set = alerts$alert_set, alert_name = alerts$alert_name,

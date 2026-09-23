@@ -72,11 +72,40 @@
   proj
 }
 
+#' Write a CSV without ever leaving a partially-written file at `path`
+#'
+#' @description
+#' `write.csv(data, path, ...)` writes directly to the final path; a crash,
+#' power loss, or kill signal partway through leaves `path` truncated --
+#' for the three callers below, that file *is* DESIGN.md's "durable,
+#' portable source of truth", so a partial write there is silent data
+#' loss on the next [patliR_load()], not just a rerun-and-move-on
+#' inconvenience. Write to a temp file in the *same* directory (so the
+#' rename below stays on one filesystem/volume, a precondition for it
+#' being atomic at all) and rename it over the destination -- readers only
+#' ever see the old complete file or the new complete file, never a
+#' half-written one. `file.rename()` replacing an existing destination is
+#' reliable on the platforms `patliR` targets (confirmed on Windows, where
+#' older guidance sometimes assumed otherwise); the copy+remove fallback
+#' below exists only for the unlikely case it is not, on some filesystem
+#' this was never tested against.
+#' @keywords internal
+.atomic_write_csv <- function(data, path, row.names = FALSE) {
+  dir <- dirname(path)
+  tmp <- tempfile(pattern = ".patliR_tmp_", tmpdir = dir, fileext = ".csv")
+  utils::write.csv(data, tmp, row.names = row.names)
+  if (!file.rename(tmp, path)) {
+    file.copy(tmp, path, overwrite = TRUE)
+    file.remove(tmp)
+  }
+  invisible(path)
+}
+
 #' Write one of the numbered "source of truth" CSV files for a project
 #' @keywords internal
 .write_step_csv <- function(proj, filename, data) {
   path <- file.path(projectDir(proj), filename)
-  utils::write.csv(data, path, row.names = FALSE)
+  .atomic_write_csv(data, path)
   invisible(path)
 }
 
@@ -85,7 +114,7 @@
 .write_results_csv <- function(proj, name, data) {
   results_dir <- file.path(projectDir(proj), "results")
   if (!dir.exists(results_dir)) dir.create(results_dir, recursive = TRUE)
-  utils::write.csv(data, file.path(results_dir, paste0(name, ".csv")), row.names = FALSE)
+  .atomic_write_csv(data, file.path(results_dir, paste0(name, ".csv")))
   invisible(NULL)
 }
 

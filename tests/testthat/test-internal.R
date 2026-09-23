@@ -1,3 +1,36 @@
+test_that(".atomic_write_csv() round-trips a data.frame and leaves no temp file behind", {
+  dir <- tempfile("patliR_atomic_"); dir.create(dir)
+  path <- file.path(dir, "out.csv")
+  df <- data.frame(a = 1:3, b = c("x", "y", "z"), stringsAsFactors = FALSE)
+
+  patliR:::.atomic_write_csv(df, path)
+
+  expect_true(file.exists(path))
+  expect_equal(utils::read.csv(path, stringsAsFactors = FALSE), df)
+  ## no leftover .patliR_tmp_*.csv in the same directory
+  leftovers <- list.files(dir, pattern = "^\\.patliR_tmp_")
+  expect_length(leftovers, 0)
+})
+
+test_that(".atomic_write_csv() never truncates the destination when the write itself fails partway (regression: write.csv() used to write straight to the final path)", {
+  dir <- tempfile("patliR_atomic_"); dir.create(dir)
+  path <- file.path(dir, "out.csv")
+  original <- data.frame(a = 1, stringsAsFactors = FALSE)
+  utils::write.csv(original, path, row.names = FALSE)
+
+  ## Simulate a write that dies partway through (disk full, permission
+  ## error, a non-writable column type, ...): write.csv() itself errors.
+  ## Because .atomic_write_csv() only ever writes to a fresh temp file
+  ## first, the pre-existing destination must be completely untouched --
+  ## no truncation, no partial content -- when that happens.
+  testthat::local_mocked_bindings(
+    write.csv = function(...) stop("simulated write failure"),
+    .package = "utils"
+  )
+  expect_error(patliR:::.atomic_write_csv(data.frame(a = 2), path), "simulated write failure")
+  expect_equal(utils::read.csv(path, stringsAsFactors = FALSE), original)
+})
+
 test_that(".cli_escape() doubles literal curly braces (glue's own escape convention)", {
   expect_equal(patliR:::.cli_escape("no braces here"), "no braces here")
   expect_equal(patliR:::.cli_escape("{a} and {b}"), "{{a}} and {{b}}")

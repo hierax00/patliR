@@ -287,6 +287,6 @@ prep_compound <- function(proj, data_row,
 #' @keywords internal
 .write_log_csv <- function(proj) {
   path <- file.path(projectDir(proj), "patliR_log.csv")
-  utils::write.csv(projectLog(proj), path, row.names = FALSE)
+  .atomic_write_csv(projectLog(proj), path)
   invisible(path)
 }

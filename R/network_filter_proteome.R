@@ -131,8 +131,6 @@ network_filter_proteome <- function(proj, proteome, condition = NULL, proteome_l
 #' @keywords internal
 .network_proteome_auto_label <- function(proteome) {
   x <- paste(sort(unique(proteome)), collapse = "\x01")
-  codes <- utf8ToInt(enc2utf8(x))
-  if (length(codes) == 0) return("unnamed")
-  h <- sum(as.numeric(codes) * seq_along(codes)) %% (2^31 - 1)
-  paste0("proteome_", sprintf("%08x", as.integer(h)))
+  if (!nzchar(x)) return("unnamed")
+  paste0("proteome_", rlang::hash(x))
 }

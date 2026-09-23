@@ -115,3 +115,22 @@ test_that("network_filter_proteome() never modifies network_edges itself", {
   proj <- network_filter_proteome(proj, proteome = before$uniprot_id[1])
   expect_identical(patliRResults(proj, "network_edges"), before)
 })
+
+test_that("network_filter_proteome() keeps distinct proteomes with colliding weighted character sums", {
+  proj <- .network_stats_test_setup()
+  edges <- patliRResults(proj, "network_edges")
+  cond <- edges$condition[1]
+  edges <- edges[rep(1L, 2L), , drop = FALSE]
+  edges$uniprot_id <- c("P10040", "P10500")
+  patliRResults(proj, "network_edges") <- edges
+
+  proj <- network_filter_proteome(proj, "P10040", condition = cond)
+  proj <- network_filter_proteome(proj, "P10500", condition = cond)
+  filtered <- patliRResults(proj, "network_filtered_edges")
+  expect_setequal(filtered$uniprot_id, c("P10040", "P10500"))
+  expect_equal(length(unique(filtered$proteome_label)), 2L)
+  expect_identical(
+    patliR:::.network_proteome_auto_label(c("P10040", "P10500", "P10040")),
+    patliR:::.network_proteome_auto_label(c("P10500", "P10040"))
+  )
+})

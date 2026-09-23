@@ -217,3 +217,59 @@ test_that("disease_genes_fetch() validates its arguments", {
   expect_error(disease_genes_fetch(proj, disease = "x", min_score = 2), "min_score")
   expect_error(disease_genes_fetch(proj, disease = "x", source = "genecards"), "arg")
 })
+
+test_that("disease_genes_fetch() requires a known score to meet min_score", {
+  fake_graphql <- function(query_string, variables = list()) {
+    if (grepl("DiseaseById", query_string)) return(list(disease = list(id = variables$id)))
+    scores <- c(NA_real_, 0.4, 0.39)
+    list(disease = list(
+      id = variables$efoId, name = "test disease",
+      associatedTargets = list(count = 3L, rows = lapply(seq_along(scores), function(i) {
+        list(score = scores[i], target = list(
+          id = paste0("ENSG", i), approvedSymbol = paste0("G", i),
+          proteinIds = list(list(id = paste0("P", i), source = "uniprot_swissprot"))
+        ))
+      }))
+    ))
+  }
+  testthat::local_mocked_bindings(.open_targets_graphql = fake_graphql, .package = "patliR")
+  proj <- .test_project()
+  proj <- disease_genes_import(proj, data.frame(uniprot_id = "P_OTHER"), disease_id = "OTHER")
+  proj <- disease_genes_fetch(proj, disease = "EFO_TEST")
+  dg <- patliRResults(proj, "disease_genes")
+  expect_equal(dg$uniprot_id[dg$disease_id == "EFO_TEST"], "P2")
+  expect_equal(dg$association_score[dg$disease_id == "EFO_TEST"], 0.4)
+
+  proj <- disease_genes_fetch(proj, disease = "EFO_TEST", min_score = NULL)
+  dg <- patliRResults(proj, "disease_genes")
+  expect_setequal(dg$uniprot_id[dg$disease_id == "EFO_TEST"], c("P1", "P2", "P3"))
+  expect_true(is.na(dg$association_score[dg$uniprot_id == "P1"]))
+
+  proj <- disease_genes_fetch(proj, disease = "EFO_TEST", min_score = 0.5)
+  dg <- patliRResults(proj, "disease_genes")
+  expect_equal(dg$uniprot_id, "P_OTHER")
+  expect_true(any(grepl("dropped 3", projectLog(proj)$message)))
+})
+
+test_that("disease_genes_import() keeps scores aligned through symbol multi-mapping", {
+  testthat::skip_if_not_installed("clusterProfiler")
+  testthat::skip_if_not_installed("org.Hs.eg.db")
+  testthat::local_mocked_bindings(
+    bitr = function(...) data.frame(
+      SYMBOL = c("AAA", "AAA", "BBB"), UNIPROT = c("P1", "P2", "P3")
+    ),
+    .package = "clusterProfiler"
+  )
+  proj <- .test_project()
+  proj <- disease_genes_import(
+    proj, data.frame(symbol = c("BBB", " AAA ", "AAA", "UNMAPPED"),
+                     score = c(0.2, 0.8, 0.6, 0.9)),
+    disease_id = "D1", map_symbols = TRUE
+  )
+  dg <- patliRResults(proj, "disease_genes")
+  expect_equal(nrow(dg), 5L)
+  expect_setequal(dg$association_score[dg$uniprot_id == "P1"], c(0.8, 0.6))
+  expect_setequal(dg$association_score[dg$uniprot_id == "P2"], c(0.8, 0.6))
+  expect_equal(dg$association_score[dg$uniprot_id == "P3"], 0.2)
+  expect_false("UNMAPPED" %in% dg$gene_symbol)
+})

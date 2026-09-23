@@ -170,13 +170,13 @@ disease_genes_fetch <- function(proj, disease, source = c("open_targets"),
   new_rows <- unique(new_rows)
 
   if (!is.null(min_score) && nrow(new_rows) > 0) {
-    below <- !is.na(new_rows$association_score) & new_rows$association_score < min_score
+    below <- is.na(new_rows$association_score) | new_rows$association_score < min_score
     n_below <- sum(below)
     proj <- .log_append(
       proj, step = "disease_genes_fetch", id = NA_character_,
       message = paste0(
         "disease_genes_below_min_score: min_score = ", min_score, "; kept ",
-        sum(!below), " gene(s), dropped ", n_below,
+        sum(!below), " gene(s), dropped ", n_below, " (including missing scores)",
         if (n_below) paste0(" (e.g. ", paste(utils::head(new_rows$uniprot_id[below], 10), collapse = ", "), ")") else ""
       )
     )
@@ -342,9 +342,13 @@ disease_genes_import <- function(proj, table, disease_id, disease_name = NULL,
         if (length(failed)) paste0(" (e.g. ", paste(utils::head(failed, 10), collapse = ", "), ")") else ""
       )
     )
-    raw <- data.frame(uniprot_id = smap$UNIPROT, gene_symbol = smap$SYMBOL,
-                      stringsAsFactors = FALSE)
-    uni_col <- "uniprot_id"; sym_col <- "gene_symbol"; sc_col <- NA_character_
+    raw <- merge(
+      data.frame(gene_symbol = trimws(as.character(raw[[sym_col]])),
+                 association_score = if (!is.na(sc_col)) raw[[sc_col]] else rep(NA_real_, nrow(raw))),
+      data.frame(uniprot_id = smap$UNIPROT, gene_symbol = smap$SYMBOL),
+      by = "gene_symbol", sort = FALSE
+    )
+    uni_col <- "uniprot_id"; sym_col <- "gene_symbol"; sc_col <- "association_score"
     mapped_via_symbols <- TRUE
   }
 

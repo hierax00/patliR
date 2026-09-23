@@ -175,3 +175,13 @@ test_that("network_motifs()'s log line reports the deduplicated feedback CYCLE c
   expect_true(length(feedback_msg) >= 1)
   expect_true(any(grepl("1 feedback loop\\(s\\) found", feedback_msg))) ## deduplicated count, not 3
 })
+
+test_that(".network_n_distinct_feedback_cycles() keeps opposite directed cycles distinct", {
+  feedback_rows <- data.frame(
+    node_a = c("A", "B", "C", "A", "C", "B"),
+    node_b = c("B", "C", "A", "C", "B", "A"),
+    node_c = c("C", "A", "B", "B", "A", "C"),
+    stringsAsFactors = FALSE
+  )
+  expect_equal(patliR:::.network_n_distinct_feedback_cycles(feedback_rows), 2L)
+})

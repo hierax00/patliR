@@ -79,7 +79,7 @@ walks every 2-path once) lists it three times -- \verb{(A, B, C)}, \verb{(B, C, 
 consumers want every rotation visible, e.g. to look up "what is node X's
 role in this cycle" directly), but it means \code{nrow(subset(motif_type == "feedback"))} is exactly 3x the number of \emph{distinct} cycles, never the
 cycle count itself. The \code{projectLog(proj)} summary line reports the
-deduplicated cycle count (canonical rotation = the 3 node IDs sorted),
+deduplicated cycle count (canonical rotation starts at the smallest node ID),
 not the row count -- read the row count as "3 rows per real cycle", the
 log line as the actual count.
 }

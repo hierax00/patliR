@@ -58,7 +58,7 @@ NULL
 #' role in this cycle" directly), but it means `nrow(subset(motif_type ==
 #' "feedback"))` is exactly 3x the number of *distinct* cycles, never the
 #' cycle count itself. The `projectLog(proj)` summary line reports the
-#' deduplicated cycle count (canonical rotation = the 3 node IDs sorted),
+#' deduplicated cycle count (canonical rotation starts at the smallest node ID),
 #' not the row count -- read the row count as "3 rows per real cycle", the
 #' log line as the actual count.
 #'
@@ -224,7 +224,10 @@ network_motifs <- function(proj, condition = NULL, n_cores = 1L, pathway_db = NU
   if (nrow(feedback_rows) == 0) return(0L)
   canon <- apply(
     feedback_rows[, c("node_a", "node_b", "node_c"), drop = FALSE], 1,
-    function(r) paste(sort(r), collapse = "\x01")
+    function(r) {
+      first <- order(r)[1L]
+      paste(r[((seq_len(3L) + first - 2L) %% 3L) + 1L], collapse = "\x01")
+    }
   )
   length(unique(canon))
 }

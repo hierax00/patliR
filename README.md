@@ -395,18 +395,35 @@ to the last cached result. It does not retry a failed request itself.
 ## Bundled reference data
 
 Small curated tables ship under `inst/extdata/` so the local steps work
-offline:
+offline. None of these are covered by patliR's own MIT license -- see
+[`inst/COPYRIGHTS`](inst/COPYRIGHTS) for the full attribution of each:
 
 - **PAINS** — 480 filters, Baell & Holloway (2010), *J. Med. Chem.* 53(7),
   2719–2740; verbatim from RDKit's `wehi_pains.csv` (BSD-3-Clause).
 - **Brenk** — 105 alerts, Brenk et al. (2008), *ChemMedChem* 3, 435–444;
   from PatWalters/rd_filters (MIT), cross-checked against RDKit's
   `FilterCatalogs.BRENK`.
-- **Safetyome core panel** — 500 genes, Liu et al. (2026), *Toxicological
-  Sciences* 209(3), kfag021, Supplementary Table 4. Redistribution terms
-  for that table were not independently confirmed at the time of writing.
-- **BOILED-Egg** GIA/BBB ellipse boundaries — digitized from Daina & Zoete
-  (2016) via PyBOILEDegg (GPL-3).
+- **Safetyome core panel** — 500 genes, Liu et al. (2026), "Safetyome and
+  specialized panels for over 3,000 phenotypes: a systematic and
+  translational approach using human genetics and pharmacology,"
+  *Toxicological Sciences* 209(3), kfag021,
+  <https://doi.org/10.1093/toxsci/kfag021>, Supplementary Table 4. Open
+  access, **CC BY** (Creative Commons Attribution — confirmed via Europe
+  PMC/PubMed metadata; see the article's own license statement for the
+  exact version, most likely 4.0). Redistributed verbatim as CSV, no
+  content changes beyond that reformatting.
+- **BOILED-Egg** GIA/BBB ellipse boundaries — numeric points from the
+  supporting information of Daina, A. & Zoete, V. (2016), "A BOILED-Egg
+  To Predict Gastrointestinal Absorption and Brain Penetration of Small
+  Molecules," *ChemMedChem* 11, 1117-1121,
+  <https://doi.org/10.1002/cmdc.201600182>, as transcribed in the
+  reference implementation PyBOILEDegg (Milne, B.F., 2021,
+  <https://github.com/bfmilne/PyBOILEDegg>, GPL-3,
+  <https://doi.org/10.5281/zenodo.4725530>), which states the same
+  original source. Not produced by running that program -- PyBOILEDegg
+  only ever outputs a classification, never boundary coordinates -- these
+  are the published model's own numeric parameters, copied directly from
+  its source file's hard-coded coordinate lists.
 
 ## License
 

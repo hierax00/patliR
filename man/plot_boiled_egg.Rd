@@ -53,14 +53,17 @@ to have been run first.
 }
 \section{Provenance of the ellipse boundaries}{
 
-The two ellipses are digitized coordinates from the supporting
-information of Daina, A. & Zoete, V. (2016), "A BOILED-Egg To Predict
-Gastrointestinal Absorption and Brain Penetration of Small Molecules",
-\emph{ChemMedChem} 11, 1117-1121, \doi{10.1002/cmdc.201600182} -- via the
-GPL-3 reference implementation
+The two ellipses are the published model's own numeric parameters,
+from the supporting information of Daina, A. & Zoete, V. (2016), "A
+BOILED-Egg To Predict Gastrointestinal Absorption and Brain
+Penetration of Small Molecules", \emph{ChemMedChem} 11, 1117-1121,
+\doi{10.1002/cmdc.201600182} -- copied directly from the hard-coded
+coordinate lists in the GPL-3 reference implementation
 \url{https://github.com/bfmilne/PyBOILEDegg} (Milne, B.F., 2021,
-\doi{10.5281/zenodo.4725530}), which states the same source. These are
-the real published boundaries, not an approximation.
+\doi{10.5281/zenodo.4725530}), whose own comment states the same
+original source. Not produced by running that program -- it only ever
+outputs a classification, never boundary coordinates. These are the
+real published boundaries, not an approximation.
 }
 
 \section{The one real caveat -- WLogP}{

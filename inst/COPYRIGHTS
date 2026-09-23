@@ -1,0 +1,50 @@
+patliR is licensed MIT (see LICENSE.md at the package root). This file
+lists the copyright/license status of third-party data files bundled
+under inst/extdata/ for offline use, which are NOT covered by patliR's
+own MIT license and retain their original terms.
+
+pains_smarts.csv
+  480 PAINS (Pan-Assay Interference Compounds) SMARTS filters.
+  Source: Baell, J.B. & Holloway, G.A. (2010), J. Med. Chem. 53(7),
+  2719-2740.
+  Bundled verbatim from RDKit's wehi_pains.csv (rdkit/rdkit,
+  https://github.com/rdkit/rdkit).
+  License: BSD-3-Clause. Copyright (c) RDKit contributors.
+
+brenk_smarts.csv
+  105 structural alert SMARTS filters.
+  Source: Brenk, R. et al. (2008), ChemMedChem 3, 435-444.
+  Bundled from PatWalters/rd_filters
+  (https://github.com/PatWalters/rd_filters), cross-checked against
+  RDKit's FilterCatalogs.BRENK.
+  License: MIT. Copyright (c) Pat Walters.
+
+safetyome_core_panel.csv
+  500-gene safety panel with organ-system annotations and scores.
+  Source: Liu et al. (2026), "Safetyome and specialized panels for over
+  3,000 phenotypes: a systematic and translational approach using human
+  genetics and pharmacology," Toxicological Sciences 209(3), kfag021,
+  https://doi.org/10.1093/toxsci/kfag021, Supplementary Table 4.
+  License: CC BY (Creative Commons Attribution; open access, confirmed
+  via Europe PMC/PubMed metadata -- see the article's own license
+  statement for the exact version, most likely 4.0).
+  Attribution: (c) The Author(s) 2026. Published by Oxford University
+  Press on behalf of the Society of Toxicology. Redistributed verbatim
+  as CSV; no content changes beyond that reformatting.
+
+boiled_egg_gia.csv, boiled_egg_bbb.csv
+  Numeric (TPSA, WLogP) coordinate pairs tracing the BOILED-Egg GIA/BBB
+  ellipse boundaries.
+  Source: Daina, A. & Zoete, V. (2016), "A BOILED-Egg To Predict
+  Gastrointestinal Absorption and Brain Penetration of Small Molecules,"
+  ChemMedChem 11, 1117-1121, https://doi.org/10.1002/cmdc.201600182,
+  supporting information.
+  Transcribed directly from the hard-coded coordinate lists in Milne,
+  B.F. (2021), PyBOILEDegg, https://github.com/bfmilne/PyBOILEDegg,
+  https://doi.org/10.5281/zenodo.4725530 (GPL-3) -- whose own source
+  comment cites the same original paper as the data's source. Not
+  produced by running that program: PyBOILEDegg only ever outputs a
+  GI-absorption/BBB-permeation classification, never boundary
+  coordinates, so nothing GPL-3-licensed was executed to produce these
+  files. These numbers are the cited paper's own published model
+  parameters, not an expression original to PyBOILEDegg.

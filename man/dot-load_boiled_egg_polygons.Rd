@@ -11,12 +11,17 @@ boundaries bundled in \code{inst/extdata}}
 A \code{list(gia = data.frame(tpsa, wlogp), bbb = data.frame(tpsa, wlogp))}.
 }
 \description{
-These coordinates are digitized from the supporting information of
-Daina, A. & Zoete, V. (2016), "A BOILED-Egg To Predict Gastrointestinal
-Absorption and Brain Penetration of Small Molecules", \emph{ChemMedChem}
-11, 1117-1121 -- taken from the GPL-3 implementation
-\url{https://github.com/bfmilne/PyBOILEDegg} (Milne, B.F., 2021, Zenodo
-\doi{10.5281/zenodo.4725530}), which states the same provenance. Used
-as-is (TPSA on the x-axis, WLogP on the y-axis), not re-derived by us.
+These coordinates are the published model's own numeric parameters
+from the supporting information of Daina, A. & Zoete, V. (2016), "A
+BOILED-Egg To Predict Gastrointestinal Absorption and Brain
+Penetration of Small Molecules", \emph{ChemMedChem} 11, 1117-1121 -- copied
+directly from the hard-coded coordinate lists in
+\url{https://github.com/bfmilne/PyBOILEDegg}'s source (Milne, B.F., 2021,
+Zenodo \doi{10.5281/zenodo.4725530}), whose own comment states the
+same original source. Not produced by running that program (it only
+ever outputs a GI/BBB classification, never boundary coordinates) --
+this is a direct transcription of published numeric data, not a
+derivative of any code Milne wrote. Used as-is (TPSA on the x-axis,
+WLogP on the y-axis), not re-derived by us.
 }
 \keyword{internal}

@@ -161,3 +161,56 @@ test_that("tox_report() always returns the fixed disclaimer note, regardless of 
   expect_true(file.exists(csv_path))
   expect_equal(nrow(utils::read.csv(csv_path)), nrow(report$summary))
 })
+
+test_that("tox_report() returns a typed empty summary for empty result tables", {
+  proj <- .test_project()
+  patliRResults(proj, "tox_local") <- data.frame(
+    compound_id = character(), alert_set = character(),
+    alert_name = character(), matched = logical()
+  )
+  report <- suppressWarnings(tox_report(proj))
+  expect_s3_class(report$summary, "data.frame")
+  expect_equal(nrow(report$summary), 0L)
+  expect_type(report$summary$n_pains_alerts, "integer")
+  expect_false(file.exists(file.path(projectDir(proj), "results", "tox_report.csv")))
+})
+
+test_that("tox_local() preserves unknown results when SMARTS matching fails", {
+  skip_if_not_installed("rcdk")
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+  local_mocked_bindings(
+    .load_alert_smarts = function(set) data.frame(name = "invalid", smarts = "[INVALID"),
+    .package = "patliR"
+  )
+  proj <- tox_local(proj, alert_sets = "pains")
+  expect_true(all(is.na(patliRResults(proj, "tox_local")$matched)))
+})
+
+test_that("tox_safetyome() removes stale rows even when mapping returns no rows", {
+  skip_if_not_installed("clusterProfiler")
+  skip_if_not_installed("org.Hs.eg.db")
+  proj <- .test_project()
+  panel <- patliR:::.load_safetyome_core_panel()
+  local_mocked_bindings(
+    bitr = function(geneID, ...) data.frame(
+      UNIPROT = geneID[geneID == "mapped"],
+      SYMBOL = rep(panel$gene[1], sum(geneID == "mapped"))
+    ),
+    .package = "clusterProfiler"
+  )
+  patliRResults(proj, "targets_imported") <- data.frame(
+    compound_id = c("A", "B"), uniprot_id = "mapped"
+  )
+  proj <- tox_safetyome(proj)
+  before <- patliRResults(proj, "tox_safetyome")
+  patliRResults(proj, "targets_imported") <- data.frame(
+    compound_id = c("A", "B"), uniprot_id = c("unmapped", "mapped")
+  )
+  proj <- tox_safetyome(proj, compound_ids = "A")
+  expect_equal(patliRResults(proj, "tox_safetyome"), before[before$compound_id == "B", ])
+  patliRResults(proj, "targets_imported") <- data.frame(compound_id = "A", uniprot_id = "unmapped")
+  proj <- tox_safetyome(proj)
+  expect_equal(nrow(patliRResults(proj, "tox_safetyome")), 0L)
+  expect_true(any(grepl("tox_safetyome_unmapped", projectLog(proj)$message)))
+})

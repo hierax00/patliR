@@ -149,7 +149,7 @@ adme_local <- function(proj, compound_ids = NULL,
 
   out$n_atoms <- desc$n_atoms
 
-  approx <- .smiles_approx_descriptors(cmp$smiles, desc$n_atoms)
+  approx <- .smiles_approx_descriptors(cmp$smiles, desc$n_heavy)
   out$fraction_csp3_approx <- approx$fraction_csp3_approx
   out$aromatic_proportion_approx <- approx$aromatic_proportion_approx
   out$n_rings_approx <- approx$n_rings_approx
@@ -209,7 +209,7 @@ adme_local <- function(proj, compound_ids = NULL,
   mols <- .parse_smiles_safe(smiles)
   empty_row <- data.frame(mw = NA_real_, logp = NA_real_, hbd = NA_integer_,
                            hba = NA_integer_, tpsa = NA_real_,
-                           rotatable_bonds = NA_integer_, n_atoms = NA_integer_,
+                           rotatable_bonds = NA_integer_, n_atoms = NA_integer_, n_heavy = NA_integer_,
                            wlogp_proxy = NA_real_, amr = NA_real_)
   rows <- lapply(mols, function(m) {
     if (is.null(m)) return(empty_row)
@@ -223,7 +223,9 @@ adme_local <- function(proj, compound_ids = NULL,
         tpsa = .safe_desc(m, "org.openscience.cdk.qsar.descriptors.molecular.TPSADescriptor", "TopoPSA"),
         rotatable_bonds = as.integer(.safe_desc(m, "org.openscience.cdk.qsar.descriptors.molecular.RotatableBondsCountDescriptor", "nRotB")),
         n_atoms = as.integer(tryCatch(rcdk::get.atom.count(m), error = function(e) NA_integer_)),
-        wlogp_proxy = tryCatch(as.numeric(rcdk::get.alogp(m)[["ALogP"]]), error = function(e) NA_real_),
+        n_heavy = tryCatch(sum(vapply(rcdk::get.atoms(m), function(a) rcdk::get.symbol(a) != "H", logical(1))),
+                          error = function(e) NA_integer_),
+        wlogp_proxy = tryCatch(as.numeric(rcdk::get.alogp(m)), error = function(e) NA_real_),
         ## Same ALOGPDescriptor rcdk::get.alogp() already calls, but read via
         ## eval.desc() for the AMR (molar refractivity) column it also
         ## returns alongside ALogP/ALogp2 -- needed for the Ghose filter's
@@ -260,9 +262,11 @@ adme_local <- function(proj, compound_ids = NULL,
       return(c(fraction_csp3_approx = NA_real_, aromatic_proportion_approx = NA_real_,
                n_rings_approx = NA_real_))
     }
-    aromatic_c     <- lengths(regmatches(s, gregexpr("c", s, fixed = TRUE)))
-    aromatic_other <- lengths(regmatches(s, gregexpr("[nosp](?![a-z])", s, perl = TRUE)))
-    aliphatic_c    <- lengths(regmatches(s, gregexpr("C(?![a-z])", s, perl = TRUE)))
+    atoms <- regmatches(s, gregexpr("\\[[^]]*\\]|Br|Cl|[BCNOPSFIbcnosp]", s, perl = TRUE))[[1]]
+    atoms <- sub("^\\[[0-9]*([A-Z][a-z]?|se|as|[bcnops]).*\\]$", "\\1", atoms, perl = TRUE)
+    aromatic_c     <- sum(atoms == "c")
+    aromatic_other <- sum(atoms %in% c("b", "n", "o", "p", "s", "se", "as"))
+    aliphatic_c    <- sum(atoms == "C")
     total_carbon <- aromatic_c + aliphatic_c
     c(
       fraction_csp3_approx = if (total_carbon > 0) aliphatic_c / total_carbon else NA_real_,

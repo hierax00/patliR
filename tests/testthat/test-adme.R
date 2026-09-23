@@ -9,6 +9,53 @@ test_that("adme_local() computes descriptors and rule pass/fail for all compound
   expect_true(file.exists(file.path(projectDir(proj), "results", "adme_local.csv")))
 })
 
+test_that("adme_local() keeps the scalar ALogP value for BOILED-Egg predictions", {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+  cmp <- compounds(proj)
+  cmp$smiles[1] <- "c1ccccc1"
+  compounds(proj) <- cmp
+  proj <- adme_local(proj, compound_ids = cmp$id[1])
+  adme <- patliRResults(proj, "adme_local")
+
+  mol <- rcdk::parse.smiles("c1ccccc1")[[1]]
+  rcdk::convert.implicit.to.explicit(mol)
+  expected <- rcdk::get.alogp(mol)
+  expect_true(is.finite(expected))
+  expect_equal(adme$wlogp_proxy, as.numeric(expected))
+  expect_false(is.na(adme$gi_absorption))
+  expect_false(is.na(adme$bbb_permeant))
+})
+
+test_that("adme_local() divides aromatic atoms by heavy atoms for ESOL", {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_single_compound(), identifier = "pubchem")
+  cmp <- compounds(proj)
+  cmp$smiles <- "c1ccccc1"
+  compounds(proj) <- cmp
+  proj <- adme_local(proj)
+  adme <- patliRResults(proj, "adme_local")
+
+  ## Benzene has six aromatic heavy atoms and six hydrogens. Ghose
+  ## uses total atoms, whereas ESOL's aromatic proportion uses heavy atoms.
+  expect_equal(adme$n_atoms, 12L)
+  expect_equal(adme$aromatic_proportion_approx, 1)
+  expect_equal(adme$logs_esol,
+               0.16 - 0.63 * adme$logp - 0.0062 * adme$mw +
+                 0.066 * adme$rotatable_bonds - 0.74)
+})
+
+test_that("SMILES approximation counts adjacent atoms without confusing element symbols", {
+  out <- patliR:::.smiles_approx_descriptors(
+    c("Cc1ccccc1", "c1ccncc1", "Clc1ccccc1", "[13CH3]c1ccccc1", "Cn1cccc1", "[Sc+3]"),
+    c(7, 6, 7, 7, 6, 1)
+  )
+  ## The uppercase C before aromatic c/n is still carbon; aromatic n
+  ## before c is still nitrogen. Bracketed Sc and chlorine are not carbon.
+  expect_equal(out$fraction_csp3_approx, c(1/7, 0, 0, 1/7, 1/5, NA_real_))
+  expect_equal(out$aromatic_proportion_approx, c(6/7, 1, 6/7, 6/7, 5/6, 0))
+})
+
 test_that("adme_local() re-running on a subset of compounds does not wipe out the rest of the table", {
   ## Regression: patliRResults(proj, "adme_local") <- out used to be a
   ## bare overwrite -- calling adme_local() again for just one compound
@@ -165,4 +212,34 @@ test_that("adme_filter() errors on source = 'imported' (not implemented yet)", {
   proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
   proj <- adme_local(proj)
   expect_error(adme_filter(proj, source = "imported"), "not implemented yet")
+})
+
+test_that("adme_filter() does not count unknown rule outcomes as failures", {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+  ids <- compounds(proj)$id
+  adme <- data.frame(compound_id = ids, ro5_pass = NA)
+  patliRResults(proj, "adme_local") <- adme
+
+  all_unknown <- adme_filter(proj, rules = "ro5", hard_cutoff = TRUE, ask = FALSE)
+  expect_equal(compounds(all_unknown)$id, ids)
+  expect_true(all(is.na(patliRResults(all_unknown, "adme_filtered")$pass)))
+  expect_false(any(grepl("hard_cutoff removal", projectLog(all_unknown)$message)))
+
+  adme$ro5_pass <- TRUE
+  adme$ro5_pass[1:2] <- c(FALSE, NA)
+  patliRResults(proj, "adme_local") <- adme
+  testthat::local_mocked_bindings(
+    .ask_hard_cutoff = function(n_remove, n_total, summary_msg, fails_any, cmp) {
+      expect_equal(n_remove, 1L)
+      expect_equal(summary_msg, "ro5_pass: 1")
+      expect_equal(fails_any, ids[1])
+      TRUE
+    },
+    .package = "patliR"
+  )
+  proj <- adme_filter(proj, rules = "ro5", hard_cutoff = TRUE, ask = TRUE)
+  expect_equal(compounds(proj)$id, ids[-1])
+  log <- projectLog(proj)
+  expect_equal(log$id[grepl("hard_cutoff removal", log$message)], ids[1])
 })

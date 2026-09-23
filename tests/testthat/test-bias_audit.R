@@ -25,6 +25,21 @@
   proj
 }
 
+test_that("bias_audit() does not count empty partner IDs as compounds or targets", {
+  proj <- .test_project()
+  patliRResults(proj, "reference_bioactivity") <- data.frame(
+    compound_id = c("C1", "C1", "C1", "", NA, "C2"),
+    target_chembl_id = c("T1", "", NA, "T1", "T1", ""),
+    stringsAsFactors = FALSE
+  )
+  proj <- bias_audit(proj)
+  homog <- patliRResults(proj, "bias_homogeneity")
+  expect_equal(homog$frecuencia_global_refdb[homog$tipo == "compound" & homog$id == "C1"], 1L)
+  expect_equal(homog$frecuencia_global_refdb[homog$tipo == "compound" & homog$id == "C2"], 0L)
+  expect_equal(homog$frecuencia_global_refdb[homog$tipo == "target" & homog$id == "T1"], 1L)
+  expect_false(any(is.na(homog$id) | homog$id == ""))
+})
+
 test_that("bias_audit() requires reference_bioactivity to exist", {
   proj <- .test_project()
   expect_error(bias_audit(proj), "reference_bioactivity")

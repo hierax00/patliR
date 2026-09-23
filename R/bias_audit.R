@@ -128,7 +128,7 @@ bias_audit <- function(proj, check_homogeneity = TRUE, mad_threshold = 2.5, cate
   if (nrow(ref_bio) == 0) return(.empty_bias_homogeneity_row())
 
   deg_list <- split(ref_bio[[other_col]], ref_bio[[id_col]])
-  degree <- vapply(deg_list, function(x) length(unique(stats::na.omit(x))), integer(1))
+  degree <- vapply(deg_list, function(x) length(unique(x[!is.na(x) & nzchar(x)])), integer(1))
   ids <- names(deg_list)
 
   med <- stats::median(degree)

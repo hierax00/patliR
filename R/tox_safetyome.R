@@ -131,7 +131,7 @@ tox_safetyome <- function(proj, compound_ids = NULL) {
     by.x = "gene_symbol", by.y = "gene", all.x = TRUE, sort = FALSE
   )
   hits$in_core_panel <- !is.na(hits$safetyome_scaled_score)
-  hits$source <- "safetyome_2026"
+  hits$source <- rep("safetyome_2026", nrow(hits))
 
   out <- hits[, c(
     "compound_id", "uniprot_id", "gene_symbol", "in_core_panel", "organ_system",
@@ -140,7 +140,10 @@ tox_safetyome <- function(proj, compound_ids = NULL) {
     "source"
   )]
 
-  out <- .network_upsert(proj, "tox_safetyome", out, "compound_id")
+  existing <- patliRResults(proj, "tox_safetyome")
+  if (!is.null(existing) && !is.null(compound_ids)) {
+    out <- rbind(existing[!existing$compound_id %in% compound_ids, , drop = FALSE], out)
+  }
   patliRResults(proj, "tox_safetyome") <- out
   .write_results_csv(proj, "tox_safetyome", out)
   .write_log_csv(proj)

@@ -225,7 +225,7 @@ network_synergy <- function(proj, condition = NULL, disease,
   have_dgs <- "disease_gene_source" %in% names(proximity_all)
   provenance_known <- have_dgs &&
     any(!is.na(proximity_all$disease_gene_source))
-  if (have_dgs) {
+  if (provenance_known) {
     present_sources <- unique(stats::na.omit(proximity_all$disease_gene_source))
     if (length(present_sources) > 1) {
       cli::cli_warn(c(
@@ -500,27 +500,12 @@ network_synergy <- function(proj, condition = NULL, disease,
 
   result <- do.call(rbind, rows)
   rownames(result) <- NULL
-  ## Recomputed slots: every compound pair this (condition, disease) could
-  ## yield -- listed explicitly so a rerun with a smaller `top_n` (or one
-  ## that now produces no pairs at all) drops the pairs it no longer emits.
-  touched_keys <- do.call(rbind, lapply(conditions, function(cond) {
-    cps <- sort(unique(edges_all$compound_id[edges_all$condition == cond]))
-    if (length(cps) < 2) return(NULL)
-    cb <- utils::combn(cps, 2)
-    data.frame(
-      condition = cond, disease_id = disease,
-      compound_a = cb[1, ], compound_b = cb[2, ], stringsAsFactors = FALSE
-    )
-  }))
-  if (is.null(touched_keys)) {
-    touched_keys <- data.frame(
-      condition = character(0), disease_id = character(0),
-      compound_a = character(0), compound_b = character(0), stringsAsFactors = FALSE
-    )
-  }
+  ## Replace every pair for the recomputed condition/disease, including
+  ## pairs involving compounds no longer present in the current network.
+  touched_keys <- data.frame(condition = conditions, disease_id = disease, stringsAsFactors = FALSE)
   result <- .network_upsert(
     proj, "network_synergy", result,
-    c("condition", "disease_id", "compound_a", "compound_b"), touched_keys = touched_keys
+    c("condition", "disease_id"), touched_keys = touched_keys
   )
 
   patliRResults(proj, "network_synergy") <- result

@@ -69,6 +69,30 @@
   unique(e$compound_id[e$condition == "FLO-ET"])
 }
 
+test_that("network_synergy() drops pairs involving compounds removed from the network", {
+  proj <- .network_stats_test_setup()
+  cps <- .synergy_flo_compounds(proj)
+  patliRResults(proj, "network_proximity") <- .synergy_fake_prox(cps)
+  proj <- network_synergy(proj, condition = "FLO-ET", disease = "SOME_DISEASE",
+                          separation = "jaccard", pairs = "all")
+  before <- patliRResults(proj, "network_synergy")
+  other <- before
+  other$disease_id <- "OTHER_DISEASE"
+  patliRResults(proj, "network_synergy") <- rbind(before, other)
+  edges <- patliRResults(proj, "network_edges")
+  for (keep in list(cps[-1], cps[2])) {
+    patliRResults(proj, "network_edges") <- edges[
+      edges$condition != "FLO-ET" | edges$compound_id %in% keep, , drop = FALSE]
+    proj <- network_synergy(proj, condition = "FLO-ET", disease = "SOME_DISEASE",
+                            separation = "jaccard", pairs = "all")
+    after <- patliRResults(proj, "network_synergy")
+    current <- after[after$disease_id == "SOME_DISEASE", ]
+    expect_equal(nrow(current), choose(length(keep), 2))
+    expect_true(all(current$compound_a %in% keep & current$compound_b %in% keep))
+    expect_equal(after$synergy_score[after$disease_id == "OTHER_DISEASE"], other$synergy_score)
+  }
+})
+
 ## Append a fabricated single-condition network to an existing edges table.
 .synergy_add_condition <- function(proj, condition, compound_targets) {
   e <- patliRResults(proj, "network_edges")
@@ -165,6 +189,30 @@ test_that(".synergy_proximal(): three-valued, with a per-row p_adjusted fallback
 ## ---------------------------------------------------------------------------
 ## network_synergy() -- error paths / regressions
 ## ---------------------------------------------------------------------------
+
+test_that("network_synergy() retains legacy proximity rows with all-NA source provenance", {
+  proj <- .network_stats_test_setup()
+  cps <- .synergy_flo_compounds(proj)
+  prox <- .synergy_fake_prox(cps, source = NA_character_)
+  patliRResults(proj, "network_proximity") <- prox
+  expect_warning(
+    updated <- network_synergy(proj, condition = "FLO-ET", disease = "SOME_DISEASE",
+                               separation = "jaccard", pairs = "all"),
+    "predate"
+  )
+  result <- patliRResults(updated, "network_synergy")
+  expect_equal(nrow(result), choose(length(cps), 2))
+  expect_true(all(is.na(result$disease_gene_source)))
+
+  prox$disease_gene_source <- NULL
+  patliRResults(proj, "network_proximity") <- prox
+  expect_warning(
+    legacy <- network_synergy(proj, condition = "FLO-ET", disease = "SOME_DISEASE",
+                              separation = "jaccard", pairs = "all"),
+    "predate"
+  )
+  expect_equal(result, patliRResults(legacy, "network_synergy"))
+})
 
 test_that("network_synergy() requires network_proximity() to have run first", {
   proj <- .network_stats_test_setup()

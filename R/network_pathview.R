@@ -245,6 +245,9 @@ network_pathview <- function(proj, condition = NULL,
   if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
   if (is.null(kegg_dir)) kegg_dir <- file.path(cacheDir(proj), "kegg_pathview")
   if (!dir.exists(kegg_dir)) dir.create(kegg_dir, recursive = TRUE)
+  out_dir <- normalizePath(out_dir, winslash = "/", mustWork = TRUE)
+  kegg_dir <- normalizePath(kegg_dir, winslash = "/", mustWork = TRUE)
+  out_suffix <- paste0("pathview_", rlang::hash(cond))
 
   old_wd <- getwd()
   on.exit(setwd(old_wd), add = TRUE)
@@ -256,12 +259,19 @@ network_pathview <- function(proj, condition = NULL,
   rows <- vector("list", nrow(enr))
   for (i in seq_len(nrow(enr))) {
     pid <- enr$ID[i]
+    expected_png <- file.path(out_dir, paste0(pid, ".", out_suffix, ".png"))
     res <- tryCatch(
-      pathview::pathview(
-        gene.data = gene_vector, pathway.id = pid, species = "hsa",
-        kegg.dir = kegg_dir, limit = list(gene = limit_gene),
-        low = low, mid = mid, high = high
-      ),
+      {
+        if (file.exists(expected_png) && unlink(expected_png) != 0L) {
+          stop("Could not remove the previous pathway PNG before rendering")
+        }
+        pathview::pathview(
+          gene.data = gene_vector, pathway.id = pid, species = "hsa",
+          kegg.dir = kegg_dir, limit = list(gene = limit_gene),
+          out.suffix = out_suffix,
+          low = low, mid = mid, high = high
+        )
+      },
       error = function(e) e
     )
     ## pathview() frequently *warns* and returns without ever writing a
@@ -269,7 +279,6 @@ network_pathview <- function(proj, condition = NULL,
     ## returns an HTML error page) -- !inherits(res, "error") alone cannot
     ## tell that apart from a genuine render, so `ok` also requires the
     ## expected output PNG to actually exist on disk.
-    expected_png <- file.path(out_dir, paste0(pid, ".pathview.png"))
     ok <- !inherits(res, "error") && file.exists(expected_png)
     msg <- if (inherits(res, "error")) {
       conditionMessage(res)

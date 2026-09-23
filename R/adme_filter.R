@@ -89,7 +89,7 @@ adme_filter <- function(proj, rules = c("ro5", "veber", "ghose", "egan", "oprea"
     return(proj)
   }
 
-  fails_any <- unique(long$compound_id[!long$pass])
+  fails_any <- unique(long$compound_id[!is.na(long$pass) & !long$pass])
   if (length(fails_any) == 0) {
     cli::cli_inform("No compounds fail any of the selected rules; nothing to cut.")
     return(proj)
@@ -97,7 +97,7 @@ adme_filter <- function(proj, rules = c("ro5", "veber", "ghose", "egan", "oprea"
 
   cmp <- compounds(proj)
   n_total <- nrow(cmp)
-  by_rule <- vapply(rule_cols, function(col) sum(!adme[[col]]), integer(1))
+  by_rule <- vapply(rule_cols, function(col) sum(!adme[[col]], na.rm = TRUE), integer(1))
   summary_msg <- paste0(rule_cols, ": ", by_rule, collapse = ", ")
 
   proceed <- TRUE

@@ -72,3 +72,27 @@ test_that("prep_as_condition() errors before prep_compounds()", {
   proj <- .test_project()
   expect_error(prep_as_condition(proj), "run .*prep_compounds")
 })
+
+test_that("prep_binarize() includes zero abundances in the condition quantile", {
+  data <- data.frame(Name = letters[1:5], `R1-X` = c(0, 0, 2, 10, NA), check.names = FALSE)
+  proj <- prep_binarize(.test_project(), data)
+  expect_equal(binarizedMatrix(proj)$X, c(0L, 0L, 1L, 1L, NA_integer_))
+  data$`R1-X` <- c(0, 2, 4, 6, NA)
+  proj <- prep_binarize(.test_project(), data, q = 0.5)
+  expect_equal(binarizedMatrix(proj)$X, c(0L, 0L, 1L, 1L, NA_integer_))
+})
+
+test_that("prep_as_condition() aligns presence by ID and includes missing compounds", {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+  cmp <- compounds(proj)
+  data <- data.frame(Name = rev(cmp$name[-1]), `R1-X` = 1, check.names = FALSE)
+  proj <- prep_binarize(proj, data)
+  proj <- prep_as_condition(proj, "subset", cmp$id[1:2])
+  for (result in list(matrixRaw(proj), binarizedMatrix(proj))) {
+    expect_setequal(result$compound_id, cmp$id)
+    expect_equal(result$subset, as.integer(result$compound_id %in% cmp$id[1:2]))
+    expect_true(is.na(result$X[result$compound_id == cmp$id[1]]))
+    expect_true(all(result$X[result$compound_id != cmp$id[1]] == 1))
+  }
+})

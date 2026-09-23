@@ -259,10 +259,15 @@ test_that("network_proximity() z_score is unchanged after the .network_string_lc
   proj <- network_proximity(proj, condition = cond, disease = "D_PIN", n_random = 12, seed = 1)
   res <- patliRResults(proj, "network_proximity")
   res <- res[order(res$compound_id), ]
-  expect_equal(res$compound_id, c("C0001", "C0002", "C0006", "C0007"))
+  ## Frozen values updated when prep_binarize()'s Q1 threshold was fixed
+  ## to include zero-abundance compounds in the quantile (its documented
+  ## "Q1 across all compounds" contract) -- more compounds now correctly
+  ## clear the presence threshold, so the FLO-ET network (and therefore
+  ## this fixture's z_scores) is different.
+  expect_equal(res$compound_id, c("C0001", "C0002", "C0004", "C0006", "C0007", "C0008"))
   expect_equal(
     round(res$z_score, 6),
-    c(4.88244, 3.943095, 7.60343, 3.691396),
+    c(5.996314, 4.445597, 2.636711, 4.089164, 4.402743, 3.13524),
     tolerance = 1e-5
   )
   expect_true(all(res$n_tests_in_family == nrow(res)))

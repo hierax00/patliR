@@ -185,11 +185,16 @@ test_that("clustering = 'hdbscan' reproduces the pre-0.2.0 output given the same
   expect_equal(s1$r_index, s2$r_index)
   expect_equal(s1$module_id, s2$module_id)
   expect_equal(s1$n_nodes, s2$n_nodes)
-  ## frozen against patliR 2a27dde (pre-0.2.0): FLO-ET / seed 42 / hdbscan
-  expect_equal(s1$module_id, c("M1", "M2", "M3"))
-  expect_equal(s1$module_type, c("cluster", "cluster", "noise"))
-  expect_equal(s1$n_nodes, c(4L, 2L, 8L))
-  expect_equal(round(s1$r_index, 6), c(0.187500, 0.250000, 0.109375))
+  ## frozen against the FLO-ET fixture (updated when prep_binarize()'s Q1
+  ## threshold was fixed to include zero-abundance compounds in the
+  ## quantile, per its documented "Q1 across all compounds" contract --
+  ## more compounds now correctly clear the presence threshold, so the
+  ## FLO-ET network is a different, larger graph and hdbscan's density
+  ## heuristic no longer finds a cluster in it, all 16 nodes are "noise")
+  expect_equal(s1$module_id, "M1")
+  expect_equal(s1$module_type, "noise")
+  expect_equal(s1$n_nodes, 16L)
+  expect_equal(round(s1$r_index, 6), 0.1875)
   ## the historical module_id / n_nodes scheme is unchanged: modules cover
   ## every node, exactly once
   g <- .network_graph(p1, "FLO-ET")

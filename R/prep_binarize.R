@@ -124,8 +124,7 @@ prep_binarize <- function(proj, data, id_col = "Name",
       } else {
         avg <- vals[, 1]
       }
-      nonzero <- avg[avg > 0]
-      used_q1 <- if (length(nonzero) > 0) stats::quantile(nonzero, probs = q, na.rm = TRUE, names = FALSE) else 0
+      used_q1 <- if (any(!is.na(avg))) stats::quantile(avg, probs = q, na.rm = TRUE, names = FALSE) else 0
       bin <- ifelse(avg > 0 & avg >= used_q1, 1L, 0L)
     }
 
@@ -212,8 +211,20 @@ prep_as_condition <- function(proj, condition = "all", compound_ids = NULL) {
   if (condition %in% names(bin)) {
     cli::cli_warn("Condition {.val {condition}} already exists; overwriting it.")
   }
-  raw[[condition]] <- present
-  bin[[condition]] <- present
+  missing_ids <- setdiff(cmp$id, raw$compound_id)
+  if (length(missing_ids) > 0) {
+    extra <- raw[rep(NA_integer_, length(missing_ids)), , drop = FALSE]
+    extra$compound_id <- missing_ids
+    raw <- rbind(raw, extra)
+  }
+  missing_ids <- setdiff(cmp$id, bin$compound_id)
+  if (length(missing_ids) > 0) {
+    extra <- bin[rep(NA_integer_, length(missing_ids)), , drop = FALSE]
+    extra$compound_id <- missing_ids
+    bin <- rbind(bin, extra)
+  }
+  raw[[condition]] <- as.integer(raw$compound_id %in% ids)
+  bin[[condition]] <- as.integer(bin$compound_id %in% ids)
 
   ## set both slots together -- the S4 validity check requires matrix_raw
   ## and binarized to carry the same condition columns at all times.

@@ -192,7 +192,13 @@ test_that(".network_layers_plot_data() places every graph vertex and marks the t
   pd <- patliR:::.network_layers_plot_data(proj, g, "FLO-ET", layout = "fr", top_hub_n = 2, seed = 1)
   expect_equal(nrow(pd$nodes), igraph::vcount(g))
   expect_equal(nrow(pd$edges), igraph::ecount(g))
-  expect_true(sum(pd$nodes$is_hub) <= 2)
+  ## is_hub is "degree >= the top_hub_n'th highest degree", so a tie at that
+  ## cutoff is kept, not arbitrarily broken -- top_hub_n is a floor on how
+  ## many nodes get marked, not a hard cap. On this fixture (after
+  ## prep_binarize()'s Q1-threshold fix enlarged it) there is a 5-way tie
+  ## at the cutoff degree, so is_hub is TRUE for 6 nodes with top_hub_n = 2.
+  expect_equal(sum(pd$nodes$is_hub), 6)
+  expect_true(all(pd$nodes$degree[pd$nodes$is_hub] >= sort(pd$nodes$degree, decreasing = TRUE)[2]))
   expect_true(all(c("x", "y", "label", "degree") %in% names(pd$nodes)))
 })
 

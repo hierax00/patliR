@@ -111,8 +111,11 @@ test_that("rank_candidates() roll_up = 'max' never scores a compound below roll_
 test_that("rank_candidates() output shows the raw z_score for proximity, direction-flipped only for ranking", {
   proj <- .rank_test_setup()
   cps <- .rank_flo_compounds(proj)
+  ## An ascending, all-distinct sequence -- length tracks cps so this
+  ## doesn't assume a fixed fixture size; preserves c(-2, -1, 0, 1) when
+  ## cps has exactly 4 elements.
   prox <- data.frame(condition = "FLO-ET", compound_id = cps, disease_id = "D1",
-                      z_score = c(-2, -1, 0, 1), stringsAsFactors = FALSE)
+                      z_score = seq(-2, by = 1, length.out = length(cps)), stringsAsFactors = FALSE)
   patliRResults(proj, "network_proximity") <- prox
   proj <- rank_candidates(proj, condition = "FLO-ET", disease = "D1")
   rc <- patliRResults(proj, "rank_candidates")
@@ -155,15 +158,18 @@ test_that("rank_candidates() synergy criterion takes the best (max) partner scor
   expect_equal(rc$crit_synergy_best[rc$compound_id == a], 0.9)
   expect_equal(rc$n_p2_partners[rc$compound_id == a], 2L)
   expect_equal(rc$crit_synergy_best[rc$compound_id == b], 0.2)
-  expect_true(is.na(rc$crit_synergy_best[!rc$compound_id %in% c(a, b, d)]))
+  expect_true(all(is.na(rc$crit_synergy_best[!rc$compound_id %in% c(a, b, d)])))
 })
 
 test_that("rank_candidates() module_robustness joins r_index via network_module_membership", {
   proj <- .rank_test_setup()
   cps <- .rank_flo_compounds(proj)
-  testthat::skip_if(length(cps) < 4, "fixture needs exactly 4 compounds for this module split")
+  testthat::skip_if(length(cps) < 4, "fixture needs at least 4 compounds for this module split")
+  ## Deliberately a controlled 4-compound/2-module scenario -- restricted
+  ## to the first 4 of cps regardless of how many the fixture actually
+  ## has, so this test doesn't depend on the ambient fixture's size.
   membership <- data.frame(
-    condition = "FLO-ET", node_id = cps, node_type = "compound",
+    condition = "FLO-ET", node_id = cps[1:4], node_type = "compound",
     module_id = c("m1", "m1", "m2", "m2"), module_type = "cluster",
     stringsAsFactors = FALSE
   )

@@ -64,7 +64,8 @@ compounds_classify <- function(proj, compound_ids = NULL,
     smiles_key <- cmp$canonical_smiles[i] %||% cmp$smiles[i]
     cls <- .fetch_external(
       fetch_fun = function() .npclassifier_lookup(smiles_key),
-      cache_dir = cacheDir(proj), cache_key = paste0("npclassifier_", id), mode = fetch_mode
+      cache_dir = cacheDir(proj),
+      cache_key = paste0("npclassifier_", id, "_", rlang::hash(smiles_key)), mode = fetch_mode
     )
     if (is.null(cls)) {
       return(data.frame(

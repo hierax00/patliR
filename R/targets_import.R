@@ -129,10 +129,10 @@ targets_import <- function(proj, path, platform = c("swisstargetprediction", "su
     confidence = if (!is.na(confidence_col_resolved)) {
       .parse_percent_column(raw[[confidence_col_resolved]])
     } else {
-      NA_real_
+      rep(NA_real_, n)
     },
-    source = platform,
-    import_date = Sys.Date(),
+    source = rep(platform, n),
+    import_date = rep(Sys.Date(), n),
     stringsAsFactors = FALSE
   )
 

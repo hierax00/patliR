@@ -161,3 +161,21 @@ test_that("targets_import_batch() excludes a file with the wrong columns instead
 
   unlink(batch_dir, recursive = TRUE)
 })
+
+test_that("targets_import() accepts header-only exports", {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+  batch_dir <- tempfile("patliR_empty_targets_")
+  dir.create(batch_dir)
+  path <- file.path(batch_dir, "Targets5280443.csv")
+  writeLines("UniProt ID,Probability", path)
+  on.exit(unlink(batch_dir, recursive = TRUE))
+  proj <- targets_import(proj, path, platform = "superpred")
+  result <- patliRResults(proj, "targets_imported")
+  expect_equal(nrow(result), 0L)
+  expect_s3_class(result$import_date, "Date")
+  expect_type(result$confidence, "double")
+  proj <- targets_import_batch(proj, dirname(path), platform = "superpred")
+  log <- patliRResults(proj, "targets_import_batch_log")
+  expect_true(log$ok[log$path == basename(path)])
+})

@@ -72,6 +72,17 @@ NULL
 #' evidentiary weight as", the direct edges (`compound_target`,
 #' `target_pathway`, `target_disease`).
 #'
+#' @section Splitting a large network into readable figures:
+#' A condition with ~20 compounds and several hundred predicted targets,
+#' most of them hit by a single compound, draws as a hairball whatever the
+#' layout. Three optional filters (all off by default) cut it down:
+#' `min_target_degree = 2` keeps only shared targets; `compound_ids` draws
+#' one or a few compounds' sub-network; `module_id` draws one module of
+#' [network_module_robustness()]. Every filtered figure gets its own PNG
+#' and log row (the filter is encoded in the file name and in the log's
+#' `subset` column), so one call per module or per compound builds a
+#' series of small figures -- see the examples.
+#'
 #' @param proj A `PatliRProject` object, with [network_build()] already run.
 #' @param condition `NULL` (default -- pool every condition
 #'   [network_build()] has built into one combined graph, see the section
@@ -120,6 +131,18 @@ NULL
 #'   restrict the pathway layer to specific `network_enrich()` `db`
 #'   value(s) (e.g. `"kegg"` alone) before `max_pathways` even applies, or
 #'   `NULL` (default) for every `db` combined.
+#' @param min_target_degree Integer >= 1, default `1` (every target, the
+#'   historical behaviour). Drops targets hit by fewer than this many
+#'   distinct compounds -- `2` keeps only the targets shared between
+#'   compounds, which removes the degree-1 "dandelion" leaves that make a
+#'   condition with a few hundred singleton targets unreadable. See the
+#'   section on splitting large networks.
+#' @param compound_ids `NULL` (default, every compound) or a character
+#'   vector of `compound_id`s: draw only the sub-network of those compounds
+#'   and their targets.
+#' @param module_id `NULL` (default) or one or more `module_id`s from
+#'   [network_module_robustness()]'s `network_module_membership`: draw only
+#'   the compound/target nodes of those module(s).
 #' @param save Logical, default `TRUE`. If `TRUE`, also writes a PNG to
 #'   `out_dir`.
 #' @param out_dir Directory to write the PNG to (only used if
@@ -129,11 +152,12 @@ NULL
 #' @return A `ggplot` object (`engine = "static"`) or a `girafe` htmlwidget
 #'   (`engine = "ggiraph"`). If `save = TRUE` (the default), the PNG path
 #'   is also recorded in `patliRResults(proj, "network_layers_plot_log")`
-#'   (one row per distinct `(condition, layout, colour_by)` combination --
+#'   (one row per distinct `(condition, layout, colour_by, subset)` combination --
 #'   `"ALL"` for the pooled default `condition` -- upserted, see
-#'   `.network_upsert()`; the filename encodes all three too, e.g.
+#'   `.network_upsert()`; the filename encodes them too, e.g.
 #'   `network_layers_ALL_fr_layer.png`, so different `layout`/`colour_by`
-#'   views never overwrite each other's log row or PNG), retrievable via
+#'   views never overwrite each other's log row or PNG; `subset` is `""` unless
+#'   `min_target_degree`/`compound_ids`/`module_id` filter the graph), retrievable via
 #'   `attr(result, "proj")`.
 #'
 #' @examples
@@ -164,6 +188,20 @@ NULL
 #' # proj <- network_module_robustness(proj, condition = "FLO-ET")
 #' # plot_network_layers(proj, condition = "FLO-ET", colour_by = "module", save = FALSE)
 #'
+#' ## Split a hairball: only targets shared by >= 2 compounds ...
+#' plot_network_layers(proj, condition = "FLO-ET", min_target_degree = 2, save = FALSE)
+#' ## ... or one figure per module (after network_module_robustness()) ...
+#' # proj <- network_module_robustness(proj, condition = "FLO-ET")
+#' # mem <- patliRResults(proj, "network_module_membership")
+#' # for (m in sort(unique(stats::na.omit(mem$module_id[mem$condition == "FLO-ET"])))) {
+#' #   proj <- attr(plot_network_layers(proj, condition = "FLO-ET", module_id = m,
+#' #                                    colour_by = "module"), "proj")
+#' # }
+#' ## ... or one per compound:
+#' # for (id in compounds(proj)$id) {
+#' #   proj <- attr(plot_network_layers(proj, condition = "FLO-ET", compound_ids = id), "proj")
+#' # }
+#'
 #' ## To also draw the pathway layer (opt-in -- see the layers section
 #' ## above for why), run network_enrich() first and pass it explicitly,
 #' ## keeping max_pathways capped:
@@ -180,7 +218,9 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
                                  layout = c("fr", "kk", "drl", "bipartite"),
                                  colour_by = c("layer", "module", "node_type"), top_hub_n = 15,
                                  seed = 1, layers = c("compound", "target"),
-                                 max_pathways = 30, pathway_db = NULL, save = TRUE, out_dir = NULL,
+                                 max_pathways = 30, pathway_db = NULL,
+                                 min_target_degree = 1, compound_ids = NULL, module_id = NULL,
+                                 save = TRUE, out_dir = NULL,
                                  width = 9, height = 8, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
   engine <- match.arg(engine)
@@ -190,6 +230,10 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
   if (length(unknown_layers) > 0) {
     cli::cli_abort("Unknown {.arg layers} value(s) {.val {unknown_layers}}; must be a subset of {.val {c('compound', 'target', 'pathway', 'disease')}}.")
   }
+  if (!is.numeric(min_target_degree) || length(min_target_degree) != 1L || !is.finite(min_target_degree) ||
+      min_target_degree < 1 || min_target_degree != floor(min_target_degree)) {
+    cli::cli_abort("{.arg min_target_degree} must be a single integer >= 1.")
+  }
   engine <- .plot_require(engine)
   scope <- .plot_scope(proj, condition) # condition NULL -> every built condition
   conditions <- scope$conditions
@@ -197,26 +241,37 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
 
   g <- .network_layered_graph_multi(proj, conditions, pathway_db = pathway_db)
   g <- .network_layers_filter(proj, g, conditions, layers = layers, max_pathways = max_pathways)
+  g <- .network_layers_subset(proj, g, conditions, compound_ids = compound_ids,
+                              min_target_degree = min_target_degree, module_id = module_id)
   if (igraph::vcount(g) == 0) {
-    cli::cli_abort("Condition(s) {.val {conditions}} have zero nodes for {.arg layers} = {.val {layers}} -- nothing to plot.")
+    cli::cli_abort(c(
+      "Condition(s) {.val {conditions}} have zero nodes for {.arg layers} = {.val {layers}} -- nothing to plot.",
+      "i" = if (!is.null(compound_ids) || !is.null(module_id) || min_target_degree > 1) "{.arg compound_ids}/{.arg module_id}/{.arg min_target_degree} removed every node; relax them."
+    ))
   }
+  subset_tag <- .network_layers_subset_tag(compound_ids, min_target_degree, module_id)
 
   pd <- .network_layers_plot_data(proj, g, conditions, layout = layout, top_hub_n = top_hub_n, seed = seed, colour_by = colour_by)
-  p <- .network_layers_ggplot(pd, engine = engine, title_suffix = scope_label)
+  title_suffix <- .network_layers_subset_title(scope_label, compound_ids, min_target_degree, module_id)
+  p <- .network_layers_ggplot(pd, engine = engine, title_suffix = title_suffix, fig_width = width)
 
+  ## `subset` joined the log key after the first release -- older logs get
+  ## "" (the unfiltered figure) so a default call still replaces its row.
+  proj <- .plot_log_backfill(proj, "network_layers_plot_log", "subset", "")
   .plot_finish(
     proj, p,
     name = "network_layers_plot_log",
-    filename = paste0("network_layers_", scope_label, "_", layout, "_", colour_by, ".png"),
+    filename = paste0("network_layers_", scope_label, "_", layout, "_", colour_by,
+                      if (nzchar(subset_tag)) paste0("_", subset_tag), ".png"),
     log_row = data.frame(
-      condition = scope_label, layout = layout, colour_by = colour_by, path = NA_character_,
-      n_nodes = igraph::vcount(g), n_edges = igraph::ecount(g),
+      condition = scope_label, layout = layout, colour_by = colour_by, subset = subset_tag,
+      path = NA_character_, n_nodes = igraph::vcount(g), n_edges = igraph::ecount(g),
       stringsAsFactors = FALSE
     ),
-    key_cols = c("condition", "layout", "colour_by"),
+    key_cols = c("condition", "layout", "colour_by", "subset"),
     engine = engine, save = save, out_dir = out_dir,
     width = width, height = height, dpi = dpi,
-    static = if (engine == "static") p else .network_layers_ggplot(pd, engine = "static", title_suffix = scope_label)
+    static = if (engine == "static") p else .network_layers_ggplot(pd, engine = "static", title_suffix = title_suffix, fig_width = width)
   )
 }
 
@@ -320,6 +375,86 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
   }
 
   igraph::induced_subgraph(g, igraph::V(g)[keep])
+}
+
+#' Split a hairball into a readable sub-network: restrict to some
+#' compounds / one module, or to targets shared by several compounds
+#'
+#' @description
+#' Applied after `.network_layers_filter()`. `compound_ids` drops every
+#' other compound; `module_id` keeps only compound/target nodes that
+#' [network_module_robustness()]'s `network_module_membership` assigns to
+#' those module(s) in any condition in scope; `min_target_degree` drops
+#' targets hit by fewer than that many distinct compounds (compound-target
+#' edges only -- `2` keeps just the shared targets, which is what carries
+#' the network's structure; singleton targets are the "dandelion" leaves).
+#' Nodes left isolated by any of these are dropped too. Pathway/disease
+#' nodes are kept while something still links to them (derived
+#' compound-pathway/-disease edges included). With every argument at its
+#' default the graph is returned unchanged.
+#' @return An `igraph` induced subgraph.
+#' @keywords internal
+.network_layers_subset <- function(proj, g, conditions, compound_ids = NULL, min_target_degree = 1, module_id = NULL) {
+  vname <- igraph::V(g)$name
+  vlayer <- igraph::V(g)$layer
+  drop <- rep(FALSE, length(vname))
+  if (!is.null(compound_ids)) {
+    drop <- drop | (vlayer == "compound" & !vname %in% compound_ids)
+  }
+  if (!is.null(module_id)) {
+    membership_all <- patliRResults(proj, "network_module_membership")
+    if (is.null(membership_all) || nrow(membership_all) == 0) {
+      cli::cli_abort(c(
+        "No {.val network_module_membership} entry in {.arg proj}.",
+        "i" = "{.arg module_id} needs per-node module assignments -- run {.fn network_module_robustness} first."
+      ))
+    }
+    mem <- membership_all[membership_all$condition %in% conditions & membership_all$module_id %in% module_id, , drop = FALSE]
+    if (nrow(mem) == 0) {
+      cli::cli_abort("No node of module(s) {.val {module_id}} in condition(s) {.val {conditions}}.")
+    }
+    drop <- drop | (vlayer %in% c("compound", "target") & !vname %in% mem$node_id)
+  }
+  changed <- any(drop)
+  if (changed) g <- igraph::induced_subgraph(g, igraph::V(g)[!drop])
+
+  if (min_target_degree > 1) {
+    el <- igraph::as_data_frame(g, what = "edges")
+    ct <- el[el$edge_kind == "compound_target", , drop = FALSE]
+    n_compounds <- tapply(ct$from, ct$to, function(x) length(unique(x)))
+    targets <- igraph::V(g)$name[igraph::V(g)$layer == "target"]
+    n_hit <- n_compounds[targets]
+    low <- targets[is.na(n_hit) | n_hit < min_target_degree]
+    if (length(low) > 0) {
+      g <- igraph::induced_subgraph(g, igraph::V(g)[!igraph::V(g)$name %in% low])
+      changed <- TRUE
+    }
+  }
+  ## Removing isolated vertices cannot isolate anything else -- one pass.
+  if (changed) g <- igraph::induced_subgraph(g, igraph::V(g)[igraph::degree(g, mode = "all") > 0])
+  g
+}
+
+#' File-name / log-key tag for `.network_layers_subset()`'s arguments
+#' @return `""` when nothing is filtered, else e.g. `"mindeg2_mod-M1"`.
+#' @keywords internal
+.network_layers_subset_tag <- function(compound_ids = NULL, min_target_degree = 1, module_id = NULL) {
+  parts <- character(0)
+  if (!is.null(compound_ids)) parts <- c(parts, paste0("cmp-", substr(rlang::hash(sort(unique(compound_ids))), 1, 8)))
+  if (!is.null(module_id)) parts <- c(parts, paste0("mod-", gsub("[^A-Za-z0-9_.-]+", "_", paste(sort(unique(module_id)), collapse = "+"))))
+  if (min_target_degree > 1) parts <- c(parts, paste0("mindeg", min_target_degree))
+  paste(parts, collapse = "_")
+}
+
+#' Plot-title suffix naming `.network_layers_subset()`'s active filters
+#' @return `scope_label`, followed by e.g. `" (module M1; targets hit by >= 2 compounds)"`.
+#' @keywords internal
+.network_layers_subset_title <- function(scope_label, compound_ids = NULL, min_target_degree = 1, module_id = NULL) {
+  parts <- character(0)
+  if (!is.null(compound_ids)) parts <- c(parts, paste0(length(unique(compound_ids)), " selected compound(s)"))
+  if (!is.null(module_id)) parts <- c(parts, paste0("module ", paste(sort(unique(module_id)), collapse = ", ")))
+  if (min_target_degree > 1) parts <- c(parts, paste0("targets hit by >= ", min_target_degree, " compounds"))
+  if (length(parts) == 0) scope_label else paste0(scope_label, " (", paste(parts, collapse = "; "), ")")
 }
 
 #' Compute a layout + labels/colors/sizes for `plot_network_layers()`
@@ -499,7 +634,7 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
 }
 
 #' @keywords internal
-.network_layers_ggplot <- function(pd, engine, title_suffix) {
+.network_layers_ggplot <- function(pd, engine, title_suffix, fig_width = 9, edge_alpha = 1) {
   nodes <- pd$nodes
   edges <- pd$edges
   ## sqrt-scaled point size: hub nodes read as visibly bigger without a
@@ -516,7 +651,7 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
       colour = "grey75", linewidth = 0.15
     ) +
     ggplot2::scale_linetype_manual(values = c(`FALSE` = "solid", `TRUE` = "22"), guide = "none") +
-    ggplot2::scale_alpha_manual(values = c(`FALSE` = 0.35, `TRUE` = 0.2), guide = "none")
+    ggplot2::scale_alpha_manual(values = c(`FALSE` = 0.35, `TRUE` = 0.2) * edge_alpha, guide = "none")
 
   ## Node grouping is carried on `fill` (with a fixed grey border), not
   ## `colour`, so an overlay that maps `colour` to a *continuous* value --
@@ -538,29 +673,48 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
     )
   }
 
+  ## Hub labels: long GC-MS names truncated for the drawn text only (the
+  ## tooltip above keeps the full name), repelled off each other and off
+  ## the hub points when ggrepel is installed -- hubs cluster in the dense
+  ## core of a force-directed layout, where plain offset text piles up.
   hubs <- nodes[nodes$is_hub, , drop = FALSE]
   if (nrow(hubs) > 0) {
-    p <- p + ggplot2::geom_text(
+    hubs$short_label <- .plot_truncate(hubs$label)
+    p <- p + .plot_text_layer(
       data = hubs,
-      ggplot2::aes(x = .data$x, y = .data$y, label = .data$label),
-      size = 3, fontface = "bold", colour = "grey15", vjust = -1, show.legend = FALSE
+      mapping = ggplot2::aes(x = .data$x, y = .data$y, label = .data$short_label),
+      size = 3, fontface = "bold", colour = "grey15", show.legend = FALSE,
+      repel_args = list(
+        box.padding = 0.35, point.padding = 0.2, min.segment.length = 0.2,
+        segment.colour = "grey40", max.overlaps = Inf,
+        bg.colour = "white", bg.r = 0.12, seed = 1
+      ),
+      text_args = list(vjust = -1)
     )
   }
 
   layer_title <- paste(unique(nodes$layer[order(match(nodes$layer, c("compound", "target", "pathway", "disease")))]), collapse = "-")
   p +
     ggplot2::scale_fill_manual(values = pd$palette, name = pd$legend_name) +
+    ## identity-scaled point sizes leave the legend keys at the tiny default
+    ggplot2::guides(fill = ggplot2::guide_legend(override.aes = list(size = 4))) +
     ggplot2::scale_size_identity(guide = "none") +
-    ggplot2::coord_equal() +
+    ggplot2::coord_equal(xlim = pd$xlim, ylim = pd$ylim, clip = "off") +
     ggplot2::labs(
-      title = paste0(layer_title, " network -- ", title_suffix),
-      subtitle = "Node size = degree; labeled nodes are the top-degree hubs; dashed edges are derived (transitive) relationships",
+      title = .plot_wrap(paste0(layer_title, " network -- ", title_suffix), .plot_wrap_width(fig_width, 13)),
+      subtitle = .plot_wrap(
+        "Node size = degree; labeled nodes are the top-degree hubs; dashed edges are derived (transitive) relationships",
+        .plot_wrap_width(fig_width, 8)
+      ),
       x = NULL, y = NULL
     ) +
     ggplot2::theme_void() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(size = 12, face = "bold"),
       plot.subtitle = ggplot2::element_text(size = 8, colour = "grey40"),
+      plot.title.position = "plot",
+      plot.background = ggplot2::element_rect(fill = "white", colour = NA),
+      plot.margin = ggplot2::margin(8, 12, 8, 12),
       legend.position = "right"
     )
 }

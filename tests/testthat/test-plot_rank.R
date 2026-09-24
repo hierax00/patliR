@@ -150,3 +150,20 @@ test_that("plot_rank(view = 'heatmap', target_relevance = 'centrality') requires
     "network_centrality"
   )
 })
+
+test_that("plot_rank(view = 'pareto') draws shortened front-1 labels with x headroom", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .test_project()
+  long_id <- "Naphthalene, 1,2-dihydro-1,1,6-trimethyl-"
+  patliRResults(proj, "network_edges") <- data.frame(condition = "A", compound_id = c(long_id, "c2"), uniprot_id = "t1", weight = 1)
+  patliRResults(proj, "rank_candidates") <- data.frame(
+    condition = "A", compound_id = c(long_id, "c2"), rra_rank = 1:2, pareto_front = c(1L, 2L),
+    crit_centrality = c(0.9, 0.1), stringsAsFactors = FALSE
+  )
+  p <- plot_rank(proj, condition = "A", save = FALSE)
+  lab <- Filter(function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")), p$layers)[[1]]$data
+  expect_equal(nrow(lab), 1)
+  expect_true(nchar(lab$short_label) <= 28)
+  expect_identical(lab$compound_label, long_id)
+  expect_equal(p$scales$get_scales("x")$expand, ggplot2::expansion(mult = 0.12))
+})

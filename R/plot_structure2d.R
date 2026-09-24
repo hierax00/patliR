@@ -24,7 +24,10 @@ NULL
 #' @param compound_ids Character vector of `compounds(proj)$id`, or `NULL`
 #'   (default) for every compound with a successful (`generated_ok`)
 #'   `structure2d_log` entry.
-#' @param ncol Integer, default `4`. Number of grid columns.
+#' @param ncol Integer, default `4`. Number of grid columns. When `height`
+#'   is not given, the saved figure is `max(8, ceiling(n / ncol) * 2.3)`
+#'   inches tall, so each structure keeps a legible cell however many
+#'   compounds there are; captions are wrapped to the cell width.
 #'
 #' @return A `patchwork` object (see [plot_upset()] for why `patchwork`,
 #'   not a single `ggplot`). If `save = TRUE` (default), also writes a PNG
@@ -75,11 +78,20 @@ plot_structure2d <- function(proj, compound_ids = NULL, ncol = 4,
   cmp <- compounds(proj)
   name_lookup <- stats::setNames(cmp$name, cmp$id)
   dat$label <- ifelse(is.na(name_lookup[dat$id]) | name_lookup[dat$id] == "", dat$id, name_lookup[dat$id])
+  ## A fixed 10 x 8 in canvas shrinks a 100+ compound grid to thumbnails
+  ## with overprinted captions: unless `height` was given, grow it with the
+  ## number of grid rows; captions wrap to the cell width (two lines max).
+  if (missing(height)) height <- .structure2d_height(nrow(dat), ncol, height)
+  cell_chars <- .plot_wrap_width(width / min(ncol, nrow(dat)), 8, margin = 0.2)
+  dat$caption <- .plot_wrap(.plot_truncate(dat$label, 2 * cell_chars), cell_chars)
 
   panels <- lapply(seq_len(nrow(dat)), function(i) {
     img <- tryCatch(png::readPNG(dat$path[i]), error = function(e) NULL)
-    p <- ggplot2::ggplot() + ggplot2::theme_void() + ggplot2::labs(title = dat$label[i]) +
-      ggplot2::theme(plot.title = ggplot2::element_text(size = 8, hjust = 0.5))
+    p <- ggplot2::ggplot() + ggplot2::theme_void() + ggplot2::labs(title = dat$caption[i]) +
+      ggplot2::theme(
+        plot.title = ggplot2::element_text(size = 8, hjust = 0.5, lineheight = 0.9),
+        plot.background = ggplot2::element_rect(fill = "white", colour = NA)
+      )
     if (!is.null(img)) {
       p <- p + ggplot2::annotation_raster(img, xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf) +
         ggplot2::coord_fixed(xlim = c(0, 1), ylim = c(0, 1))
@@ -95,7 +107,7 @@ plot_structure2d <- function(proj, compound_ids = NULL, ncol = 4,
     if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
     if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
     path <- file.path(out_dir, "structure2d_grid.png")
-    ggplot2::ggsave(path, p, width = width, height = height, dpi = dpi, limitsize = FALSE)
+    ggplot2::ggsave(path, p, width = width, height = height, dpi = dpi, limitsize = FALSE, bg = "white")
     grid_log <- data.frame(path = path, n_compounds = nrow(dat), stringsAsFactors = FALSE)
     patliRResults(proj, "structure2d_grid_log") <- grid_log
     .write_results_csv(proj, "structure2d_grid_log", grid_log)
@@ -104,3 +116,18 @@ plot_structure2d <- function(proj, compound_ids = NULL, ncol = 4,
   if (save) attr(p, "proj") <- proj
   p
 }
+
+#' Figure height for `plot_structure2d()`'s grid
+#'
+#' @description
+#' ~2.3 in per grid row (a 2.5 in wide cell at the default `width = 10`,
+#' `ncol = 4`, plus its caption), never less than `height`.
+#' @param n Number of structures.
+#' @param ncol Grid columns.
+#' @param height Minimum height in inches (the function default, 8).
+#' @return Height in inches.
+#' @keywords internal
+.structure2d_height <- function(n, ncol, height = 8) {
+  max(height, ceiling(n / ncol) * 2.3)
+}
+

@@ -161,7 +161,14 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
   dat$tooltip <- sprintf("%s\nz = %.2f (d_obs = %.2f, null = %.2f +/- %.2f)", dat$label, dat$z_score, dat$d_observed, dat$d_random_mean, dat$d_random_sd)
 
   p <- ggplot2::ggplot(dat, ggplot2::aes(x = .data$compound_id, y = .data$z_score, colour = .data$significant)) +
-    ggplot2::geom_hline(yintercept = c(-1.96, 0, 1.96), linetype = c("22", "solid", "22"), colour = "grey60") +
+    ## reference lines as data, not a length-3 linetype vector: a vector
+    ## aesthetic is recycled per panel and fails once facet_wrap() gives more
+    ## than one (condition, disease) panel
+    ggplot2::geom_hline(
+      data = data.frame(yintercept = c(-1.96, 0, 1.96), lt = c("22", "solid", "22")),
+      ggplot2::aes(yintercept = .data$yintercept, linetype = .data$lt), colour = "grey60", inherit.aes = FALSE
+    ) +
+    ggplot2::scale_linetype_identity() +
     ggplot2::geom_segment(ggplot2::aes(xend = .data$compound_id, y = 0, yend = .data$z_score), linewidth = 0.4, alpha = 0.6)
   p <- p + if (engine == "ggiraph" && requireNamespace("ggiraph", quietly = TRUE)) {
     ggiraph::geom_point_interactive(ggplot2::aes(tooltip = .data$tooltip, data_id = .data$compound_id), size = 2.5)
@@ -174,12 +181,23 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
     ggplot2::scale_colour_manual(values = c(`TRUE` = "#c0392b", `FALSE` = "grey40"), name = "|z| >= 1.96") +
     ggplot2::labs(
       title = paste0("Network proximity z-scores -- ", scope_label),
-      subtitle = "More negative = targets significantly closer to the disease module than the degree-matched null model",
+      subtitle = .plot_wrap(
+        "More negative = targets significantly closer to the disease module than the degree-matched null model",
+        .plot_wrap_width(width, 8)
+      ),
       x = NULL, y = "z-score"
     ) +
     ggplot2::theme_minimal() +
-    ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 8, colour = "grey40"))
-  if (length(unique(dat$panel)) > 1) p <- p + ggplot2::facet_wrap(~panel, scales = "free_y")
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 8, colour = "grey40"),
+      plot.title.position = "plot"
+    )
+  ## Several (condition, disease) panels side by side sharing the compound
+  ## axis: facet_wrap(scales = "free_y") repeated the full compound labels
+  ## per panel and squeezed each panel to a sliver with clipped strips.
+  if (length(unique(dat$panel)) > 1) {
+    p <- p + ggplot2::facet_grid(cols = ggplot2::vars(.data$panel), labeller = ggplot2::label_wrap_gen(25))
+  }
 
   .plot_finish(
     proj, p,
@@ -262,7 +280,7 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
     paste(dat_null$condition, dat_null$disease_id, dat_null$compound_id, sep = "\r"), keep_key
   )]
   facet_labels <- stats::setNames(
-    paste0(main_scope$label, "\n(", main_scope$condition, " / ", main_scope$disease_id, ")"), main_scope$facet
+    paste0(.plot_truncate(main_scope$label, 32), "\n(",main_scope$condition, " / ", main_scope$disease_id, ")"), main_scope$facet
   )
 
   ## p_adjusted may be all-NA (or absent, on a legacy/fabricated table) --
@@ -283,13 +301,17 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
     ggplot2::facet_wrap(~facet, scales = "free", labeller = ggplot2::as_labeller(facet_labels)) +
     ggplot2::labs(
       title = paste0("Network proximity null distributions -- ", scope_label),
-      subtitle = "Degree-preserving null resamples (network_proximity(store_null = TRUE)); red line = d_observed (Guney et al. 2016 Fig. 1)",
+      subtitle = .plot_wrap(
+        "Degree-preserving null resamples (network_proximity(store_null = TRUE)); red line = d_observed (Guney et al. 2016 Fig. 1)",
+        .plot_wrap_width(width, 8)
+      ),
       x = "d_random (null draw)", y = "Count"
     ) +
     ggplot2::theme_minimal() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(size = 12, face = "bold"),
       plot.subtitle = ggplot2::element_text(size = 8, colour = "grey40"),
+      plot.title.position = "plot",
       strip.text = ggplot2::element_text(size = 7.5)
     )
 

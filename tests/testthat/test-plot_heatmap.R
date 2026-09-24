@@ -67,3 +67,11 @@ test_that("presence heatmaps render disjoint NA rows through pheatmap", {
   expect_identical(p$tree_col, NA)
   expect_true(file.exists(patliRResults(attr(p, "proj"), "heatmap_plot_log")$path))
 })
+
+test_that(".plot_heatmap_top_targets() ranks by number of compounds, then summed weight", {
+  long <- data.frame(compound_id = c("c1", "c2", "c1", "c1", "c2", "c3"),
+                     uniprot_id = c("A", "A", "B", "C", "C", "C"),
+                     weight = c(0.1, 0.1, 0.9, NA, 0.2, 0.3), stringsAsFactors = FALSE)
+  expect_identical(patliR:::.plot_heatmap_top_targets(long, 2), c("C", "A"))
+  expect_identical(patliR:::.plot_heatmap_top_targets(long, 10), c("C", "A", "B"))
+})

@@ -53,6 +53,7 @@ Suggests:
     bipartite,
     STRINGdb,
     ggalluvial,
+    ggrepel,
     ggVennDiagram,
     patchwork,
     pheatmap,

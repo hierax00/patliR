@@ -237,3 +237,75 @@ test_that("zero hubs disables labels and invalid hub counts or empty scopes erro
   expect_error(plot_network_layers(proj, condition = character(), save = FALSE), "at least one condition")
   expect_error(patliR:::.network_layered_graph_multi(proj, character()), "at least one condition")
 })
+
+test_that("min_target_degree keeps only shared targets and drops the compounds left isolated", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .network_stats_test_setup()
+  g <- patliR:::.network_layered_graph_multi(proj, "FLO-ET")
+  g <- patliR:::.network_layers_filter(proj, g, "FLO-ET", layers = c("compound", "target"), max_pathways = 0)
+  expect_identical(patliR:::.network_layers_subset(proj, g, "FLO-ET"), g)
+
+  g2 <- patliR:::.network_layers_subset(proj, g, "FLO-ET", min_target_degree = 2)
+  ct <- igraph::as_data_frame(g, what = "edges")
+  n_hit <- tapply(ct$from, ct$to, function(x) length(unique(x)))
+  kept_targets <- igraph::V(g2)$name[igraph::V(g2)$layer == "target"]
+  expect_setequal(kept_targets, names(n_hit)[n_hit >= 2])
+  expect_true(all(igraph::degree(g2) > 0))
+})
+
+test_that("compound_ids draws only that compound's sub-network, in its own file and log row", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .network_stats_test_setup()
+  edges <- patliRResults(proj, "network_edges")
+  one <- unique(edges$compound_id[edges$condition == "FLO-ET"])[1]
+  p <- plot_network_layers(proj, condition = "FLO-ET", compound_ids = one, save = TRUE)
+  pts <- Filter(function(l) inherits(l$geom, "GeomPoint"), p$layers)[[1]]$data
+  expect_identical(unique(pts$name[pts$layer == "compound"]), one)
+  expect_true(all(pts$name[pts$layer == "target"] %in% edges$uniprot_id[edges$compound_id == one]))
+
+  log_df <- patliRResults(attr(p, "proj"), "network_layers_plot_log")
+  tag <- patliR:::.network_layers_subset_tag(compound_ids = one)
+  expect_true(startsWith(tag, "cmp-"))
+  expect_identical(log_df$subset, tag)
+  expect_true(file.exists(file.path(projectDir(proj), "plots", paste0("network_layers_FLO-ET_fr_layer_", tag, ".png"))))
+  expect_match(p$labels$title, "1 selected compound")
+})
+
+test_that("module_id restricts to one module and needs network_module_robustness()", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .network_stats_test_setup()
+  expect_error(plot_network_layers(proj, condition = "FLO-ET", module_id = "M1", save = FALSE), "network_module_robustness")
+  proj <- network_module_robustness(proj, condition = "FLO-ET", seed = 42)
+  mem <- patliRResults(proj, "network_module_membership")
+  m <- stats::na.omit(mem$module_id[mem$condition == "FLO-ET"])[1]
+  p <- plot_network_layers(proj, condition = "FLO-ET", module_id = m, colour_by = "module", save = FALSE)
+  pts <- Filter(function(l) inherits(l$geom, "GeomPoint"), p$layers)[[1]]$data
+  expect_true(all(pts$name %in% mem$node_id[mem$condition == "FLO-ET" & mem$module_id %in% m]))
+  expect_error(plot_network_layers(proj, condition = "FLO-ET", module_id = "no_such_module", save = FALSE), "No node")
+})
+
+test_that("an old network_layers_plot_log without `subset` is back-filled and the default row replaced", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .network_stats_test_setup()
+  patliRResults(proj, "network_layers_plot_log") <- data.frame(
+    condition = "FLO-ET", layout = "fr", colour_by = "layer", path = "old.png", n_nodes = 1, n_edges = 1
+  )
+  p <- plot_network_layers(proj, condition = "FLO-ET", save = TRUE)
+  log_df <- patliRResults(attr(p, "proj"), "network_layers_plot_log")
+  expect_equal(nrow(log_df), 1)
+  expect_identical(log_df$subset, "")
+  expect_false(identical(log_df$path, "old.png"))
+})
+
+test_that("hub labels are truncated for drawing but the tooltip keeps the full name", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .network_stats_test_setup()
+  g <- patliR:::.network_layered_graph_multi(proj, "FLO-ET")
+  pd <- patliR:::.network_layers_plot_data(proj, g, "FLO-ET", layout = "fr", top_hub_n = 50, seed = 1)
+  pd$nodes$label[1] <- strrep("Long-compound-name-", 4)
+  pd$nodes$is_hub[1] <- TRUE
+  p <- patliR:::.network_layers_ggplot(pd, engine = "static", title_suffix = "X")
+  lab <- Filter(function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")), p$layers)[[1]]$data
+  expect_true(all(nchar(lab$short_label) <= 28))
+  expect_identical(lab$label[lab$name == pd$nodes$name[1]], pd$nodes$label[1])
+})

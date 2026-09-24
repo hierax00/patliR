@@ -75,8 +75,12 @@ test_that("plot_network_degeneracy() filter = 'score' reproduces the historical 
   )
   patliRResults(proj, "network_degeneracy") <- fake_deg
 
-  ## min_degeneracy = 0.6 excludes the one pair (score 0.5) -> zero links, still a valid plot
-  p_excluded <- plot_network_degeneracy(proj, condition = "FLO-ET", filter = "score", min_degeneracy = 0.6, save = FALSE)
+  ## min_degeneracy = 0.6 excludes the one pair (score 0.5) -> zero links,
+  ## still a valid plot, but no longer a silent one
+  expect_warning(
+    p_excluded <- plot_network_degeneracy(proj, condition = "FLO-ET", filter = "score", min_degeneracy = 0.6, save = FALSE),
+    "no degeneracy link"
+  )
   expect_s3_class(p_excluded, "ggplot")
   ## min_degeneracy = 0.1 includes it -- same cutoff arithmetic as the pre-revision code
   p_included <- plot_network_degeneracy(proj, condition = "FLO-ET", filter = "score", min_degeneracy = 0.1, save = FALSE)
@@ -142,4 +146,80 @@ test_that("plot_network_degeneracy() supports layout = 'bipartite' (its scope is
   patliRResults(proj, "network_degeneracy") <- fake_deg
   p <- plot_network_degeneracy(proj, condition = "FLO-ET", layout = "bipartite", save = FALSE)
   expect_s3_class(p, "ggplot")
+})
+
+.degeneracy_fixture <- function(proj) {
+  ct <- unique(patliRResults(proj, "network_edges")[patliRResults(proj, "network_edges")$condition == "FLO-ET", "compound_id"])
+  testthat::skip_if(length(ct) < 3, "need at least 3 compounds in this fixture's FLO-ET condition")
+  pairs <- utils::combn(ct[1:3], 2)
+  patliRResults(proj, "network_degeneracy") <- data.frame(
+    condition = "FLO-ET", compound_a = pairs[1, ], compound_b = pairs[2, ],
+    z_score = c(4, 1, -0.5), p_adjusted = c(0.01, 0.3, 0.9), degeneracy_score = c(0.8, 0.4, 0.1),
+    stringsAsFactors = FALSE
+  )
+  proj
+}
+
+test_that("plot_network_degeneracy() aborts, naming the available conditions, when the requested one has no rows", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .degeneracy_fixture(.network_stats_test_setup())
+  deg <- patliRResults(proj, "network_degeneracy")
+  deg$condition <- "OTHER"
+  patliRResults(proj, "network_degeneracy") <- deg
+  expect_error(plot_network_degeneracy(proj, condition = "FLO-ET", save = FALSE), "OTHER")
+})
+
+test_that("plot_network_degeneracy() warns when no pair passes the filter", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .degeneracy_fixture(.network_stats_test_setup())
+  expect_warning(
+    p <- plot_network_degeneracy(proj, condition = "FLO-ET", alpha = 0.001, save = FALSE),
+    "no degeneracy link"
+  )
+  expect_s3_class(p, "ggplot")
+  expect_false(any(vapply(p$layers, function(l) inherits(l$geom, "GeomCurve"), logical(1))))
+})
+
+test_that("degeneracy links are drawn only for passing pairs, coloured by z and sized by score", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .degeneracy_fixture(.network_stats_test_setup())
+  p <- plot_network_degeneracy(proj, condition = "FLO-ET", save = FALSE)
+  curves <- Filter(function(l) inherits(l$geom, "GeomCurve"), p$layers)[[1]]
+  expect_equal(nrow(curves$data), 1)
+  expect_equal(curves$data$z_score, 4)
+  expect_true(all(c("colour", "linewidth") %in% names(curves$mapping)))
+})
+
+test_that("layout = 'circle' draws only the compounds, on the unit circle, with every link", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .degeneracy_fixture(.network_stats_test_setup())
+  p <- plot_network_degeneracy(proj, condition = "FLO-ET", layout = "circle", filter = "score",
+                               min_degeneracy = 0.3, save = FALSE)
+  pts <- Filter(function(l) inherits(l$geom, "GeomPoint"), p$layers)[[1]]$data
+  expect_true(all(pts$layer == "compound"))
+  expect_equal(sqrt(pts$x^2 + pts$y^2), rep(1, nrow(pts)))
+  curves <- Filter(function(l) inherits(l$geom, "GeomCurve"), p$layers)[[1]]
+  expect_equal(nrow(curves$data), 2)
+})
+
+test_that("view = 'heatmap' tiles every scored pair symmetrically and marks the passing ones", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .degeneracy_fixture(.network_stats_test_setup())
+  p <- plot_network_degeneracy(proj, condition = "FLO-ET", view = "heatmap", save = TRUE)
+  expect_true(any(vapply(p$layers, function(l) inherits(l$geom, "GeomTile"), logical(1))))
+  expect_equal(nrow(p$data), 6)
+  stars <- Filter(function(l) inherits(l$geom, "GeomText"), p$layers)[[1]]$data
+  expect_equal(nrow(stars), 2)
+  expect_true(all(stars$value == 4))
+  log_df <- patliRResults(attr(p, "proj"), "network_degeneracy_plot_log")
+  expect_identical(log_df$view, "heatmap")
+  expect_true(file.exists(log_df$path))
+})
+
+test_that(".network_degeneracy_order() puts the most degenerate pair next to each other", {
+  deg <- data.frame(condition = "A", compound_a = c("a", "a", "b", "a"), compound_b = c("d", "b", "c", "c"),
+                    z_score = c(9, 0, 0, 0), degeneracy_score = 0.1, stringsAsFactors = FALSE)
+  ord <- patliR:::.network_degeneracy_order(deg, c("a", "b", "c", "d"))
+  expect_setequal(ord, c("a", "b", "c", "d"))
+  expect_equal(abs(diff(match(c("a", "d"), ord))), 1)
 })

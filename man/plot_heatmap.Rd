@@ -9,6 +9,7 @@ plot_heatmap(
   proj,
   condition = NULL,
   what = c("compound_target", "compound_condition"),
+  top_n_targets = NULL,
   save = TRUE,
   out_dir = NULL,
   width = NULL,
@@ -24,6 +25,12 @@ condition. Rebuilding a subset leaves previously-built conditions
 untouched in \code{patliRResults(proj, "network_edges")}.}
 
 \item{what}{\code{"compound_target"} (default) or \code{"compound_condition"}.}
+
+\item{top_n_targets}{\code{NULL} (default, every target) or an integer: for
+\code{what = "compound_target"}, keep only the \code{top_n_targets} targets hit
+by the most compounds (ties by summed weight). With a few hundred
+targets the full matrix is unreadable; a \code{cli_inform} suggests this
+above 60 targets. Ignored for \code{what = "compound_condition"}.}
 
 \item{save}{Logical, default \code{TRUE}. If \code{TRUE}, writes a PDF via
 \code{pheatmap::pheatmap(..., filename = ...)} and logs the path to

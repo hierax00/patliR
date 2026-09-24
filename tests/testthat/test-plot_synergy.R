@@ -62,9 +62,9 @@ test_that("plot_synergy() draws the Cheng quadrant over all P1..P6 + NA classes,
 
   built <- ggplot2::ggplot_build(p)
   ann_labels <- unlist(lapply(built$data, function(d) {
-    if ("label" %in% names(d)) d$label[grepl("Complementary Exposure", d$label)] else NULL
+    if ("label" %in% names(d)) d$label[grepl("Complementary Exposure|P2 pair", d$label)] else NULL
   }))
-  expect_true(length(ann_labels) >= 1)
+  expect_true(any(grepl("Complementary Exposure", ann_labels)))
 
   hand_count_d1 <- sum(fake$cheng_class == "P2" & fake$disease_id == "D1", na.rm = TRUE)
   hand_count_d2 <- sum(fake$cheng_class == "P2" & fake$disease_id == "D2", na.rm = TRUE)
@@ -142,4 +142,25 @@ test_that("unclassified synergy pairs still contribute to the separation histogr
   expect_equal(plots$sab$data$s_ab, c(-0.5, 1))
   expect_equal(sum(ggplot2::ggplot_build(plots$sab)$data[[1]]$count), 2)
   expect_true(inherits(plots$main$layers[[1]]$geom, "GeomText"))
+})
+
+test_that("plot_synergy() draws the P2 quadrant name and its count as separate single-line labels", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(condition = "A", compound_id = "c1", uniprot_id = "t1")
+  patliRResults(proj, "network_synergy") <- data.frame(
+    condition = "A", disease_id = "d1", compound_a = c("c1", "c2"), compound_b = c("c2", "c3"),
+    z_score_a = c(-3, -1), z_score_b = c(-2, -4), s_ab = c(0.5, -0.2), separated = c(TRUE, FALSE),
+    cheng_class = c("P2", "P1"), synergy_score = c(1, NA), stringsAsFactors = FALSE
+  )
+  testthat::local_mocked_bindings(
+    .synergy_finish_both = function(proj, p_main, p_sab, ...) list(main = p_main, sab = p_sab),
+    .package = "patliR"
+  )
+  plots <- plot_synergy(proj, condition = "A", save = FALSE)
+  txt <- Filter(function(l) inherits(l$geom, "GeomText"), plots$main$layers)
+  labels <- unlist(lapply(txt, function(l) c(l$data$quadrant_label, l$data$count_label)))
+  expect_true(any(grepl("Complementary Exposure (P2)", labels, fixed = TRUE)))
+  expect_true(any(grepl("n = 1 P2 pair", labels, fixed = TRUE)))
+  expect_false(any(grepl("\n", labels, fixed = TRUE)))
 })

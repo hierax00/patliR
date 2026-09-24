@@ -24,6 +24,11 @@ NULL
 #'
 #' @inheritParams network_build
 #' @param what `"compound_target"` (default) or `"compound_condition"`.
+#' @param top_n_targets `NULL` (default, every target) or an integer: for
+#'   `what = "compound_target"`, keep only the `top_n_targets` targets hit
+#'   by the most compounds (ties by summed weight). With a few hundred
+#'   targets the full matrix is unreadable; a `cli_inform` suggests this
+#'   above 60 targets. Ignored for `what = "compound_condition"`.
 #' @param save Logical, default `TRUE`. If `TRUE`, writes a PDF via
 #'   `pheatmap::pheatmap(..., filename = ...)` and logs the path to
 #'   `patliRResults(proj, "heatmap_plot_log")`. If `FALSE`, draws to the
@@ -64,9 +69,12 @@ NULL
 #'
 #' @export
 plot_heatmap <- function(proj, condition = NULL, what = c("compound_target", "compound_condition"),
+                          top_n_targets = NULL,
                           save = TRUE, out_dir = NULL, width = NULL, height = NULL) {
   stopifnot(is(proj, "PatliRProject"))
   what <- match.arg(what)
+  stopifnot(is.null(top_n_targets) ||
+              (is.numeric(top_n_targets) && length(top_n_targets) == 1 && !is.na(top_n_targets) && top_n_targets >= 1))
   if (!requireNamespace("pheatmap", quietly = TRUE)) {
     cli::cli_abort("The {.pkg pheatmap} package is required for {.fn plot_heatmap}.")
   }
@@ -90,17 +98,46 @@ plot_heatmap <- function(proj, condition = NULL, what = c("compound_target", "co
     if (nrow(long) == 0) {
       cli::cli_abort("Nothing to plot for {.arg what} = {.val {what}} in this scope.")
     }
+    n_targets_all <- length(unique(long$uniprot_id))
+    if (!is.null(top_n_targets)) {
+      long <- long[long$uniprot_id %in% .plot_heatmap_top_targets(long, top_n_targets), , drop = FALSE]
+    } else if (n_targets_all > 60) {
+      cli::cli_inform(c(
+        "i" = "{.fn plot_heatmap}: {n_targets_all} target columns -- the PDF will be {round(n_targets_all * 0.9 + 2)} in wide and the cells unreadable; pass {.arg top_n_targets} (e.g. {.code top_n_targets = 40}) to keep the targets shared by the most compounds."
+      ))
+    }
     mat <- .plot_edge_matrix(proj, conditions, long)
-    title <- paste0("Compound-Target Binding Probability -- ", scope_label)
+    title <- paste0(
+      "Compound-Target Binding Probability -- ", scope_label,
+      if (ncol(mat) < n_targets_all) paste0(" (top ", ncol(mat), " of ", n_targets_all, " targets)")
+    )
   }
 
+  ## top_n_targets joined the log key later -- older rows are full matrices
+  top_n_used <- if (what == "compound_target" && !is.null(top_n_targets)) as.numeric(top_n_targets) else NA_real_
+  proj <- .plot_log_backfill(proj, "heatmap_plot_log", "top_n_targets", NA_real_)
   .plot_pheatmap_render(
     proj, mat, title, save, out_dir, width, height,
     log_name = "heatmap_plot_log",
-    log_row = data.frame(condition = scope_label, what = what, path = NA_character_, stringsAsFactors = FALSE),
-    key_cols = c("condition", "what"),
-    filename = paste0("heatmap_", what, "_", scope_label, ".pdf")
+    log_row = data.frame(condition = scope_label, what = what, top_n_targets = top_n_used,
+                         path = NA_character_, stringsAsFactors = FALSE),
+    key_cols = c("condition", "what", "top_n_targets"),
+    filename = paste0("heatmap_", what, "_", scope_label, if (!is.na(top_n_used)) paste0("_top", top_n_used), ".pdf")
   )
+}
+
+#' Targets shared by the most compounds, for `plot_heatmap(top_n_targets =)`
+#'
+#' @description
+#' Ranked by number of distinct compounds hitting the target, then by the
+#' summed `weight` (`NA` counted as 0), then by `uniprot_id`.
+#' @return Character vector of at most `top_n` `uniprot_id`s.
+#' @keywords internal
+.plot_heatmap_top_targets <- function(long, top_n) {
+  ids <- sort(unique(long$uniprot_id))
+  breadth <- vapply(ids, function(t) length(unique(long$compound_id[long$uniprot_id == t])), integer(1))
+  weight <- vapply(ids, function(t) sum(long$weight[long$uniprot_id == t], na.rm = TRUE), numeric(1))
+  utils::head(ids[order(-breadth, -weight, ids)], top_n)
 }
 
 #' Build by IDs, preserving unknown weights and labelling only after pooling

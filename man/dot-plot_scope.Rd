@@ -18,7 +18,9 @@ vector of condition names.}
 }
 \description{
 \code{.network_resolve_conditions()} plus the \code{"ALL"} (pooled) vs.
-\code{"cond1+cond2"} (explicit) label string that the \verb{plot_*} family uses
+\code{"cond1+cond2_<hash>"} (explicit multiple) label string that the \verb{plot_*} family uses
 for filenames, plot titles and the \code{condition} column of every plot log.
+Single-condition labels stay unchanged except literal \code{"ALL"}, which
+also gets a hash to distinguish it from the pooled default.
 }
 \keyword{internal}

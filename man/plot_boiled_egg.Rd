@@ -12,7 +12,8 @@ plot_boiled_egg(
   out_dir = NULL,
   width = 7,
   height = 5,
-  dpi = 150
+  dpi = 150,
+  label = c("id", "name", "none")
 )
 }
 \arguments{
@@ -26,7 +27,7 @@ a tooltip per point. \code{"static"}: plain \code{ggplot2}.}
 
 \item{save}{Logical, default \code{TRUE}. If \code{TRUE}, also writes two static
 PNGs to \code{out_dir} -- \code{boiled_egg_labeled.png} (with each point labeled
-by its \code{compound_id}) and \code{boiled_egg_plain.png} (same scatter, no
+by \code{compound_id} or name, see \code{label}) and \code{boiled_egg_plain.png} (same scatter, no
 point labels -- useful once you have many compounds and the labels
 start overlapping).}
 
@@ -34,6 +35,14 @@ start overlapping).}
 \code{save = TRUE}). Defaults to \code{file.path(projectDir(proj), "plots")}.}
 
 \item{width, height, dpi}{Passed to \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}} for the saved PNG.}
+
+\item{label}{What the labeled PNG (\code{boiled_egg_labeled.png}) prints
+next to each point: \code{"id"} (default, \code{compound_id}), \code{"name"} (the
+compound name, shortened to 24 characters; \code{compound_id} when there is
+none) or \code{"none"}. Labels are repelled when the optional \code{ggrepel}
+package is installed, and ones that still cannot be placed without
+overlapping are left out (the plain PNG and the \code{ggiraph} tooltips
+cover every compound).}
 }
 \value{
 A \code{girafe} htmlwidget (\code{engine = "ggiraph"}) or a \code{ggplot}
@@ -76,6 +85,14 @@ identical descriptor, so this plot (and \code{adme_local()}'s
 but methodologically related, atom-contribution method. A compound near
 an ellipse boundary could land on a different side of the line than it
 would in the real SwissADME tool.
+}
+
+\section{Axis range}{
+
+The plot opens on the published frame (TPSA -20 to 220, WLogP -3 to 8)
+and widens it to include every compound -- lipophilic volatiles often
+exceed WLogP 8 -- noting the widening in a caption. The two ellipses are
+drawn from their published coordinates regardless.
 }
 
 \examples{

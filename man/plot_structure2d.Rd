@@ -22,7 +22,10 @@ plot_structure2d(
 (default) for every compound with a successful (\code{generated_ok})
 \code{structure2d_log} entry.}
 
-\item{ncol}{Integer, default \code{4}. Number of grid columns.}
+\item{ncol}{Integer, default \code{4}. Number of grid columns. When \code{height}
+is not given, the saved figure is \code{max(8, ceiling(n / ncol) * 2.3)}
+inches tall, so each structure keeps a legible cell however many
+compounds there are; captions are wrapped to the cell width.}
 
 \item{save}{Logical, default \code{TRUE}. Whether to also write the plot to
 disk (in addition to returning it).}

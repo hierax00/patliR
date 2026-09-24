@@ -80,6 +80,16 @@ NULL
 #'   highest-degree targets (ties broken by `uniprot_id`, for a
 #'   deterministic order) get a text label; every other plotted target
 #'   gets an unlabeled tick mark instead.
+#'   Labels are fanned out along the baseline (short leader lines back to
+#'   their ticks) so neighbouring high-degree targets do not overprint, and
+#'   names longer than 20 characters are shortened (full name in the
+#'   `ggiraph` tooltip).
+#' @param top_n_targets `NULL` (default, every target in scope) or an
+#'   integer >= 2: draw only the `top_n_targets` targets with the most
+#'   actions interactions among the condition's targets (ties by
+#'   `uniprot_id`), and the arcs among them. A condition with a few hundred
+#'   targets otherwise reduces the baseline to a smear of ticks (a
+#'   `cli_inform` suggests this above 150 targets).
 #' @param engine `"static"` (default) or `"ggiraph"`, save/out_dir/width/
 #'   height/dpi -- same as [plot_network_layers()].
 #'
@@ -116,12 +126,15 @@ NULL
 #'
 #' @export
 plot_target_chord <- function(proj, condition = NULL, actions_score_threshold = 400, top_n_labels = 15,
+                               top_n_targets = NULL,
                                engine = c("static", "ggiraph"), save = TRUE, out_dir = NULL,
                                width = 8, height = 6, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
   stopifnot(is.numeric(actions_score_threshold), length(actions_score_threshold) == 1,
             !is.na(actions_score_threshold), actions_score_threshold >= 0, actions_score_threshold <= 999)
   stopifnot(is.numeric(top_n_labels), length(top_n_labels) == 1, !is.na(top_n_labels), top_n_labels >= 0)
+  stopifnot(is.null(top_n_targets) ||
+              (is.numeric(top_n_targets) && length(top_n_targets) == 1 && !is.na(top_n_targets) && top_n_targets >= 2))
   if (!requireNamespace("STRINGdb", quietly = TRUE)) {
     cli::cli_abort(c(
       "{.fn plot_target_chord} needs {.pkg STRINGdb} (for UniProt -> STRING_id mapping, same as {.fn network_bowtie}), not installed.",
@@ -182,6 +195,17 @@ plot_target_chord <- function(proj, condition = NULL, actions_score_threshold = 
     ))
   }
 
+  n_targets_all <- length(targets)
+  if (!is.null(top_n_targets)) {
+    kept <- .target_chord_top_targets(targets, edge_df, top_n_targets)
+    targets <- kept$targets
+    edge_df <- kept$edge_df
+  } else if (length(targets) > 150) {
+    cli::cli_inform(c(
+      "i" = "{.fn plot_target_chord}: {length(targets)} targets on one line -- most ticks will be indistinguishable; pass {.arg top_n_targets} (e.g. {.code top_n_targets = 60}) to keep only the most connected ones."
+    ))
+  }
+
   labels <- .plot_label_nodes(proj, conditions, targets, "target")
   nodes <- .target_chord_nodes(targets, edge_df, top_n_labels, labels)
 
@@ -191,18 +215,22 @@ plot_target_chord <- function(proj, condition = NULL, actions_score_threshold = 
   edge_df$edge_id <- seq_len(nrow(edge_df))
   arcs <- .network_target_chord_bezier(edge_df)
 
-  p <- .network_target_chord_ggplot(nodes, arcs, has_score, engine, scope_label)
+  p <- .network_target_chord_ggplot(nodes, arcs, has_score, engine, scope_label, fig_width = width, fig_height = height)
 
+  ## top_n_targets joined the log key later -- older rows drew every target
+  top_n_used <- if (is.null(top_n_targets)) NA_real_ else as.numeric(top_n_targets)
+  proj <- .plot_log_backfill(proj, "target_chord_plot_log", "top_n_targets", NA_real_)
   .plot_finish(
     proj, p,
     name = "target_chord_plot_log",
-    filename = paste0("target_chord_", scope_label, ".png"),
+    filename = paste0("target_chord_", scope_label, if (!is.na(top_n_used)) paste0("_top", top_n_used), ".png"),
     log_row = data.frame(
-      condition = scope_label, path = NA_character_, n_targets = length(targets),
+      condition = scope_label, top_n_targets = top_n_used, path = NA_character_,
+      n_targets = length(targets), n_targets_in_scope = n_targets_all,
       n_edges = nrow(edge_df), actions_score_threshold = actions_score_threshold,
       score_available = has_score, stringsAsFactors = FALSE
     ),
-    key_cols = "condition",
+    key_cols = c("condition", "top_n_targets"),
     engine = engine, save = save, out_dir = out_dir,
     width = width, height = height, dpi = dpi
   )
@@ -372,6 +400,62 @@ plot_target_chord <- function(proj, condition = NULL, actions_score_threshold = 
   nodes
 }
 
+#' Keep only the `top_n` most connected targets for `plot_target_chord()`
+#'
+#' @description
+#' Degree within `edge_df` (edges among the plotted targets), ties broken
+#' by `uniprot_id`; edges with an end outside the kept set are dropped.
+#' @return `list(targets, edge_df)`.
+#' @keywords internal
+.target_chord_top_targets <- function(targets, edge_df, top_n) {
+  deg <- stats::setNames(rep(0L, length(targets)), targets)
+  if (nrow(edge_df) > 0) {
+    tab <- table(c(edge_df$uniprot_a, edge_df$uniprot_b))
+    tab <- tab[names(tab) %in% targets]
+    deg[names(tab)] <- as.integer(tab)
+  }
+  keep <- utils::head(targets[order(-deg, targets)], top_n)
+  list(
+    targets = sort(keep),
+    edge_df = edge_df[edge_df$uniprot_a %in% keep & edge_df$uniprot_b %in% keep, , drop = FALSE]
+  )
+}
+
+#' Spread label anchors along the baseline so no two are closer than
+#' `min_gap`
+#'
+#' @description
+#' `plot_target_chord()` orders nodes by ascending degree, so the labeled
+#' (highest-degree) targets are always the rightmost, adjacent ticks --
+#' drawn at their own x their labels pile into one smear. Each label is
+#' moved the least needed to keep `min_gap` between neighbours (a forward
+#' pass pushing right, then -- if that overshoots `upper` -- a backward pass
+#' pulling left); order is preserved, so leader lines from node to label
+#' never cross. If `min_gap` cannot fit at all, labels are spaced evenly
+#' over `[lower, upper]`.
+#' @param x Numeric node positions.
+#' @return Numeric label positions, same order as `x`.
+#' @keywords internal
+.target_chord_label_x <- function(x, min_gap, lower, upper) {
+  n <- length(x)
+  if (n == 0) return(numeric(0))
+  o <- order(x)
+  y <- x[o]
+  if ((n - 1) * min_gap >= upper - lower) {
+    y <- seq(lower, upper, length.out = n)
+  } else {
+    y[1] <- max(y[1], lower)
+    for (i in seq_len(n - 1) + 1L) y[i] <- max(y[i], y[i - 1] + min_gap)
+    if (y[n] > upper) {
+      y[n] <- upper
+      for (i in rev(seq_len(n - 1))) y[i] <- min(y[i], y[i + 1] - min_gap)
+    }
+  }
+  out <- numeric(n)
+  out[o] <- y
+  out
+}
+
 #' Quadratic-Bezier arc points for `plot_target_chord()`'s arc diagram
 #'
 #' @description
@@ -414,7 +498,7 @@ plot_target_chord <- function(proj, condition = NULL, actions_score_threshold = 
 }
 
 #' @keywords internal
-.network_target_chord_ggplot <- function(nodes, arcs, has_score, engine, title_suffix) {
+.network_target_chord_ggplot <- function(nodes, arcs, has_score, engine, title_suffix, fig_width = 8, fig_height = 6) {
   interactive <- engine == "ggiraph" && requireNamespace("ggiraph", quietly = TRUE)
   nodes$tooltip <- sprintf("%s\ndegree=%d", ifelse(is.na(nodes$label), nodes$uniprot_id, nodes$label), nodes$degree)
 
@@ -448,6 +532,19 @@ plot_target_chord <- function(proj, condition = NULL, actions_score_threshold = 
       p + ggplot2::geom_point(data = unlabeled, ggplot2::aes(x = .data$x, y = 0), shape = 3, size = 1.2, colour = "grey50")
     }
   }
+
+  ## Vertical room for the angled labels under the baseline, in data units:
+  ## the arcs span y in [0, y_top]; a label of k characters at 60 degrees
+  ## hangs ~k * 0.055 * sin(60) inches below it.
+  n <- nrow(nodes)
+  y_top <- if (nrow(arcs) > 0) max(arcs$y) else 1
+  panel_w <- max(fig_width - 2, 2)  # minus legend + margins
+  panel_h <- max(fig_height - 1.3, 1.5) # minus title + subtitle
+  label_h_in <- if (nrow(labeled) > 0) max(nchar(.plot_truncate(labeled$label, 20))) * 0.055 * 0.87 + 0.25 else 0.1
+  label_h_in <- min(label_h_in, 0.45 * panel_h)
+  y_bottom <- -y_top * label_h_in / (panel_h - label_h_in)
+  drop <- 0.08 * abs(y_bottom) / label_h_in # leader-line length, ~0.08 in
+
   if (nrow(labeled) > 0) {
     p <- if (interactive) {
       p + ggiraph::geom_point_interactive(
@@ -458,26 +555,39 @@ plot_target_chord <- function(proj, condition = NULL, actions_score_threshold = 
     } else {
       p + ggplot2::geom_point(data = labeled, ggplot2::aes(x = .data$x, y = 0), shape = 16, size = 1.8, colour = "#c0392b")
     }
-    p <- p + ggplot2::geom_text(
-      data = labeled, ggplot2::aes(x = .data$x, y = 0, label = .data$label),
-      angle = 60, hjust = 1, vjust = 1.4, size = 2.6, colour = "grey15"
-    )
+    ## Labeled targets are the highest-degree ones, i.e. the rightmost
+    ## adjacent ticks: spread their label anchors ~0.17 in apart
+    ## (.target_chord_label_x()) and join each to its tick with a short
+    ## leader line, instead of printing every label at its own tick.
+    min_gap <- 0.17 * max(n - 1, 1) / panel_w
+    labeled$label_x <- .target_chord_label_x(labeled$x, min_gap, lower = 1, upper = max(n, 1))
+    labeled$short_label <- .plot_truncate(labeled$label, 20)
+    p <- p +
+      ggplot2::geom_segment(
+        data = labeled, ggplot2::aes(x = .data$x, xend = .data$label_x, y = 0, yend = -drop),
+        colour = "grey55", linewidth = 0.25
+      ) +
+      ggplot2::geom_text(
+        data = labeled, ggplot2::aes(x = .data$label_x, y = -drop, label = .data$short_label),
+        angle = 60, hjust = 1, vjust = 0.5, size = 2.6, colour = "grey15"
+      )
   }
 
   p +
-    ggplot2::coord_cartesian(clip = "off") +
+    ggplot2::coord_cartesian(ylim = c(y_bottom, 1.03 * y_top), expand = FALSE, clip = "off") +
     ggplot2::labs(
       title = paste0("Target-target STRING actions adjacency -- ", title_suffix),
-      subtitle = paste0(
+      subtitle = .plot_wrap(paste0(
         "Nodes = condition target(s), ordered by degree (ascending, left to right); arcs = STRING directed 'actions' interactions ",
         "(network_bowtie()'s own data source, direction dropped here); top labeled by degree, rest ticked"
-      ),
+      ), .plot_wrap_width(fig_width, 7.5)),
       x = NULL, y = NULL
     ) +
     ggplot2::theme_minimal() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(size = 12, face = "bold"),
       plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"),
+      plot.title.position = "plot",
       axis.text = ggplot2::element_blank(), axis.ticks = ggplot2::element_blank(),
       panel.grid = ggplot2::element_blank()
     )

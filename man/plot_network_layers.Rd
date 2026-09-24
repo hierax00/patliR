@@ -16,6 +16,9 @@ plot_network_layers(
   layers = c("compound", "target"),
   max_pathways = 30,
   pathway_db = NULL,
+  min_target_degree = 1,
+  compound_ids = NULL,
+  module_id = NULL,
   save = TRUE,
   out_dir = NULL,
   width = 9,
@@ -81,6 +84,21 @@ restrict the pathway layer to specific \code{network_enrich()} \code{db}
 value(s) (e.g. \code{"kegg"} alone) before \code{max_pathways} even applies, or
 \code{NULL} (default) for every \code{db} combined.}
 
+\item{min_target_degree}{Integer >= 1, default \code{1} (every target, the
+historical behaviour). Drops targets hit by fewer than this many
+distinct compounds -- \code{2} keeps only the targets shared between
+compounds, which removes the degree-1 "dandelion" leaves that make a
+condition with a few hundred singleton targets unreadable. See the
+section on splitting large networks.}
+
+\item{compound_ids}{\code{NULL} (default, every compound) or a character
+vector of \code{compound_id}s: draw only the sub-network of those compounds
+and their targets.}
+
+\item{module_id}{\code{NULL} (default) or one or more \code{module_id}s from
+\code{\link[=network_module_robustness]{network_module_robustness()}}'s \code{network_module_membership}: draw only
+the compound/target nodes of those module(s).}
+
 \item{save}{Logical, default \code{TRUE}. If \code{TRUE}, also writes a PNG to
 \code{out_dir}.}
 
@@ -93,11 +111,12 @@ value(s) (e.g. \code{"kegg"} alone) before \code{max_pathways} even applies, or
 A \code{ggplot} object (\code{engine = "static"}) or a \code{girafe} htmlwidget
 (\code{engine = "ggiraph"}). If \code{save = TRUE} (the default), the PNG path
 is also recorded in \code{patliRResults(proj, "network_layers_plot_log")}
-(one row per distinct \verb{(condition, layout, colour_by)} combination --
+(one row per distinct \verb{(condition, layout, colour_by, subset)} combination --
 \code{"ALL"} for the pooled default \code{condition} -- upserted, see
-\code{.network_upsert()}; the filename encodes all three too, e.g.
+\code{.network_upsert()}; the filename encodes them too, e.g.
 \code{network_layers_ALL_fr_layer.png}, so different \code{layout}/\code{colour_by}
-views never overwrite each other's log row or PNG), retrievable via
+views never overwrite each other's log row or PNG; \code{subset} is \code{""} unless
+\code{min_target_degree}/\code{compound_ids}/\code{module_id} filter the graph), retrievable via
 \code{attr(result, "proj")}.
 }
 \description{
@@ -164,6 +183,19 @@ evidentiary weight as", the direct edges (\code{compound_target},
 \code{target_pathway}, \code{target_disease}).
 }
 
+\section{Splitting a large network into readable figures}{
+
+A condition with ~20 compounds and several hundred predicted targets,
+most of them hit by a single compound, draws as a hairball whatever the
+layout. Three optional filters (all off by default) cut it down:
+\code{min_target_degree = 2} keeps only shared targets; \code{compound_ids} draws
+one or a few compounds' sub-network; \code{module_id} draws one module of
+\code{\link[=network_module_robustness]{network_module_robustness()}}. Every filtered figure gets its own PNG
+and log row (the filter is encoded in the file name and in the log's
+\code{subset} column), so one call per module or per compound builds a
+series of small figures -- see the examples.
+}
+
 \examples{
 \dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
@@ -191,6 +223,20 @@ plot_network_layers(proj, condition = "FLO-ET", layout = "bipartite", save = FAL
 ## Colour by module (needs network_module_robustness() first):
 # proj <- network_module_robustness(proj, condition = "FLO-ET")
 # plot_network_layers(proj, condition = "FLO-ET", colour_by = "module", save = FALSE)
+
+## Split a hairball: only targets shared by >= 2 compounds ...
+plot_network_layers(proj, condition = "FLO-ET", min_target_degree = 2, save = FALSE)
+## ... or one figure per module (after network_module_robustness()) ...
+# proj <- network_module_robustness(proj, condition = "FLO-ET")
+# mem <- patliRResults(proj, "network_module_membership")
+# for (m in sort(unique(stats::na.omit(mem$module_id[mem$condition == "FLO-ET"])))) {
+#   proj <- attr(plot_network_layers(proj, condition = "FLO-ET", module_id = m,
+#                                    colour_by = "module"), "proj")
+# }
+## ... or one per compound:
+# for (id in compounds(proj)$id) {
+#   proj <- attr(plot_network_layers(proj, condition = "FLO-ET", compound_ids = id), "proj")
+# }
 
 ## To also draw the pathway layer (opt-in -- see the layers section
 ## above for why), run network_enrich() first and pass it explicitly,

@@ -25,6 +25,7 @@ from the compound-target graph) fall into a grey \code{"not clustered"}
 level rather than an \code{NA} colour. Pooled multi-condition scope: a node
 built into more than one condition can carry a different \code{module_id}
 per condition -- the first match (by row order in the table) wins; the
+module label includes its condition when more than one is pooled. The
 common case is a single condition in scope, where this is an exact
 join.
 }

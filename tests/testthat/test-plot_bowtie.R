@@ -75,3 +75,17 @@ test_that("plot_bowtie() counts and selects compounds by ID when names coincide"
   expect_equal(p$data$compound_id, ids[2])
   expect_equal(p$data$n_targets, 2L)
 })
+
+test_that(".bowtie_x_expansion() leaves room for the longest label on each side", {
+  offset <- 1 / 8 + 0.03
+  for (w in c(8, 12)) {
+    e <- patliR:::.bowtie_x_expansion(28, 21, w)
+    panel_in <- w - 2.3
+    units_per_in <- (1 + sum(e)) / panel_in
+    expect_gte(e[1] - offset, 28 * 0.061 * units_per_in - 1e-9)
+    expect_gte(e[2] - offset, 21 * 0.061 * units_per_in - 1e-9)
+  }
+  ## absurdly long labels still leave the flows some width
+  e <- patliR:::.bowtie_x_expansion(500, 500, 6)
+  expect_true(all(is.finite(e)))
+})

@@ -126,11 +126,17 @@ plot_robustness <- function(proj, condition = NULL, module_id = NULL,
   p <- p +
     ggplot2::labs(
       title = paste0("Module percolation robustness -- ", scope_label),
-      subtitle = "Fraction of the module in its largest component as nodes are removed (x = fraction removed); R = mean over removal steps, bounded above by (N-1)/(2N) < 0.5 and not comparable across module sizes (Schneider et al. 2011)",
+      subtitle = .plot_wrap(
+        "Fraction of the module in its largest component as nodes are removed (x = fraction removed); R = mean over removal steps, bounded above by (N-1)/(2N) < 0.5 and not comparable across module sizes (Schneider et al. 2011)",
+        .plot_wrap_width(width, 8)
+      ),
       x = "Fraction of module removed", y = "Largest component fraction"
     ) +
     ggplot2::theme_minimal() +
-    ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 8, colour = "grey40"))
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 8, colour = "grey40"),
+      plot.title.position = "plot"
+    )
 
   .plot_finish(
     proj, p,

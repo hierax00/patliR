@@ -9,13 +9,14 @@ plot_network_degeneracy(
   proj,
   condition = NULL,
   engine = c("static", "ggiraph"),
-  layout = c("fr", "kk", "drl", "bipartite"),
+  layout = c("fr", "kk", "drl", "bipartite", "circle"),
   colour_by = c("layer", "module", "node_type"),
   top_hub_n = 15,
   seed = 1,
   filter = c("p_adjusted", "score"),
   min_degeneracy = 0.3,
   alpha = 0.05,
+  view = c("network", "heatmap"),
   save = TRUE,
   out_dir = NULL,
   width = 9,
@@ -35,16 +36,8 @@ restrict to.}
 (adds a tooltip per node with its id/layer/degree; falls back to
 \code{"static"} with a warning if \code{ggiraph} is not installed).}
 
-\item{layout}{One of \code{"fr"} (default, Fruchterman-Reingold -- the
-classic "hairball" force layout, matching the reference figure),
-\code{"kk"} (Kamada-Kawai), \code{"drl"} (matched against
-\verb{igraph::layout_with_<layout>()}), or \code{"bipartite"} -- a deterministic
-two-column layout (compounds on the left, targets on the right, each
-column ordered by degree so fewer edges cross; the standard
-affiliation-network rendering, Borgatti & Everett 1997). \code{"bipartite"}
-only works when the scope's graph is genuinely two-layer
-(compound-target only, the default \code{layers}) -- \code{cli_abort}s naming
-the extra layer(s) otherwise.}
+\item{layout}{As in \code{\link[=plot_network_layers]{plot_network_layers()}}, plus \code{"circle"} --
+compounds only, on a circle; see the section above.}
 
 \item{colour_by}{One of \code{"layer"} (default -- the historical behaviour:
 compound/target/pathway/disease, \code{.network_layers_layer_colors()}),
@@ -79,6 +72,10 @@ links.}
 \code{filter} resolves to \code{"p_adjusted"}: the significance cutoff on
 \code{p_adjusted}.}
 
+\item{view}{\code{"network"} (default) or \code{"heatmap"} -- see the section
+above. \code{layout}, \code{colour_by}, \code{top_hub_n}, \code{seed} and \code{engine} only
+apply to the network view.}
+
 \item{save}{Logical, default \code{TRUE}. If \code{TRUE}, also writes a PNG to
 \code{out_dir}.}
 
@@ -91,8 +88,9 @@ links.}
 A \code{ggplot} object (\code{engine = "static"}) or a \code{girafe} htmlwidget
 (\code{engine = "ggiraph"}). Same \code{save}/logging behavior as
 \code{\link[=plot_network_layers]{plot_network_layers()}}, under \code{patliRResults(proj, "network_degeneracy_plot_log")} -- keyed (and filenamed) by
-\verb{(condition, layout, colour_by, filter)}, same reasoning as
-\code{\link[=plot_network_layers]{plot_network_layers()}}'s own log.
+\verb{(condition, layout, colour_by, filter, view)}, same reasoning as
+\code{\link[=plot_network_layers]{plot_network_layers()}}'s own log (the heatmap is saved as
+\verb{network_degeneracy_heatmap_<condition>_<filter>.png}).
 }
 \description{
 Draws the same compound-target layout \code{\link[=plot_network_layers]{plot_network_layers()}} does
@@ -123,6 +121,28 @@ null exists for those modes); if every pair in scope has \code{p_adjusted = NA},
 falls back to \code{filter = "score"} and \code{cli_inform}s why.
 }
 
+\section{Views and layouts}{
+
+\code{view = "network"} (default) draws the links over the compound-target
+network. With a few hundred targets the force-directed layouts (\code{"fr"},
+\code{"kk"}, \code{"drl"}) bury the compounds in the middle of the target mesh;
+\code{layout = "circle"} drops the targets and puts the compounds on a
+circle (ordered so mutually degenerate compounds sit side by side), which
+makes every link readable as a chord. \code{view = "heatmap"} is a compound x
+compound tile map of every scored pair's \code{z_score} (the pairs passing
+\code{filter} marked \code{*}), the densest summary when many pairs pass.
+Links are coloured by \code{z_score} and their width follows
+\code{degeneracy_score}.
+}
+
+\section{A condition with no \code{network_degeneracy()} rows is an error}{
+
+\code{\link[=network_degeneracy]{network_degeneracy()}} is run per condition. Plotting a condition it was
+never run on aborts (naming the conditions it \emph{was} run on) rather than
+silently drawing the bare network; when rows exist but none passes
+\code{filter}, the figure is drawn with a warning.
+}
+
 \examples{
 \dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
@@ -144,6 +164,10 @@ proj <- network_build(proj)
 # "direct" mode (default) has its own permutation null -- filter = "p_adjusted" works
 proj <- network_degeneracy(proj, condition = "FLO-ET", seed = 1)
 plot_network_degeneracy(proj, condition = "FLO-ET", save = FALSE)
+# compounds on a circle, targets hidden -- every link visible
+plot_network_degeneracy(proj, condition = "FLO-ET", layout = "circle", save = FALSE)
+# compound x compound z-score heatmap
+plot_network_degeneracy(proj, condition = "FLO-ET", view = "heatmap", save = FALSE)
 }
 
 }

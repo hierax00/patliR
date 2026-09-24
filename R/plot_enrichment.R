@@ -142,17 +142,28 @@ plot_enrichment <- function(proj, condition = NULL, db = NULL, top_n = 20,
   p <- p +
     ggplot2::scale_colour_gradient(low = "#c0392b", high = "#2980b9", name = "p.adjust") +
     ggplot2::scale_size(range = c(1.5, 6), name = "Count") +
+    ## long GO/Reactome descriptions would otherwise squeeze the panel
+    ggplot2::scale_y_discrete(labels = function(v) .plot_wrap(v, 55)) +
     ggplot2::labs(
       title = paste0("Enrichment -- ", scope_label, " / ", db_label),
-      subtitle = paste0(
-        "Top ", top_n, " most-significant term(s) per (condition, db); x = GeneRatio, y ordered by GeneRatio;\n",
+      subtitle = .plot_wrap(paste0(
+        "Top ", top_n, " most-significant term(s) per (condition, db); x = GeneRatio, y ordered by GeneRatio; ",
         "colour = p.adjust (red = more significant), size = Count"
-      ),
+      ), .plot_wrap_width(width, 8)),
       x = "GeneRatio", y = NULL
     ) +
     ggplot2::theme_minimal() +
-    ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 8, colour = "grey40"))
-  if (multi_db) p <- p + ggplot2::facet_wrap(~db, scales = "free_y")
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 8, colour = "grey40"),
+      plot.title.position = "plot"
+    )
+  ## Several dbs: stack the facets in one column (side by side, each facet
+  ## carries its own long term labels and the panels collapse to slivers)
+  ## and, unless `height` was given, grow the figure with the term count.
+  if (multi_db) {
+    p <- p + ggplot2::facet_wrap(~db, scales = "free_y", ncol = 1)
+    if (missing(height)) height <- max(height, 1.5 + 0.22 * nrow(dat))
+  }
 
   .plot_finish(
     proj, p,

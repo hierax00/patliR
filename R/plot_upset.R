@@ -117,7 +117,7 @@ plot_upset <- function(proj, condition = NULL, top_n = 15,
     if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
     if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
     path <- file.path(out_dir, paste0("upset_", scope_label, ".png"))
-    ggplot2::ggsave(path, p, width = width, height = height, dpi = dpi)
+    ggplot2::ggsave(path, p, width = width, height = height, dpi = dpi, bg = "white")
     log_row <- data.frame(condition = scope_label, path = path, n_intersections = nrow(sizes), stringsAsFactors = FALSE)
     log_df <- .network_upsert(proj, "upset_plot_log", log_row, "condition")
     patliRResults(proj, "upset_plot_log") <- log_df

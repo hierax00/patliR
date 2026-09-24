@@ -143,6 +143,7 @@ plot_rank <- function(proj, condition = NULL, view = c("pareto", "heatmap"),
   dat$tooltip <- sprintf("%s\n%s = %s\n%s = %s\nrra_rank = %d, front = %d", dat$compound_label, x, signif(dat[[x]], 3), y, signif(dat[[y]], 3), dat$rra_rank, dat$pareto_front)
 
   front1 <- dat[dat$pareto_front == 1L, , drop = FALSE]
+  if (is.null(width)) width <- 8
 
   p <- ggplot2::ggplot(dat, ggplot2::aes(x = .data[[x]], y = .data[[y]], colour = .data$front_f))
   p <- p + if (engine == "ggiraph" && requireNamespace("ggiraph", quietly = TRUE)) {
@@ -150,25 +151,38 @@ plot_rank <- function(proj, condition = NULL, view = c("pareto", "heatmap"),
   } else {
     ggplot2::geom_point(size = 2.5, alpha = 0.85)
   }
+  ## Front-1 labels: shortened for drawing (tooltip keeps the full name) and
+  ## repelled when ggrepel is installed -- a label on a point at the right
+  ## edge (the worst rra_rank) otherwise runs off the panel.
   if (nrow(front1) > 0) {
-    p <- p + ggplot2::geom_text(
+    front1$short_label <- .plot_truncate(front1$compound_label)
+    p <- p + .plot_text_layer(
       data = front1,
-      mapping = ggplot2::aes(x = .data[[x]], y = .data[[y]], label = .data$compound_label),
-      size = 2.6, colour = "grey15", vjust = -1, inherit.aes = FALSE
+      mapping = ggplot2::aes(x = .data[[x]], y = .data[[y]], label = .data$short_label),
+      size = 2.6, colour = "grey15", inherit.aes = FALSE,
+      repel_args = list(box.padding = 0.3, min.segment.length = 0.2, segment.colour = "grey60",
+                        max.overlaps = Inf, seed = 1),
+      text_args = list(vjust = -1)
     )
   }
+  ## headroom on both sides of a numeric x so edge labels have room either way
+  if (is.numeric(dat[[x]])) p <- p + ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = 0.12))
   p <- p +
     ggplot2::scale_colour_manual(values = c(`1 (non-dominated)` = "#c0392b", `2+` = "#7f8c8d"), name = "Pareto front") +
     ggplot2::labs(
       title = paste0("Candidate ranking -- ", scope_label),
-      subtitle = paste0("x = ", x, ", y = ", y, "; colour = Pareto front (non-dominated over every criterion rank_candidates() used, not just x/y)"),
+      subtitle = .plot_wrap(
+        paste0("x = ", x, ", y = ", y, "; colour = Pareto front (non-dominated over every criterion rank_candidates() used, not just x/y)"),
+        .plot_wrap_width(width, 7.5)
+      ),
       x = x, y = y
     ) +
     ggplot2::theme_minimal() +
-    ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"))
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"),
+      plot.title.position = "plot"
+    )
   if (length(unique(dat$panel)) > 1) p <- p + ggplot2::facet_wrap(~panel)
-
-  if (is.null(width)) width <- 8
   .plot_finish(
     proj, p,
     name = "rank_plot_log",

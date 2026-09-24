@@ -139,3 +139,15 @@ test_that(".chemical_space_scope() is empty for the whole project and distinct p
   expect_identical(patliR:::.chemical_space_scope(NULL, c("b", "a")),
                    patliR:::.chemical_space_scope(NULL, c("a", "b")))
 })
+
+test_that("plot_chemical_space() draws a single family legend with matching hull and point colours", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .cs_project()
+  p <- plot_chemical_space(proj, color_by = "family", engine = "static", save = FALSE)
+  fill <- p$scales$get_scales("fill")
+  colour <- p$scales$get_scales("colour")
+  expect_identical(fill$guide, "none")
+  expect_identical(fill$palette(3), colour$palette(3))
+  built <- ggplot2::ggplot_build(p)
+  expect_no_error(ggplot2::ggplot_gtable(built))
+})

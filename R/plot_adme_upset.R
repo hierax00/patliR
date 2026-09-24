@@ -118,7 +118,7 @@ plot_adme_upset <- function(proj, top_n = 15,
     if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
     if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
     path <- file.path(out_dir, "adme_upset.png")
-    ggplot2::ggsave(path, p, width = width, height = height, dpi = dpi)
+    ggplot2::ggsave(path, p, width = width, height = height, dpi = dpi, bg = "white")
     log_row <- data.frame(path = path, n_rules = length(rules), n_intersections = nrow(sizes), stringsAsFactors = FALSE)
     patliRResults(proj, "adme_upset_log") <- log_row
     .write_results_csv(proj, "adme_upset_log", log_row)

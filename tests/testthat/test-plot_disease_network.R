@@ -135,3 +135,25 @@ test_that("disease networks only include profiles matching retained compound-tar
   expect_error(plot_disease_network(proj, condition = "A", save = FALSE),
                "No .*targets_disease_profile.* rows")
 })
+
+test_that("plot_disease_network() labels only the top_n_labels diseases with the most targets", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .network_stats_test_setup()
+  edges <- patliRResults(proj, "network_edges")
+  flo <- edges[edges$condition == "FLO-ET", , drop = FALSE]
+  targets <- unique(flo$uniprot_id)
+  testthat::skip_if(length(targets) < 3, "fixture needs at least 3 FLO-ET targets")
+  cmp <- flo$compound_id[match(targets[1:3], flo$uniprot_id)]
+  profile <- rbind(
+    .disease_network_fake_profile(cmp, targets[1:3], disease_id = "D1", disease_name = "Three-target disease"),
+    .disease_network_fake_profile(cmp[1:2], targets[1:2], disease_id = "D2", disease_name = "Two-target disease"),
+    .disease_network_fake_profile(cmp[1], targets[1], disease_id = "D3", disease_name = "One-target disease")
+  )
+  patliRResults(proj, "targets_disease_profile") <- profile
+  p <- plot_disease_network(proj, condition = "FLO-ET", top_n_labels = 2, save = FALSE)
+  lab <- Filter(function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")), p$layers)[[1]]$data
+  expect_setequal(lab$id, c("D1", "D2"))
+  p0 <- plot_disease_network(proj, condition = "FLO-ET", top_n_labels = 0, save = FALSE)
+  lab0 <- Filter(function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")), p0$layers)[[1]]$data
+  expect_equal(nrow(lab0), 0)
+})

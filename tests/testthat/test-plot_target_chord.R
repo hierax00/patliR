@@ -346,3 +346,41 @@ test_that("unreadable STRING score files report the underlying read error", {
   expect_error(patliR:::.target_chord_actions_scores(proj, 9606, "11.0"),
                "Cannot read STRING actions scores")
 })
+
+test_that(".target_chord_label_x() keeps order, bounds and a minimum gap between adjacent labels", {
+  x <- c(95, 96, 97, 98, 99, 100)
+  lx <- patliR:::.target_chord_label_x(x, min_gap = 5, lower = 1, upper = 100)
+  expect_identical(order(lx), order(x))
+  expect_true(all(diff(sort(lx)) >= 5 - 1e-9))
+  expect_true(all(lx >= 1 & lx <= 100))
+  ## already spread-out labels stay where they are
+  expect_equal(patliR:::.target_chord_label_x(c(10, 50, 90), 5, 1, 100), c(10, 50, 90))
+  ## no room for the gap at all: evenly spaced over the range
+  expect_equal(patliR:::.target_chord_label_x(c(3, 2, 1), 60, 1, 100), c(100, 50.5, 1))
+  expect_length(patliR:::.target_chord_label_x(numeric(0), 1, 1, 2), 0)
+})
+
+test_that(".target_chord_top_targets() keeps the most connected targets and only their edges", {
+  edge_df <- data.frame(uniprot_a = c("A", "A", "A", "B"), uniprot_b = c("B", "C", "D", "C"), stringsAsFactors = FALSE)
+  kept <- patliR:::.target_chord_top_targets(c("A", "B", "C", "D", "E"), edge_df, 3)
+  expect_identical(kept$targets, c("A", "B", "C"))
+  expect_true(all(kept$edge_df$uniprot_a %in% kept$targets & kept$edge_df$uniprot_b %in% kept$targets))
+  expect_equal(nrow(kept$edge_df), 3)
+})
+
+test_that("only the top_n_labels targets get a (fanned-out) text label", {
+  testthat::skip_if_not_installed("ggplot2")
+  ## 300 targets: the 5 labeled (highest-degree, rightmost) ticks are 1 unit
+  ## apart, far closer than a label height -- their anchors must be spread
+  nodes <- data.frame(uniprot_id = paste0("T", 1:300), x = 1:300, degree = 1:300, stringsAsFactors = FALSE)
+  nodes$label <- NA_character_
+  nodes$label[296:300] <- paste0("GENE", 296:300)
+  arcs <- data.frame(edge_id = 1L, x = c(1, 150, 300), y = c(0, 30, 0))
+  p <- patliR:::.network_target_chord_ggplot(nodes, arcs, has_score = FALSE, engine = "static", title_suffix = "A")
+  txt <- Filter(function(l) inherits(l$geom, "GeomText"), p$layers)
+  expect_length(txt, 1)
+  expect_equal(nrow(txt[[1]]$data), 5)
+  expect_true(all(diff(sort(txt[[1]]$data$label_x)) > 5))
+  expect_true(all(txt[[1]]$data$label_x <= 300))
+  expect_true(any(vapply(p$layers, function(l) inherits(l$geom, "GeomSegment"), logical(1))))
+})

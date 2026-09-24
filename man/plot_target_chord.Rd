@@ -9,6 +9,7 @@ plot_target_chord(
   condition = NULL,
   actions_score_threshold = 400,
   top_n_labels = 15,
+  top_n_targets = NULL,
   engine = c("static", "ggiraph"),
   save = TRUE,
   out_dir = NULL,
@@ -35,7 +36,18 @@ above; a \code{cli_inform} names the fallback when it could not.}
 \item{top_n_labels}{Integer, default \code{15}. The \code{top_n_labels}
 highest-degree targets (ties broken by \code{uniprot_id}, for a
 deterministic order) get a text label; every other plotted target
-gets an unlabeled tick mark instead.}
+gets an unlabeled tick mark instead.
+Labels are fanned out along the baseline (short leader lines back to
+their ticks) so neighbouring high-degree targets do not overprint, and
+names longer than 20 characters are shortened (full name in the
+\code{ggiraph} tooltip).}
+
+\item{top_n_targets}{\code{NULL} (default, every target in scope) or an
+integer >= 2: draw only the \code{top_n_targets} targets with the most
+actions interactions among the condition's targets (ties by
+\code{uniprot_id}), and the arcs among them. A condition with a few hundred
+targets otherwise reduces the baseline to a smear of ticks (a
+\code{cli_inform} suggests this above 150 targets).}
 
 \item{engine}{\code{"static"} (default) or \code{"ggiraph"}, save/out_dir/width/
 height/dpi -- same as \code{\link[=plot_network_layers]{plot_network_layers()}}.}

@@ -240,7 +240,7 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
       p_static <- if (dims == 3) result else
         .chemical_space_ggplot(adme, axis_labels, color_by, is_categorical, draw_hulls, "static", method)
       path <- file.path(out_dir, paste0(tag, ".png"))
-      ggplot2::ggsave(path, p_static, width = width, height = if (dims == 3) max(height, 5) else height, dpi = dpi)
+      ggplot2::ggsave(path, p_static, width = width, height = if (dims == 3) max(height, 5) else height, dpi = dpi, bg = "white")
     }
     log_cols <- c("compound_id", "dim1", "dim2", if (dims == 3) "dim3", "color_value")
     log_df <- adme[, log_cols]
@@ -378,10 +378,19 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
     }
     g +
       ggplot2::geom_point(ggplot2::aes(colour = .data$color_value), size = 2.4, alpha = 0.8) +
-      ggplot2::labs(x = axis_labels[ij[1]], y = axis_labels[ij[2]], colour = color_by, fill = color_by) +
+      ggplot2::labs(x = axis_labels[ij[1]], y = axis_labels[ij[2]], colour = color_by) +
       ggplot2::theme_minimal(base_size = 9)
   }
   panels <- lapply(pairs, panel)
+  ## same single-legend fix as .chemical_space_ggplot()
+  if (is_categorical) {
+    pal <- .chemical_space_palette(sort(unique(stats::na.omit(adme$color_value))))
+    if (length(pal) > 0) {
+      panels <- lapply(panels, function(g) g +
+        ggplot2::scale_colour_manual(values = pal, name = color_by, na.value = "grey60") +
+        ggplot2::scale_fill_manual(values = pal, guide = "none", na.value = "grey60"))
+    }
+  }
   patchwork::wrap_plots(panels, nrow = 1, guides = "collect") +
     patchwork::plot_annotation(
       title = paste0("Chemical space (", toupper(method), ", 3 axes) -- ", color_by),
@@ -487,18 +496,37 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
   ## to the legend -- this is the part of the reference figure that makes
   ## it readable at a glance without cross-referencing a legend.
   if (is_categorical && any(!is.na(adme$color_value))) {
+    ## Repelled (when ggrepel is installed) so two families whose centroids
+    ## nearly coincide do not print on top of each other; a white halo
+    ## keeps them readable over the hulls and points.
     centroids <- stats::aggregate(cbind(dim1, dim2) ~ color_value, adme, mean)
-    p <- p + ggplot2::geom_text(
+    p <- p + .plot_text_layer(
       data = centroids,
-      ggplot2::aes(x = .data$dim1, y = .data$dim2, label = .data$color_value, colour = .data$color_value),
-      fontface = "bold", size = 3.4, show.legend = FALSE
+      mapping = ggplot2::aes(x = .data$dim1, y = .data$dim2, label = .data$color_value, colour = .data$color_value),
+      fontface = "bold", size = 3.4, show.legend = FALSE,
+      repel_args = list(bg.colour = "white", bg.r = 0.15, box.padding = 0.5, min.segment.length = Inf,
+                        max.overlaps = Inf, seed = 1),
+      text_args = list()
     )
+  }
+
+  ## One legend, not two: hulls (fill) and points (colour) share one named
+  ## palette, and only the colour legend is drawn. Left to ggplot2, the two
+  ## scales get different hue ramps (hulls exist only for families with >= 3
+  ## compounds, so the fill scale has fewer levels) and two "family" legends
+  ## whose colours do not even match.
+  pal <- if (is_categorical) .chemical_space_palette(sort(unique(stats::na.omit(adme$color_value)))) else NULL
+  if (length(pal) > 0) {
+    p <- p +
+      ggplot2::scale_colour_manual(values = pal, name = color_by, na.value = "grey60") +
+      ggplot2::scale_fill_manual(values = pal, guide = "none", na.value = "grey60") +
+      ggplot2::guides(colour = ggplot2::guide_legend(override.aes = list(size = 3, alpha = 1)))
   }
 
   p +
     ggplot2::coord_cartesian(xlim = xlim, ylim = ylim, clip = "off") +
     ggplot2::labs(
-      colour = color_by, fill = color_by,
+      colour = color_by,
       title = paste0("Chemical space (", toupper(method), "), coloured by ", color_by),
       subtitle = paste0(axis_labels[1], "  |  ", axis_labels[2],
                          if (!is_categorical) "  -- continuous colour_by: hull outlines/labels not drawn" else "")
@@ -507,6 +535,7 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
     ggplot2::theme(
       plot.title = ggplot2::element_text(size = 12, face = "bold"),
       plot.subtitle = ggplot2::element_text(size = 9, colour = "grey40"),
+      plot.background = ggplot2::element_rect(fill = "white", colour = NA),
       legend.position = "right"
     )
 }

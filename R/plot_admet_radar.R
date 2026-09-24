@@ -149,19 +149,19 @@ plot_admet_radar <- function(proj, compound_ids = NULL, engine = c("ggiraph", "s
     vertices <- .radar_compound_xy(adme[i, , drop = FALSE], angles)
 
     if (save) {
-      p_labeled <- .radar_ggplot_one(vertices, zone_xy, label, engine = "static", show_labels = TRUE)
-      p_plain <- .radar_ggplot_one(vertices, zone_xy, label, engine = "static", show_labels = FALSE)
+      p_labeled <- .radar_ggplot_one(vertices, zone_xy, label, engine = "static", show_labels = TRUE, fig_width = width)
+      p_plain <- .radar_ggplot_one(vertices, zone_xy, label, engine = "static", show_labels = FALSE, fig_width = width)
       path_labeled <- file.path(out_dir, paste0(id, "_labeled.png"))
       path_plain <- file.path(out_dir, paste0(id, "_plain.png"))
-      ggplot2::ggsave(path_labeled, p_labeled, width = width, height = height, dpi = dpi)
-      ggplot2::ggsave(path_plain, p_plain, width = width, height = height, dpi = dpi)
+      ggplot2::ggsave(path_labeled, p_labeled, width = width, height = height, dpi = dpi, bg = "white")
+      ggplot2::ggsave(path_plain, p_plain, width = width, height = height, dpi = dpi, bg = "white")
       save_log[[i]] <<- data.frame(
         compound_id = id, path_labeled = path_labeled, path_plain = path_plain,
         stringsAsFactors = FALSE
       )
     }
 
-    p <- .radar_ggplot_one(vertices, zone_xy, label, engine, show_labels = TRUE)
+    p <- .radar_ggplot_one(vertices, zone_xy, label, engine, show_labels = TRUE, fig_width = width)
     if (engine == "static") return(p)
     ggiraph::girafe(ggobj = p, options = list(ggiraph::opts_tooltip(opacity = 0.9)),
                      width_svg = 5, height_svg = 5)
@@ -206,7 +206,7 @@ plot_admet_radar <- function(proj, compound_ids = NULL, engine = c("ggiraph", "s
 .close_xy <- function(df) rbind(df, df[1, , drop = FALSE])
 
 #' @keywords internal
-.radar_ggplot_one <- function(vertices, zone_xy, label, engine, show_labels = TRUE) {
+.radar_ggplot_one <- function(vertices, zone_xy, label, engine, show_labels = TRUE, fig_width = 6) {
   n_axes <- nrow(.radar_axes)
   outer_ring <- .close_xy(data.frame(x = sin(2 * pi * (seq_len(n_axes) - 1) / n_axes),
                                       y = cos(2 * pi * (seq_len(n_axes) - 1) / n_axes)))
@@ -256,13 +256,17 @@ plot_admet_radar <- function(proj, compound_ids = NULL, engine = c("ggiraph", "s
   p +
     ggplot2::coord_fixed(clip = "off", xlim = c(-1.6, 1.6), ylim = c(-1.6, 1.6)) +
     ggplot2::labs(
-      title = paste0("Bioavailability radar -- ", label),
-      subtitle = "Pink zone = optimal range (Daina, Michielin & Zoete, 2017, Sci. Rep. 7:42717)"
+      ## long GC-MS compound names would otherwise run past both edges of
+      ## the centred title
+      title = .plot_wrap(paste0("Bioavailability radar -- ", label), .plot_wrap_width(fig_width, 12, margin = 0.6)),
+      subtitle = .plot_wrap("Pink zone = optimal range (Daina, Michielin & Zoete, 2017, Sci. Rep. 7:42717)",
+                            .plot_wrap_width(fig_width, 9, margin = 0.6))
     ) +
     ggplot2::theme_void() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(size = 11, face = "bold", hjust = 0.5),
       plot.subtitle = ggplot2::element_text(size = 9, hjust = 0.5, colour = "grey40"),
+      plot.background = ggplot2::element_rect(fill = "white", colour = NA),
       plot.margin = ggplot2::margin(10, 20, 10, 20)
     )
 }

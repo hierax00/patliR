@@ -90,24 +90,53 @@ plot_bowtie <- function(proj, condition = NULL, top_n_compounds = NULL,
     not_in_action_network = "#8e44ad", other = "grey60", unmapped = "grey85"
   )
 
+  ## Stratum labels sit OUTSIDE the boxes -- compound names (shortened) to
+  ## the left of axis 1, component names to the right of axis 2 -- instead
+  ## of centred on a box a quarter of an axis unit wide, which long GC-MS
+  ## names overflowed and ran off the figure. The x expansion is sized to
+  ## the longest label on each side (.bowtie_x_expansion()).
+  side_label <- function(stratum, x, side) {
+    ifelse(x == side, .plot_truncate(stratum_label(stratum)), "")
+  }
+  left_labels <- .plot_truncate(unique(flow$compound_label))
+  right_labels <- unique(as.character(flow$bowtie_component))
+  x_expand <- .bowtie_x_expansion(max(nchar(left_labels)), max(nchar(right_labels)), width)
+  label_offset <- 1 / 8 + 0.03 # half the stratum width plus a gap
+  label_layer <- function(side) {
+    .plot_text_layer(
+      stat = ggalluvial::StatStratum,
+      mapping = ggplot2::aes(label = ggplot2::after_stat(side_label(.data$stratum, .data$x, side))),
+      size = 2.8, hjust = if (side == 1) 1 else 0,
+      nudge_x = if (side == 1) -label_offset else label_offset,
+      repel_args = list(direction = "y", min.segment.length = Inf, box.padding = 0.05,
+                        point.padding = 0, force = 0.5, max.overlaps = Inf, seed = 1),
+      text_args = list()
+    )
+  }
+
   p <- ggplot2::ggplot(
     flow,
     ggplot2::aes(axis1 = .data$compound_id, axis2 = .data$bowtie_component, y = .data$n_targets)
   ) +
     ggalluvial::geom_alluvium(ggplot2::aes(fill = .data$bowtie_component), width = 1 / 4, alpha = 0.75) +
     ggalluvial::geom_stratum(width = 1 / 4, fill = "grey92", colour = "grey40") +
-    ggplot2::geom_text(stat = ggalluvial::StatStratum, ggplot2::aes(label = stratum_label(ggplot2::after_stat(.data$stratum))), size = 2.8) +
-    ggplot2::scale_x_discrete(limits = c("compound", "bowtie_component"), expand = c(0.1, 0.1)) +
+    label_layer(1) + label_layer(2) +
+    ggplot2::scale_x_discrete(limits = c("compound", "bowtie_component"),
+                              expand = ggplot2::expansion(add = x_expand)) +
     ggplot2::scale_fill_manual(values = component_colors, name = "Bowtie\ncomponent") +
     ggplot2::labs(
       title = paste0("Compound -> bowtie component -- ", scope_label),
-      subtitle = "Flow thickness = number of that compound's targets landing in each component of the STRING directed-action network",
+      subtitle = .plot_wrap(
+        "Flow thickness = number of that compound's targets landing in each component of the STRING directed-action network",
+        .plot_wrap_width(width, 8)
+      ),
       x = NULL, y = "Number of targets"
     ) +
     ggplot2::theme_minimal() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(size = 12, face = "bold"),
       plot.subtitle = ggplot2::element_text(size = 8, colour = "grey40"),
+      plot.title.position = "plot",
       axis.text.y = ggplot2::element_blank()
     )
 
@@ -120,4 +149,34 @@ plot_bowtie <- function(proj, condition = NULL, top_n_compounds = NULL,
     engine = NULL, save = save, out_dir = out_dir,
     width = width, height = height, dpi = dpi
   )
+}
+
+#' Discrete x expansion that leaves room for the outside stratum labels
+#'
+#' @description
+#' `plot_bowtie()` has two axes at x = 1, 2 and draws its labels outside
+#' the strata (left of axis 1, right of axis 2), starting `offset` axis
+#' units from each axis. With `e_l`/`e_r` the added expansion, the panel
+#' spans `S = 1 + e_l + e_r` axis units over `panel_in` inches, and a
+#' label `t` inches long fits when `(e - offset) * panel_in / S >= t`.
+#' Writing `f = t / panel_in` for each side, the smallest such expansion
+#' solves `e_l = offset + f_l * S`, `e_r = offset + f_r * S`, i.e.
+#' `S = (1 + 2 * offset) / (1 - f_l - f_r)`. The label fractions are
+#' capped at 0.8 together so the flows always keep some width.
+#'
+#' @param left_chars,right_chars Longest label (characters) on each side.
+#' @param fig_width Figure width in inches.
+#' @param char_in Average glyph width in inches (size-2.8 text ~0.061).
+#' @param reserve_in Figure width not available to the panel (legend,
+#'   y-axis title, margins).
+#' @param offset Axis units between an axis and the start of its labels.
+#' @return Numeric `c(left, right)` for `ggplot2::expansion(add = )`.
+#' @keywords internal
+.bowtie_x_expansion <- function(left_chars, right_chars, fig_width, char_in = 0.061,
+                                reserve_in = 2.3, offset = 1 / 8 + 0.03) {
+  panel_in <- max(fig_width - reserve_in, 1)
+  f <- c(left_chars, right_chars) * char_in / panel_in
+  if (sum(f) > 0.8) f <- f * 0.8 / sum(f)
+  s <- (1 + 2 * offset) / (1 - sum(f))
+  offset + f * s
 }

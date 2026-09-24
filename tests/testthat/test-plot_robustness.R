@@ -36,3 +36,16 @@ test_that("legacy robustness summaries retain each module's own R annotation", {
   ann <- Filter(function(l) inherits(l$geom, "GeomText"), p$layers)[[1]]$data
   expect_equal(ann$label, c("R = 0.100", "R = 0.300"))
 })
+
+test_that("plot_robustness() wraps its long subtitle to the figure width", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(condition = "A", compound_id = "c1", uniprot_id = "t1")
+  patliRResults(proj, "network_robustness_curve") <- data.frame(
+    condition = "A", module_id = "m1", n_removed = 0:1, largest_component_fraction = c(1, 0)
+  )
+  p <- plot_robustness(proj, condition = "A", save = FALSE, width = 6)
+  lines <- strsplit(p$labels$subtitle, "\n", fixed = TRUE)[[1]]
+  expect_gt(length(lines), 1)
+  expect_true(all(nchar(lines) <= patliR:::.plot_wrap_width(6, 8)))
+})

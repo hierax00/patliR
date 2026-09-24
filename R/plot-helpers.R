@@ -125,7 +125,10 @@ NULL
     if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
     if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
     path <- file.path(out_dir, filename)
-    ggplot2::ggsave(path, static, width = width, height = height, dpi = dpi)
+    ## bg = "white": theme_void() figures have a blank plot.background, and
+    ## without an explicit device background the PNG comes out transparent
+    ## (rendered black by most image viewers).
+    ggplot2::ggsave(path, static, width = width, height = height, dpi = dpi, bg = "white")
     log_row$path <- path
     log_df <- .network_upsert(proj, name, log_row, key_cols)
     patliRResults(proj, name) <- log_df
@@ -138,6 +141,138 @@ NULL
   }
   if (save) attr(result, "proj") <- proj
   result
+}
+
+#' Back-fill a new key column into an existing plot log
+#'
+#' @description
+#' When a `plot_*` log gains a key column (e.g. `subset`, `view`), logs
+#' written by an earlier version lack it and [.network_upsert()] could not
+#' index them. The column is added with the value the old behaviour
+#' corresponds to, so the default call still replaces its own old row.
+#' @return `proj`, possibly with the `name` results slot updated.
+#' @keywords internal
+.plot_log_backfill <- function(proj, name, col, value) {
+  log_df <- patliRResults(proj, name)
+  if (!is.null(log_df) && nrow(log_df) > 0 && !col %in% names(log_df)) {
+    log_df[[col]] <- value
+    patliRResults(proj, name) <- log_df
+  }
+  proj
+}
+
+#' Wrap title / subtitle / caption text to a maximum line length
+#'
+#' @description
+#' ggplot2 never wraps `labs()` text, so a long subtitle runs off the right
+#' edge of the saved PNG. Each element of `x` is wrapped with
+#' [strwrap()] at `width` characters; explicit `"\n"` line breaks already
+#' in the text are kept (each line is wrapped on its own).
+#'
+#' @param x Character vector (`NULL`/`NA` pass through unchanged).
+#' @param width Maximum characters per line -- typically
+#'   `.plot_wrap_width()` of the figure's width.
+#' @return Character vector, same length as `x`.
+#' @keywords internal
+.plot_wrap <- function(x, width = 100) {
+  if (is.null(x)) return(x)
+  vapply(x, function(s) {
+    if (is.na(s)) return(NA_character_)
+    lines <- strsplit(s, "\n", fixed = TRUE)[[1]]
+    if (length(lines) == 0) return(s)
+    paste(vapply(lines, function(l) {
+      if (!nzchar(l)) return("")
+      paste(unlist(lapply(strwrap(l, width = width), .plot_break_long, width = width)), collapse = "\n")
+    }, character(1)), collapse = "\n")
+  }, character(1), USE.NAMES = FALSE)
+}
+
+#' Break one over-long, space-free line (a systematic chemical name)
+#' @description
+#' [strwrap()] only breaks at spaces, so
+#' `"2-(4-Ethenyl-4-methyl-3-(prop-1-en-2-yl)cyclohexyl)propan-2-ol"` stays
+#' one line. Such a line is cut after the last `-`, `,` or `)` that keeps
+#' the piece within `width` (hard cut at `width` when there is none).
+#' @return Character vector of pieces, each at most `width` characters.
+#' @keywords internal
+.plot_break_long <- function(line, width) {
+  out <- character(0)
+  while (nchar(line) > width) {
+    head <- substr(line, 1, width)
+    cut <- max(c(0L, gregexpr("[-,)]", head)[[1]]))
+    if (cut < width %/% 3) cut <- width
+    out <- c(out, substr(line, 1, cut))
+    line <- sub("^ +", "", substr(line, cut + 1, nchar(line)))
+  }
+  c(out, line)
+}
+
+#' Characters per line that fit across a saved figure
+#'
+#' @description
+#' Rough capacity of one text line spanning the whole figure: an average
+#' glyph of a sans-serif font is ~0.55 em wide, so `size` points of text
+#' fit `72 / (0.55 * size)` characters per inch. `margin` (inches) covers
+#' the plot margins. Deliberately a little conservative -- an early line
+#' break costs nothing, a clipped subtitle loses information.
+#'
+#' @param fig_width Figure width in inches (the `width` passed to `ggsave()`).
+#' @param size Font size in points of the text being wrapped.
+#' @param margin Inches of the figure width not available to the text.
+#' @return Integer, at least 20.
+#' @keywords internal
+.plot_wrap_width <- function(fig_width, size = 8, margin = 0.3) {
+  max(20L, as.integer(floor((fig_width - margin) * 72 / (0.55 * size))))
+}
+
+#' Shorten long labels for on-plot text
+#'
+#' @description
+#' Compound names from GC-MS libraries can run to 60+ characters
+#' (`"Naphthalene, 1,2-dihydro-1,1,6-trimethyl-"`); drawn as point labels they
+#' collide and run off the panel. Labels longer than `max_chars` are cut
+#' and end in `"..."`. Only for drawn text -- tooltips and logs keep the
+#' full name.
+#'
+#' @param x Character vector.
+#' @param max_chars Maximum label length, including the `"..."`.
+#' @return Character vector, same length as `x`.
+#' @keywords internal
+.plot_truncate <- function(x, max_chars = 28) {
+  x <- as.character(x)
+  long <- !is.na(x) & nchar(x) > max_chars
+  x[long] <- paste0(substr(x[long], 1, max_chars - 3), "...")
+  x
+}
+
+#' Is label repulsion available?
+#'
+#' @description
+#' `ggrepel` is optional (Suggests). Label layers use
+#' [ggrepel::geom_text_repel()] when it is installed and fall back to plain
+#' [ggplot2::geom_text()] otherwise. `options(patliR.repel = FALSE)` forces
+#' the fallback (reproducible figures across machines, or tests).
+#' @return `TRUE`/`FALSE`.
+#' @keywords internal
+.plot_use_repel <- function() {
+  isTRUE(getOption("patliR.repel", TRUE)) && requireNamespace("ggrepel", quietly = TRUE)
+}
+
+#' A text-label layer that repels when `ggrepel` is installed
+#'
+#' @description
+#' Arguments in `...` go to either geom; `repel_args` only to
+#' [ggrepel::geom_text_repel()] (e.g. `max.overlaps`, `box.padding`) and
+#' `text_args` only to the [ggplot2::geom_text()] fallback (e.g. a `vjust`
+#' offset that would fight the repulsion).
+#' @return A ggplot2 layer.
+#' @keywords internal
+.plot_text_layer <- function(..., repel_args = list(), text_args = list()) {
+  if (.plot_use_repel()) {
+    do.call(ggrepel::geom_text_repel, c(list(...), repel_args))
+  } else {
+    do.call(ggplot2::geom_text, c(list(...), text_args))
+  }
 }
 
 #' Look up display labels for a set of network nodes

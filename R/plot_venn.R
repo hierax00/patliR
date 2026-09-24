@@ -102,7 +102,7 @@ plot_venn <- function(proj, condition = NULL, disease = NULL,
     if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
     if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
     path <- file.path(out_dir, paste0("venn_", scope_label, "_", disease, ".png"))
-    ggplot2::ggsave(path, p, width = width, height = height, dpi = dpi)
+    ggplot2::ggsave(path, p, width = width, height = height, dpi = dpi, bg = "white")
     n_overlap <- length(intersect(compound_targets, disease_targets))
     log_row <- data.frame(
       condition = scope_label, disease_id = disease, path = path,

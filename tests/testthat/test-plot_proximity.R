@@ -130,3 +130,18 @@ test_that("plot_proximity() keeps same-named compounds in separate positions and
   main <- patliRResults(proj, "network_proximity")
   expect_setequal(unique(p$data$compound_id), main$compound_id[order(-abs(main$z_score))][1:2])
 })
+
+test_that("plot_proximity(view = 'z') builds with several disease panels (reference lines as data)", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .network_stats_test_setup()
+  ct <- unique(patliRResults(proj, "network_edges")[patliRResults(proj, "network_edges")$condition == "FLO-ET", "compound_id"])
+  one <- data.frame(
+    condition = "FLO-ET", compound_id = ct, n_targets_mapped = 1L, n_disease_genes_mapped = 1L,
+    d_observed = 2, d_random_mean = 3, d_random_sd = 1, z_score = seq(-2, 2, length.out = length(ct)),
+    n_random = 100L, seed_used = 1L, stringsAsFactors = FALSE
+  )
+  patliRResults(proj, "network_proximity") <- rbind(cbind(one, disease_id = "D1"), cbind(one, disease_id = "D2"))
+  p <- plot_proximity(proj, condition = "FLO-ET", save = FALSE)
+  expect_no_error(ggplot2::ggplot_gtable(ggplot2::ggplot_build(p)))
+  expect_s3_class(p$facet, "FacetGrid")
+})

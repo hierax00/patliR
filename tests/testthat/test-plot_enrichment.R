@@ -113,3 +113,16 @@ test_that("plot_enrichment() returns a girafe widget with engine = 'ggiraph'", {
   p <- plot_enrichment(proj, condition = "FLO-ET", save = FALSE, engine = "ggiraph")
   expect_s3_class(p, "girafe")
 })
+
+test_that("plot_enrichment() stacks several dbs in one column and wraps the subtitle", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .network_stats_test_setup()
+  patliRResults(proj, "network_enrichment") <- data.frame(
+    condition = "FLO-ET", db = rep(c("go", "kegg"), each = 2), ID = paste0("id", 1:4),
+    Description = c("a very long description of a biological process that goes on and on and on", "b", "c", "d"),
+    GeneRatio = "2/10", BgRatio = "5/100", p.adjust = 0.01, Count = 2L, stringsAsFactors = FALSE
+  )
+  p <- plot_enrichment(proj, condition = "FLO-ET", save = FALSE, width = 5)
+  expect_equal(p$facet$params$ncol, 1)
+  expect_true(all(nchar(strsplit(p$labels$subtitle, "\n", fixed = TRUE)[[1]]) <= patliR:::.plot_wrap_width(5, 8)))
+})

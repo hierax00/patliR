@@ -41,6 +41,9 @@ NULL
 #'   target's top few without re-fetching).
 #' @param compound_ids Character vector of `compounds(proj)$id` to restrict
 #'   to, or `NULL` (default) for every compound present in scope.
+#' @param top_n_labels Integer, default `25`: only this many disease nodes
+#'   -- those with the most associated targets -- get a text label (full
+#'   names stay in the `ggiraph` tooltips). `0` draws no label.
 #' @param engine `"static"` (default) or `"ggiraph"`.
 #'
 #' @return A `ggplot`/`girafe` object, with `attr(., "proj")` set when
@@ -57,9 +60,10 @@ NULL
 #' @seealso [targets_disease_profile()], [plot_network_layers()]
 #' @export
 plot_disease_network <- function(proj, condition = NULL, disease = NULL, max_rank = NULL,
-                                  compound_ids = NULL, engine = c("static", "ggiraph"),
+                                  compound_ids = NULL, top_n_labels = 25, engine = c("static", "ggiraph"),
                                   save = TRUE, out_dir = NULL, width = 9, height = 7, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
+  stopifnot(is.numeric(top_n_labels), length(top_n_labels) == 1, !is.na(top_n_labels), top_n_labels >= 0)
   engine <- match.arg(engine)
   engine <- .plot_require(engine)
   scope <- .plot_scope(proj, condition)
@@ -172,22 +176,41 @@ plot_disease_network <- function(proj, condition = NULL, disease = NULL, max_ran
   } else {
     ggplot2::geom_point(data = nodes, ggplot2::aes(x = .data$x, y = .data$y, colour = .data$layer, size = .data$point_size))
   }
+  ## drawn label shortened, full disease name kept in the tooltip
+  ## Only the `top_n_labels` diseases with the most associated targets are
+  ## named -- with hundreds of disease nodes, labelling all of them prints an
+  ## unreadable block of text over the whole network.
   disease_labels <- nodes[nodes$layer == "disease", , drop = FALSE]
-  p <- p + ggplot2::geom_text(
-    data = disease_labels, ggplot2::aes(x = .data$x, y = .data$y, label = .data$label),
-    size = 3.1, fontface = "bold", colour = "grey15", vjust = -1.6, inherit.aes = FALSE
+  n_targets_of <- table(td_edges$disease_id)
+  disease_labels$n_targets <- as.integer(n_targets_of[disease_labels$id])
+  disease_labels <- utils::head(disease_labels[order(-disease_labels$n_targets, disease_labels$label), , drop = FALSE], top_n_labels)
+  disease_labels$short_label <- .plot_truncate(disease_labels$label)
+  if (length(disease_nodes) > 60) {
+    cli::cli_inform(c(
+      "i" = "{.fn plot_disease_network}: {length(disease_nodes)} disease nodes -- only the {min(top_n_labels, length(disease_nodes))} with the most targets are labeled; narrow the figure with {.arg disease}, {.arg max_rank} (e.g. {.code max_rank = 1}) or {.arg compound_ids}."
+    ))
+  }
+  p <- p + .plot_text_layer(
+    data = disease_labels, mapping = ggplot2::aes(x = .data$x, y = .data$y, label = .data$short_label),
+    size = 3.1, fontface = "bold", colour = "grey15", inherit.aes = FALSE,
+    repel_args = list(box.padding = 0.4, min.segment.length = 0.2, segment.colour = "grey40",
+                      bg.colour = "white", bg.r = 0.12, max.overlaps = Inf, seed = 1),
+    text_args = list(vjust = -1.6)
   )
   p <- p +
     ggplot2::scale_colour_manual(values = palette, name = "Layer") +
     ggplot2::scale_size_identity() +
     ggplot2::labs(
       title = paste0("Compound-target-disease network -- ", scope_label),
-      subtitle = "disease nodes enlarged, with a convex-hull halo over their associated targets"
+      subtitle = .plot_wrap("disease nodes enlarged, with a convex-hull halo over their associated targets",
+                            .plot_wrap_width(width, 7.5))
     ) +
     ggplot2::theme_void() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(size = 12, face = "bold"),
       plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"),
+      plot.title.position = "plot",
+      plot.background = ggplot2::element_rect(fill = "white", colour = NA),
       legend.position = "right"
     )
 

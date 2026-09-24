@@ -169,11 +169,17 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
       ggplot2::geom_vline(xintercept = 0, colour = "#c0392b", linetype = "solid", linewidth = 0.6) +
       ggplot2::labs(
         title = paste0("s_AB distribution -- ", scope_label),
-        subtitle = "Menche et al. (2015) network separation across every scored pair; s_AB >= 0 (right of the red line) = topologically separated",
+        subtitle = .plot_wrap(
+          "Menche et al. (2015) network separation across every scored pair; s_AB >= 0 (right of the red line) = topologically separated",
+          .plot_wrap_width(width, 7.5)
+        ),
         x = "s_AB", y = "Pair count"
       ) +
       ggplot2::theme_minimal() +
-      ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"))
+      ggplot2::theme(
+        plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"),
+        plot.title.position = "plot"
+      )
     if (length(unique(dat$panel)) > 1) ps <- ps + ggplot2::facet_wrap(~panel)
     ps
   }
@@ -220,6 +226,8 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
   label_a <- .plot_label_nodes(proj, conditions, dat$compound_a, "compound")
   label_b <- .plot_label_nodes(proj, conditions, dat$compound_b, "compound")
   dat$pair_label <- paste(label_a, "+", label_b)
+  ## drawn labels shorten each name; the tooltip keeps pair_label in full
+  dat$short_label <- paste(.plot_truncate(label_a, 20), "+", .plot_truncate(label_b, 20))
   dat$tooltip <- sprintf(
     "%s\nz_a=%.2f  z_b=%.2f\ns_ab=%s (%s)\nclass=%s",
     dat$pair_label, dat$za_plot, dat$zb_plot,
@@ -244,7 +252,8 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
   is_p2 <- dat$is_p2
   ann_p2 <- stats::aggregate(is_p2 ~ panel, data = dat, FUN = sum)
   names(ann_p2)[2] <- "n_p2"
-  ann_p2$label <- sprintf("Complementary Exposure (P2)\nn = %d", ann_p2$n_p2)
+  ann_p2$quadrant_label <- "  Complementary Exposure (P2) quadrant"
+  ann_p2$count_label <- sprintf("  n = %d P2 pair%s", ann_p2$n_p2, ifelse(ann_p2$n_p2 == 1, "", "s"))
 
   ## top_n P2 pairs by synergy_score (descending, NA last), per panel.
   p2_rows <- dat[is_p2, , drop = FALSE]
@@ -278,15 +287,28 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
     ggplot2::geom_point(alpha = 0.75)
   }
   if (nrow(top) > 0) {
-    p <- p + ggplot2::geom_text(
-      data = top, ggplot2::aes(x = .data$za_plot, y = .data$zb_plot, label = .data$pair_label),
-      size = 2.6, colour = "grey15", vjust = -1, inherit.aes = FALSE, show.legend = FALSE
+    p <- p + .plot_text_layer(
+      data = top, mapping = ggplot2::aes(x = .data$za_plot, y = .data$zb_plot, label = .data$short_label),
+      size = 2.6, colour = "grey15", inherit.aes = FALSE, show.legend = FALSE,
+      repel_args = list(box.padding = 0.3, min.segment.length = 0.2, segment.colour = "grey60",
+                        max.overlaps = Inf, seed = 1),
+      text_args = list(vjust = -1)
     )
   }
-  p <- p + ggplot2::geom_text(
-    data = ann_p2, ggplot2::aes(x = -Inf, y = -Inf, label = .data$label),
-    hjust = -0.05, vjust = -0.6, size = 3, colour = "grey25", inherit.aes = FALSE
-  )
+  ## Quadrant name and P2 count as two single-line labels stacked in the
+  ## top-left corner of the shaded (both-proximal) quadrant, just under the
+  ## y = 0 line. One two-line label anchored at (-Inf, -Inf) justified each
+  ## line on its own width (the count slid left of the name) and sat on top
+  ## of the most proximal pairs, which is where the points concentrate.
+  p <- p +
+    ggplot2::geom_text(
+      data = ann_p2, ggplot2::aes(x = -Inf, y = 0, label = .data$quadrant_label),
+      hjust = 0, vjust = 1.6, size = 3, colour = "grey25", fontface = "bold", inherit.aes = FALSE
+    ) +
+    ggplot2::geom_text(
+      data = ann_p2, ggplot2::aes(x = -Inf, y = 0, label = .data$count_label),
+      hjust = 0, vjust = 3.4, size = 3, colour = "grey25", inherit.aes = FALSE
+    )
   p <- p +
     ggplot2::scale_colour_manual(
       values = sep_colours, na.value = "grey70", drop = FALSE,
@@ -298,15 +320,18 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
     ggplot2::scale_size(range = c(1.5, 6), name = "|s_AB|\n(NA -> smallest)") +
     ggplot2::labs(
       title = paste0("Compound pair Cheng classification -- ", scope_label),
-      subtitle = paste0(
+      subtitle = .plot_wrap(paste0(
         "x = z_score (more proximal compound), y = z_score (less proximal); shaded region = both individually proximal (z < 0);\n",
         "colour = separated (s_AB >= 0, Menche et al. 2015); shape = Cheng class P1-P6 (Cheng, Kovacs & Barabasi 2019); size = |s_AB|"
-      ),
+      ), .plot_wrap_width(width, 7.5)),
       x = "z_score (more proximal compound of the pair)",
       y = "z_score (less proximal compound of the pair)"
     ) +
     ggplot2::theme_minimal() +
-    ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"))
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"),
+      plot.title.position = "plot"
+    )
   if (length(unique(dat$panel)) > 1) p <- p + ggplot2::facet_wrap(~panel)
 
   .synergy_finish_both(proj, p, p_sab, scope_label, engine, save, out_dir, width, height, dpi)
@@ -319,7 +344,10 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
     ggplot2::annotate("text", x = 0, y = 0, label = msg, size = 3.4, colour = "grey25", lineheight = 1.1) +
     ggplot2::labs(title = title) +
     ggplot2::theme_void() +
-    ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"))
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 12, face = "bold"),
+      plot.background = ggplot2::element_rect(fill = "white", colour = NA)
+    )
 }
 
 #' Save/log both `plot_synergy()` figures and chain the returned `proj`

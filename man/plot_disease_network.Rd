@@ -11,6 +11,7 @@ plot_disease_network(
   disease = NULL,
   max_rank = NULL,
   compound_ids = NULL,
+  top_n_labels = 25,
   engine = c("static", "ggiraph"),
   save = TRUE,
   out_dir = NULL,
@@ -37,6 +38,10 @@ target's top few without re-fetching).}
 
 \item{compound_ids}{Character vector of \code{compounds(proj)$id} to restrict
 to, or \code{NULL} (default) for every compound present in scope.}
+
+\item{top_n_labels}{Integer, default \code{25}: only this many disease nodes
+-- those with the most associated targets -- get a text label (full
+names stay in the \code{ggiraph} tooltips). \code{0} draws no label.}
 
 \item{engine}{\code{"static"} (default) or \code{"ggiraph"}.}
 

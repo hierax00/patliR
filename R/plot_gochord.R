@@ -126,7 +126,7 @@ plot_gochord <- function(proj, condition = NULL, db = NULL, top_n_terms = 10,
     if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
     if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
     path <- file.path(out_dir, paste0("gochord_", cond, "_", enr$db[1], ".png"))
-    ggplot2::ggsave(path, p, width = width, height = height, dpi = dpi)
+    ggplot2::ggsave(path, p, width = width, height = height, dpi = dpi, bg = "white")
     log_row <- data.frame(condition = cond, db = enr$db[1], path = path, n_terms = nrow(enr), stringsAsFactors = FALSE)
     log_df <- .network_upsert(proj, "gochord_plot_log", log_row, c("condition", "db"))
     patliRResults(proj, "gochord_plot_log") <- log_df

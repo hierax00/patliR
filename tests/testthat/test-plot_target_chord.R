@@ -292,3 +292,57 @@ test_that("plot_target_chord() node ordering/labels are deterministic across rep
   ## data must match exactly.
   expect_identical(p1$layers[[2]]$data, p2$layers[[2]]$data)
 })
+test_that("present but invalid STRING scores cannot bypass an explicit threshold", {
+  skip_if_not_installed("STRINGdb")
+  skip_if_not_installed("ggplot2")
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(
+    condition = "A", compound_id = "c1", uniprot_id = c("t1", "t2")
+  )
+  fake <- .fake_string_db(c("t1", "t2"))
+  testthat::local_mocked_bindings(
+    .network_stringdb = function(...) fake,
+    .network_stringdb_actions_graph = function(...) list(graph = fake$get_graph()),
+    .package = "patliR"
+  )
+  dir <- file.path(cacheDir(proj), "stringdb")
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  path <- file.path(dir, "9606.protein.actions.v11.0.txt.gz")
+  write_raw <- function(dat) {
+    con <- gzfile(path, "wt")
+    on.exit(close(con))
+    utils::write.table(dat, con, sep = "\t", row.names = FALSE, quote = FALSE)
+  }
+  write_raw(data.frame(wrong_column = 1))
+  expect_error(plot_target_chord(proj, condition = "A", actions_score_threshold = 800, save = FALSE),
+               "Invalid STRING actions score schema")
+  raw <- data.frame(item_id_a = "s1", item_id_b = "s2", is_directional = "t",
+                    a_is_acting = "t", score = "broken")
+  write_raw(raw)
+  expect_error(plot_target_chord(proj, condition = "A", actions_score_threshold = 800, save = FALSE),
+               "Invalid STRING actions scores")
+  raw$score <- 700
+  write_raw(raw)
+  expect_error(plot_target_chord(proj, condition = "A", actions_score_threshold = 800, save = FALSE),
+               "scored below")
+  raw$is_directional <- "f"
+  write_raw(raw)
+  sc <- patliR:::.target_chord_actions_scores(proj, 9606, "11.0")
+  expect_equal(nrow(sc), 0L)
+  expect_named(sc, c("string_a", "string_b", "score"))
+  expect_error(plot_target_chord(proj, condition = "A", actions_score_threshold = 800, save = FALSE),
+               "scored below")
+})
+
+test_that("unreadable STRING score files report the underlying read error", {
+  proj <- .test_project()
+  dir <- file.path(cacheDir(proj), "stringdb")
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  path <- file.path(dir, "9606.protein.actions.v11.0.txt.gz")
+  file.create(path)
+  testthat::local_mocked_bindings(
+    read.delim = function(...) stop("test read failure"), .package = "utils"
+  )
+  expect_error(patliR:::.target_chord_actions_scores(proj, 9606, "11.0"),
+               "Cannot read STRING actions scores")
+})

@@ -67,8 +67,13 @@ plot_adme_upset <- function(proj, top_n = 15,
     cli::cli_abort("{.fn plot_adme_upset} needs at least 2 rules in {.val adme_filtered} to compare; got {.val {rules}}.")
   }
 
-  combo <- stats::aggregate(rule ~ compound_id, long[long$pass %in% TRUE, , drop = FALSE],
-                             function(x) paste(sort(unique(x)), collapse = "|"))
+  passing <- long[long$pass %in% TRUE, , drop = FALSE]
+  combo <- if (nrow(passing) > 0) {
+    stats::aggregate(rule ~ compound_id, passing,
+                     function(x) paste(sort(unique(x)), collapse = "|"))
+  } else {
+    data.frame(compound_id = character(0), rule = character(0), stringsAsFactors = FALSE)
+  }
   ## Compounds that pass none of the rules still form a real (empty-set)
   ## intersection -- keep them rather than silently dropping.
   all_ids <- unique(long$compound_id)

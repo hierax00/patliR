@@ -75,7 +75,8 @@ object (\code{engine = "static"}). If \code{save = TRUE} (the default), the PNG
 path and PC/UMAP scores per compound are also recorded in
 \code{patliRResults(proj, "chemical_space_log")} /
 \code{results/chemical_space_log.csv}, retrievable via
-\code{attr(result, "proj")}.
+\code{attr(result, "proj")}. This project attribute is also returned when
+\code{save = FALSE}, retaining descriptor-exclusion logs without writing files.
 }
 \description{
 Projects every compound's physicochemical descriptors (from
@@ -107,6 +108,8 @@ pass/fail rule flags and the BOILED-Egg call (those are outcomes, not
 independent axes). Compounds with \code{NA} in any of these are excluded and
 logged (\code{"plot_chemical_space_excluded_na"}), the same principle
 \code{\link[=network_proximity]{network_proximity()}} uses for compounds STRINGdb cannot map.
+Constant descriptors are dropped before scaling; at least \code{dims}
+non-constant descriptors must remain.
 }
 
 \examples{

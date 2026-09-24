@@ -127,3 +127,19 @@ test_that("plot_synergy() saves both the main scatter and the s_AB companion PNG
 test_that("plot_synergy() top_n default is 5 (spec breaking-change from 10)", {
   expect_equal(formals(plot_synergy)$top_n, 5)
 })
+test_that("unclassified synergy pairs still contribute to the separation histogram", {
+  skip_if_not_installed("ggplot2")
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(condition = "A", compound_id = "c1", uniprot_id = "t1")
+  patliRResults(proj, "network_synergy") <- data.frame(
+    condition = "A", disease_id = "d1", cheng_class = NA_character_, s_ab = c(-0.5, 1, NA)
+  )
+  testthat::local_mocked_bindings(
+    .synergy_finish_both = function(proj, p_main, p_sab, ...) list(main = p_main, sab = p_sab),
+    .package = "patliR"
+  )
+  plots <- plot_synergy(proj, condition = "A", save = FALSE)
+  expect_equal(plots$sab$data$s_ab, c(-0.5, 1))
+  expect_equal(sum(ggplot2::ggplot_build(plots$sab)$data[[1]]$count), 2)
+  expect_true(inherits(plots$main$layers[[1]]$geom, "GeomText"))
+})

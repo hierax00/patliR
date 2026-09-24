@@ -80,7 +80,9 @@ plot_disease_network <- function(proj, condition = NULL, disease = NULL, max_ran
   edges <- edges_all[edges_all$condition %in% conditions, c("compound_id", "uniprot_id", "weight"), drop = FALSE]
   if (!is.null(compound_ids)) edges <- edges[edges$compound_id %in% compound_ids, , drop = FALSE]
 
-  profile <- profile[profile$compound_id %in% edges$compound_id, , drop = FALSE]
+  profile <- merge(profile, unique(edges[c("compound_id", "uniprot_id")]),
+                   by.x = c("compound_id", "target_id"),
+                   by.y = c("compound_id", "uniprot_id"))
   if (nrow(profile) == 0) {
     cli::cli_abort("No {.val targets_disease_profile} rows for the requested compounds/condition(s)/disease/max_rank.")
   }
@@ -88,7 +90,9 @@ plot_disease_network <- function(proj, condition = NULL, disease = NULL, max_ran
   ## restrict compound-target edges to targets that actually carry disease
   ## data -- this plot is deliberately the disease-relevant subgraph, not
   ## every predicted target (plot_network_layers() already covers that).
-  ct_edges <- unique(edges[edges$uniprot_id %in% profile$target_id, , drop = FALSE])
+  ct_edges <- unique(merge(edges, unique(profile[c("compound_id", "target_id")]),
+                           by.x = c("compound_id", "uniprot_id"),
+                           by.y = c("compound_id", "target_id")))
   td_edges <- unique(profile[, c("target_id", "disease_id", "disease_name", "association_score")])
 
   compound_nodes <- sort(unique(ct_edges$compound_id))

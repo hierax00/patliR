@@ -10,8 +10,8 @@ cached raw flat file}
 \value{
 \code{data.frame(string_a, string_b, score)} (undirected, deduplicated
 by keeping the strongest of any multiple action "modes" between the
-same pair), or \code{NULL} if the raw file is not on disk, unreadable, or
-missing the expected columns.
+same pair), or \code{NULL} only if the raw file is not on disk. Unreadable
+or invalid files raise an error so confidence filtering is not bypassed.
 }
 \description{
 \code{\link[=network_bowtie]{network_bowtie()}}'s \code{.network_stringdb_actions_graph()} (internal)

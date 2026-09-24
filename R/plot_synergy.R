@@ -156,6 +156,28 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
 
   dat$panel <- paste(dat$condition, dat$disease_id, sep = " / ")
 
+  ## Companion panel: s_AB distribution across every pair in scope.
+  n_sab <- sum(!is.na(dat$s_ab))
+  p_sab <- if (n_sab == 0) {
+    .synergy_empty_panel(
+      paste0("No s_AB values available for ", scope_label, " (separation = \"jaccard\", or no pair mapped onto the STRING LCC)."),
+      paste0("s_AB distribution -- ", scope_label)
+    )
+  } else {
+    ps <- ggplot2::ggplot(dat[!is.na(dat$s_ab), , drop = FALSE], ggplot2::aes(x = .data$s_ab)) +
+      ggplot2::geom_histogram(bins = 30, fill = "#2980b9", colour = "white", alpha = 0.85) +
+      ggplot2::geom_vline(xintercept = 0, colour = "#c0392b", linetype = "solid", linewidth = 0.6) +
+      ggplot2::labs(
+        title = paste0("s_AB distribution -- ", scope_label),
+        subtitle = "Menche et al. (2015) network separation across every scored pair; s_AB >= 0 (right of the red line) = topologically separated",
+        x = "s_AB", y = "Pair count"
+      ) +
+      ggplot2::theme_minimal() +
+      ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"))
+    if (length(unique(dat$panel)) > 1) ps <- ps + ggplot2::facet_wrap(~panel)
+    ps
+  }
+
   ## This plot needs a Cheng classification, not a synergy_score -- a pair
   ## can carry a real cheng_class (P1..P6) without ever getting a
   ## synergy_score (that column is gated on complementary_exposure AND not
@@ -174,10 +196,6 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
       "s_ab non-NA count: ", n_sab, " of ", nrow(dat), "."
     )
     p_main <- .synergy_empty_panel(msg, paste0("Compound pair Cheng classification -- ", scope_label))
-    p_sab <- .synergy_empty_panel(
-      paste0("No s_AB values available for ", scope_label, "."),
-      paste0("s_AB distribution -- ", scope_label)
-    )
     return(.synergy_finish_both(proj, p_main, p_sab, scope_label, engine, save, out_dir, width, height, dpi))
   }
   if (n_class < nrow(dat)) {
@@ -290,28 +308,6 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
     ggplot2::theme_minimal() +
     ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"))
   if (length(unique(dat$panel)) > 1) p <- p + ggplot2::facet_wrap(~panel)
-
-  ## Companion panel: s_AB distribution across every pair in scope.
-  n_sab <- sum(!is.na(dat$s_ab))
-  p_sab <- if (n_sab == 0) {
-    .synergy_empty_panel(
-      paste0("No s_AB values available for ", scope_label, " (separation = \"jaccard\", or no pair mapped onto the STRING LCC)."),
-      paste0("s_AB distribution -- ", scope_label)
-    )
-  } else {
-    ps <- ggplot2::ggplot(dat[!is.na(dat$s_ab), , drop = FALSE], ggplot2::aes(x = .data$s_ab)) +
-      ggplot2::geom_histogram(bins = 30, fill = "#2980b9", colour = "white", alpha = 0.85) +
-      ggplot2::geom_vline(xintercept = 0, colour = "#c0392b", linetype = "solid", linewidth = 0.6) +
-      ggplot2::labs(
-        title = paste0("s_AB distribution -- ", scope_label),
-        subtitle = "Menche et al. (2015) network separation across every scored pair; s_AB >= 0 (right of the red line) = topologically separated",
-        x = "s_AB", y = "Pair count"
-      ) +
-      ggplot2::theme_minimal() +
-      ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"))
-    if (length(unique(dat$panel)) > 1) ps <- ps + ggplot2::facet_wrap(~panel)
-    ps
-  }
 
   .synergy_finish_both(proj, p, p_sab, scope_label, engine, save, out_dir, width, height, dpi)
 }

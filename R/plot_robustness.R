@@ -86,7 +86,7 @@ plot_robustness <- function(proj, condition = NULL, module_id = NULL,
   if (!is.null(summary_all) && nrow(summary_all) > 0) {
     ann <- summary_all[summary_all$condition %in% conditions & (is.null(module_id) | summary_all$module_id %in% module_id), , drop = FALSE]
     ann$panel <- paste(ann$condition, ann$module_id, sep = " / ")
-    r_random <- if (is.null(ann$r_index_random)) NA_real_ else ann$r_index_random
+    r_random <- if (is.null(ann$r_index_random)) rep(NA_real_, nrow(ann)) else ann$r_index_random
     ann$label <- ifelse(
       is.na(r_random),
       sprintf("R = %.3f", ann$r_index),

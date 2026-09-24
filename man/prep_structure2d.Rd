@@ -10,8 +10,7 @@ prep_structure2d(proj, engine = c("rcdk", "chemminer"), out_dir = NULL)
 \item{proj}{A \code{\link[=PatliRProject-class]{PatliRProject}} object.}
 
 \item{engine}{\code{"rcdk"} (default): use \code{rcdk}'s own 2D depiction, no extra
-dependency. \code{"chemminer"}: use \pkg{ChemmineR} (Suggests) if installed,
-useful as a second opinion when \code{rcdk} disagrees with what you expect.}
+dependency. \code{"chemminer"} is not implemented and is rejected.}
 
 \item{out_dir}{Directory to write the PNG files to. Defaults to
 \code{file.path(projectDir(proj), "structure2d")}.}
@@ -19,7 +18,7 @@ useful as a second opinion when \code{rcdk} disagrees with what you expect.}
 \value{
 The updated \code{proj}, with a \code{structure2d_log} entry in
 \code{\link[=patliRResults]{patliRResults()}} (columns \code{id}, \code{generated_ok}, \code{engine_used},
-\code{path}), also written to \code{results/structure2d_log.csv}.
+\code{path}, \code{failure_reason}), also written to \code{results/structure2d_log.csv}.
 }
 \description{
 Renders a 2D depiction (PNG) for every compound currently in

@@ -65,6 +65,8 @@ NULL
 #' arc is drawn in one constant colour -- exactly the fallback
 #' network-design-spec.md Sec 3.9 itself anticipates ("otherwise a
 #' constant colour").
+#' A present but unreadable or invalid raw score file raises an error;
+#' confidence filtering is never silently bypassed for a corrupt file.
 #'
 #' @inheritParams network_build
 #' @inheritParams plot_save_params
@@ -283,22 +285,38 @@ plot_target_chord <- function(proj, condition = NULL, actions_score_threshold = 
 #'
 #' @return `data.frame(string_a, string_b, score)` (undirected, deduplicated
 #'   by keeping the strongest of any multiple action "modes" between the
-#'   same pair), or `NULL` if the raw file is not on disk, unreadable, or
-#'   missing the expected columns.
+#'   same pair), or `NULL` only if the raw file is not on disk. Unreadable
+#'   or invalid files raise an error so confidence filtering is not bypassed.
 #' @keywords internal
 .target_chord_actions_scores <- function(proj, species, version) {
   raw_gz <- file.path(cacheDir(proj), "stringdb", paste0(species, ".protein.actions.v", version, ".txt.gz"))
   if (!file.exists(raw_gz)) return(NULL)
 
-  actions <- tryCatch(utils::read.delim(gzfile(raw_gz), stringsAsFactors = FALSE), error = function(e) NULL)
+  actions <- tryCatch({
+    con <- gzfile(raw_gz, "rt")
+    on.exit(close(con), add = TRUE)
+    utils::read.delim(con, stringsAsFactors = FALSE)
+  }, error = function(e) {
+    cli::cli_abort("Cannot read STRING actions scores from {.file {raw_gz}}; cannot apply {.arg actions_score_threshold}.", parent = e)
+  }, warning = function(w) {
+    cli::cli_abort("Cannot reliably read STRING actions scores from {.file {raw_gz}}; cannot apply {.arg actions_score_threshold}.", parent = w)
+  })
   required <- c("item_id_a", "item_id_b", "is_directional", "a_is_acting", "score")
-  if (is.null(actions) || !all(required %in% names(actions))) return(NULL)
+  if (!all(required %in% names(actions))) {
+    cli::cli_abort("Invalid STRING actions score schema in {.file {raw_gz}}: missing {toString(setdiff(required, names(actions)))}; cannot apply {.arg actions_score_threshold}.")
+  }
 
   keep <- .network_actions_flag_true(actions$is_directional) & .network_actions_flag_true(actions$a_is_acting)
   sc <- actions[keep, c("item_id_a", "item_id_b", "score")]
   sc$score <- suppressWarnings(as.numeric(sc$score))
-  sc <- sc[!is.na(sc$score), , drop = FALSE]
-  if (nrow(sc) == 0) return(NULL)
+  if (any(!is.finite(sc$score) | sc$score < 0 | sc$score > 999) ||
+      anyNA(sc$item_id_a) || anyNA(sc$item_id_b) ||
+      any(!nzchar(sc$item_id_a) | !nzchar(sc$item_id_b))) {
+    cli::cli_abort("Invalid STRING actions scores or target IDs in {.file {raw_gz}}; cannot apply {.arg actions_score_threshold}.")
+  }
+  if (nrow(sc) == 0) {
+    return(data.frame(string_a = character(0), string_b = character(0), score = numeric(0)))
+  }
 
   a_first <- sc$item_id_a < sc$item_id_b
   sc$string_a <- ifelse(a_first, sc$item_id_a, sc$item_id_b)

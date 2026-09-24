@@ -56,3 +56,14 @@ test_that("plot_heatmap() renders an entirely unknown matrix without clustering 
   expect_identical(p$tree_col, NA)
   expect_true(file.exists(patliRResults(attr(p, "proj"), "heatmap_plot_log")$path))
 })
+test_that("presence heatmaps render disjoint NA rows through pheatmap", {
+  skip_if_not_installed("pheatmap")
+  proj <- .test_project()
+  binarizedMatrix(proj) <- data.frame(compound_id = c("c1", "c2"),
+                                     A = c(1, NA), B = c(NA, 1))
+  p <- plot_heatmap(proj, what = "compound_condition", save = TRUE)
+  expect_s3_class(p, "pheatmap")
+  expect_identical(p$tree_row, NA)
+  expect_identical(p$tree_col, NA)
+  expect_true(file.exists(patliRResults(attr(p, "proj"), "heatmap_plot_log")$path))
+})

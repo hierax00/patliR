@@ -92,6 +92,8 @@ downloads anything), \code{actions_score_threshold} has no effect and every
 arc is drawn in one constant colour -- exactly the fallback
 network-design-spec.md Sec 3.9 itself anticipates ("otherwise a
 constant colour").
+A present but unreadable or invalid raw score file raises an error;
+confidence filtering is never silently bypassed for a corrupt file.
 }
 
 \examples{

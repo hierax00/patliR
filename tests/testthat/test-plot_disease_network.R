@@ -30,12 +30,12 @@ test_that("plot_disease_network() draws a convex hull when a disease has >= 3 ta
   flo <- edges[edges$condition == "FLO-ET", , drop = FALSE]
   targets <- unique(flo$uniprot_id)
   testthat::skip_if(length(targets) < 3, "fixture needs at least 3 FLO-ET targets")
-  cmp <- flo$compound_id[1]
-
   ## disease D1 gets 3 targets (hull should be drawn), disease D2 gets 1 (no hull)
   profile <- rbind(
-    .disease_network_fake_profile(cmp, targets[1:3], disease_id = "D1", disease_name = "Hull Disease"),
-    .disease_network_fake_profile(cmp, targets[1], disease_id = "D2", disease_name = "Single-target Disease")
+    .disease_network_fake_profile(flo$compound_id[match(targets[1:3], flo$uniprot_id)],
+                                  targets[1:3], disease_id = "D1", disease_name = "Hull Disease"),
+    .disease_network_fake_profile(flo$compound_id[match(targets[1], flo$uniprot_id)],
+                                  targets[1], disease_id = "D2", disease_name = "Single-target Disease")
   )
   patliRResults(proj, "targets_disease_profile") <- profile
 
@@ -111,4 +111,27 @@ test_that("plot_disease_network() saves a PNG and logs it", {
   log_df <- patliRResults(proj2, "disease_network_plot_log")
   expect_true(file.exists(log_df$path[1]))
   expect_match(log_df$path[1], "\\.png$")
+})
+test_that("disease networks only include profiles matching retained compound-target pairs", {
+  skip_if_not_installed("ggplot2")
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(
+    condition = c("A", "A", "A", "B"), compound_id = c("c1", "c2", "c2", "c1"),
+    uniprot_id = c("t1", "t2", "t1", "t3"), weight = 1
+  )
+  profile <- data.frame(compound_id = c("c1", "c1", "c1"),
+                        target_id = c("t1", "t2", "t3"), disease_id = c("d1", "d2", "d3"),
+                        disease_name = c("Keep", "Wrong pair", "Other condition"),
+                        association_score = 0.9, rank = 1L)
+  patliRResults(proj, "targets_disease_profile") <- profile
+  p <- plot_disease_network(proj, condition = "A", save = FALSE)
+  nodes <- Filter(function(l) inherits(l$geom, "GeomPoint"), p$layers)[[1]]$data
+  expect_setequal(nodes$id, c("c1", "t1", "d1"))
+  edges <- Filter(function(l) inherits(l$geom, "GeomSegment"), p$layers)[[1]]$data
+  expect_equal(nrow(edges), 2L)
+  expect_no_error(ggplot2::ggplot_build(p))
+
+  patliRResults(proj, "targets_disease_profile") <- profile[-1, ]
+  expect_error(plot_disease_network(proj, condition = "A", save = FALSE),
+               "No .*targets_disease_profile.* rows")
 })

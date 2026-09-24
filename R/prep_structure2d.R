@@ -15,14 +15,13 @@ NULL
 #'
 #' @inheritParams compounds
 #' @param engine `"rcdk"` (default): use `rcdk`'s own 2D depiction, no extra
-#'   dependency. `"chemminer"`: use \pkg{ChemmineR} (Suggests) if installed,
-#'   useful as a second opinion when `rcdk` disagrees with what you expect.
+#'   dependency. `"chemminer"` is not implemented and is rejected.
 #' @param out_dir Directory to write the PNG files to. Defaults to
 #'   `file.path(projectDir(proj), "structure2d")`.
 #'
 #' @return The updated `proj`, with a `structure2d_log` entry in
 #'   [patliRResults()] (columns `id`, `generated_ok`, `engine_used`,
-#'   `path`), also written to `results/structure2d_log.csv`.
+#'   `path`, `failure_reason`), also written to `results/structure2d_log.csv`.
 #'
 #' @examples
 #' \dontrun{
@@ -39,6 +38,9 @@ NULL
 prep_structure2d <- function(proj, engine = c("rcdk", "chemminer"), out_dir = NULL) {
   stopifnot(is(proj, "PatliRProject"))
   engine <- match.arg(engine)
+  if (engine == "chemminer") {
+    cli::cli_abort("{.code engine = \"chemminer\"} is not implemented; use {.code engine = \"rcdk\"}.")
+  }
 
   cmp <- compounds(proj)
   if (nrow(cmp) == 0) {
@@ -49,22 +51,19 @@ prep_structure2d <- function(proj, engine = c("rcdk", "chemminer"), out_dir = NU
   if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "structure2d")
   if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
 
-  if (engine == "chemminer" && !requireNamespace("ChemmineR", quietly = TRUE)) {
-    cli::cli_warn("The {.pkg ChemmineR} package is not installed; falling back to {.val rcdk}.")
-    engine <- "rcdk"
-  }
-
   results <- lapply(seq_len(nrow(cmp)), function(i) {
     id <- cmp$id[i]
     smi <- cmp$smiles[i]
     path <- file.path(out_dir, paste0(id, ".png"))
-    ok <- tryCatch({
+    failure <- tryCatch({
       .depict_2d(smi, path, engine = engine)
-      TRUE
-    }, error = function(e) FALSE)
+      NA_character_
+    }, error = function(e) conditionMessage(e))
+    ok <- is.na(failure)
     data.frame(
       id = id, generated_ok = ok, engine_used = engine,
       path = if (ok) path else NA_character_,
+      failure_reason = failure,
       stringsAsFactors = FALSE
     )
   })
@@ -74,7 +73,8 @@ prep_structure2d <- function(proj, engine = c("rcdk", "chemminer"), out_dir = NU
   if (length(failed) > 0) {
     proj <- .log_append(
       proj, step = "prep_structure2d", id = failed,
-      message = paste0("2D depiction failed with engine '", engine, "'")
+      message = paste0("2D depiction failed with engine '", engine, "': ",
+                       log_df$failure_reason[!log_df$generated_ok])
     )
   }
 

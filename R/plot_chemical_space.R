@@ -38,6 +38,8 @@ NULL
 #' independent axes). Compounds with `NA` in any of these are excluded and
 #' logged (`"plot_chemical_space_excluded_na"`), the same principle
 #' [network_proximity()] uses for compounds STRINGdb cannot map.
+#' Constant descriptors are dropped before scaling; at least `dims`
+#' non-constant descriptors must remain.
 #'
 #' @inheritParams compounds
 #' @param condition Character scalar, a single condition column of
@@ -80,7 +82,8 @@ NULL
 #'   path and PC/UMAP scores per compound are also recorded in
 #'   `patliRResults(proj, "chemical_space_log")` /
 #'   `results/chemical_space_log.csv`, retrievable via
-#'   `attr(result, "proj")`.
+#'   `attr(result, "proj")`. This project attribute is also returned when
+#'   `save = FALSE`, retaining descriptor-exclusion logs without writing files.
 #'
 #' @examples
 #' \dontrun{
@@ -243,14 +246,23 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
     patliRResults(proj, "chemical_space_log") <- log_df
     .write_results_csv(proj, "chemical_space_log", log_df)
   }
-  .write_log_csv(proj)
+  if (save) .write_log_csv(proj)
 
-  if (save) attr(result, "proj") <- proj
+  attr(result, "proj") <- proj
   result
 }
 
 #' @keywords internal
 .chemical_space_coords <- function(mat, method, seed, dims = 2) {
+  varying <- vapply(seq_len(ncol(mat)), function(j) {
+    x <- mat[, j]
+    variance <- stats::var(x)
+    is.finite(variance) && variance > 0
+  }, logical(1))
+  mat <- mat[, varying, drop = FALSE]
+  if (ncol(mat) < dims || nrow(mat) < dims) {
+    cli::cli_abort("Need at least {dims} non-constant descriptors and {dims} compounds for a {dims}D projection after dropping zero-variance descriptors.")
+  }
   if (method == "pca") {
     pca <- stats::prcomp(mat, center = TRUE, scale. = TRUE)
     out <- pca$x[, seq_len(min(dims, ncol(pca$x))), drop = FALSE]
@@ -446,7 +458,7 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
   ## Direct on-plot family labels near each group's centroid, in addition
   ## to the legend -- this is the part of the reference figure that makes
   ## it readable at a glance without cross-referencing a legend.
-  if (is_categorical) {
+  if (is_categorical && any(!is.na(adme$color_value))) {
     centroids <- stats::aggregate(cbind(dim1, dim2) ~ color_value, adme, mean)
     p <- p + ggplot2::geom_text(
       data = centroids,

@@ -373,8 +373,7 @@ network_bowtie <- function(proj, condition = NULL, species = 9606, version = "12
     utils::download.file(url, raw_gz, mode = "wb", quiet = FALSE)
   }
 
-  aliases <- utils::read.delim(gzfile(raw_gz), stringsAsFactors = FALSE, quote = "")
-  names(aliases) <- sub("^#+", "", names(aliases))
+  aliases <- .network_read_aliases_file(raw_gz)
   required <- c("string_protein_id", "alias")
   missing_cols <- setdiff(required, names(aliases))
   if (length(missing_cols) > 0) {
@@ -436,4 +435,32 @@ network_bowtie <- function(proj, condition = NULL, species = 9606, version = "12
 .empty_network_bowtie_row <- function() {
   data.frame(condition = character(0), compound_id = character(0), uniprot_id = character(0),
              string_id = character(0), bowtie_component = character(0), stringsAsFactors = FALSE)
+}
+
+#' Read a STRING `protein.aliases` flat file
+#'
+#' The v11.0 file's header line is space-separated
+#' (`## string_protein_id ## alias ## source ##`) while the data rows are
+#' tab-separated, so `read.delim()` sees a one-column header over three-column
+#' rows and fails with "more columns than column names". Newer releases use a
+#' tab-separated `#string_protein_id<TAB>alias<TAB>source` header. This reads
+#' both: the header is parsed on its own and the body is read headerless.
+#'
+#' @param path Path to the (gzipped) aliases file.
+#' @return `data.frame(string_protein_id, alias, source)`.
+#' @keywords internal
+.network_read_aliases_file <- function(path) {
+  con <- gzfile(path, "rt")
+  on.exit(close(con), add = TRUE)
+  header <- readLines(con, n = 1)
+  cols <- if (grepl("\t", header, fixed = TRUE)) {
+    sub("^#+", "", strsplit(header, "\t", fixed = TRUE)[[1]])
+  } else {
+    trimws(gsub("#", " ", strsplit(header, "[[:space:]]+#+[[:space:]]*")[[1]]))
+  }
+  cols <- cols[nzchar(cols)]
+  body <- utils::read.delim(con, header = FALSE, stringsAsFactors = FALSE, quote = "", comment.char = "")
+  if (ncol(body) < length(cols)) cols <- cols[seq_len(ncol(body))]
+  names(body)[seq_along(cols)] <- cols
+  body
 }

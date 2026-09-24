@@ -172,3 +172,19 @@ test_that("network_bowtie() no longer instantiates a second STRINGdb object just
 
   expect_no_error(suppressWarnings(network_bowtie(proj, condition = "FLO-ET")))
 })
+
+test_that(".network_read_aliases_file() reads both the space-separated (v11) and tab-separated headers", {
+  write_gz <- function(lines) {
+    path <- tempfile(fileext = ".txt.gz")
+    con <- gzfile(path, "wt"); writeLines(lines, con); close(con)
+    path
+  }
+  rows <- c("9606.ENSP1\tTP53\tsrc a", "9606.ENSP2\tEGFR\tsrc b")
+  v11 <- patliR:::.network_read_aliases_file(write_gz(c("## string_protein_id ## alias ## source ##", rows)))
+  v12 <- patliR:::.network_read_aliases_file(write_gz(c("#string_protein_id\talias\tsource", rows)))
+  for (a in list(v11, v12)) {
+    expect_equal(names(a), c("string_protein_id", "alias", "source"))
+    expect_equal(a$alias, c("TP53", "EGFR"))
+    expect_equal(a$string_protein_id, c("9606.ENSP1", "9606.ENSP2"))
+  }
+})

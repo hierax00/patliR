@@ -51,3 +51,32 @@ test_that("plot_gochord() saves a separate file for each enrichment database", {
   expect_setequal(basename(log$path), c("gochord_A_go.png", "gochord_A_reactome.png"))
   expect_true(all(file.exists(log$path)))
 })
+
+test_that("plot_gochord() keeps only the top_n_genes most shared genes and wraps long term names", {
+  testthat::skip_if_not_installed("ggplot2")
+  testthat::skip_if_not_installed("GOplot")
+  testthat::skip_if_not_installed("org.Hs.eg.db")
+
+  proj <- .network_stats_test_setup()
+  entrez <- as.character(c(7157, 1956, 3569, 4790, 5594, 5595, 207, 2064, 673, 5290, 1017, 3479))
+  patliRResults(proj, "network_enrichment") <- data.frame(
+    condition = "FLO-ET", db = "go", ID = c("GO:1", "GO:2"),
+    Description = c("a very long enriched biological process description that must be wrapped in the legend", "short term"),
+    p.adjust = c(0.001, 0.01),
+    geneID = c(paste(entrez, collapse = "/"), paste(entrez[1:4], collapse = "/")),
+    stringsAsFactors = FALSE
+  )
+  seen <- NULL
+  testthat::local_mocked_bindings(
+    GOChord = function(data, ...) { seen <<- data; ggplot2::ggplot() },
+    .package = "GOplot"
+  )
+  plot_gochord(proj, condition = "FLO-ET", top_n_genes = 5, save = FALSE)
+  expect_equal(nrow(seen), 5)
+  ## the 4 genes shared by both terms are always kept
+  expect_true(all(rowSums(seen)[order(-rowSums(seen))][1:4] == 2))
+  expect_true(any(grepl("\n", colnames(seen), fixed = TRUE)))
+
+  plot_gochord(proj, condition = "FLO-ET", top_n_genes = Inf, save = FALSE)
+  expect_equal(nrow(seen), length(entrez))
+})

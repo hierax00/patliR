@@ -9,6 +9,7 @@ plot_gochord(
   condition = NULL,
   db = NULL,
   top_n_terms = 10,
+  top_n_genes = 40,
   engine = c("static", "ggiraph"),
   save = TRUE,
   out_dir = NULL,
@@ -33,6 +34,12 @@ if both are and \code{db} was not specified.}
 \item{top_n_terms}{Integer, default \code{10}. Only the \code{top_n_terms} most
 significant terms (lowest \code{p.adjust}) are drawn -- with dozens of
 significant terms the ribbon diagram becomes unreadable.}
+
+\item{top_n_genes}{Integer, default \code{40}. With hundreds of targets in the
+top terms the ribbons and gene labels are unreadable, so only the
+\code{top_n_genes} genes shared by the most of the drawn terms are kept
+(ties broken alphabetically); terms left without genes are dropped.
+Use \code{Inf} to draw every gene.}
 
 \item{engine}{\code{"static"} (default) or \code{"ggiraph"}, save/out_dir/width/
 height/dpi -- same as \code{\link[=plot_network_layers]{plot_network_layers()}}.}

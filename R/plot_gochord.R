@@ -35,6 +35,11 @@ NULL
 #' @param top_n_terms Integer, default `10`. Only the `top_n_terms` most
 #'   significant terms (lowest `p.adjust`) are drawn -- with dozens of
 #'   significant terms the ribbon diagram becomes unreadable.
+#' @param top_n_genes Integer, default `40`. With hundreds of targets in the
+#'   top terms the ribbons and gene labels are unreadable, so only the
+#'   `top_n_genes` genes shared by the most of the drawn terms are kept
+#'   (ties broken alphabetically); terms left without genes are dropped.
+#'   Use `Inf` to draw every gene.
 #' @param engine `"static"` (default) or `"ggiraph"`, save/out_dir/width/
 #'   height/dpi -- same as [plot_network_layers()].
 #'
@@ -65,11 +70,12 @@ NULL
 #' }
 #'
 #' @export
-plot_gochord <- function(proj, condition = NULL, db = NULL, top_n_terms = 10,
+plot_gochord <- function(proj, condition = NULL, db = NULL, top_n_terms = 10, top_n_genes = 40,
                           engine = c("static", "ggiraph"), save = TRUE, out_dir = NULL,
                           width = 14, height = 14, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
   stopifnot(is.numeric(top_n_terms), length(top_n_terms) == 1, top_n_terms >= 1)
+  stopifnot(is.numeric(top_n_genes), length(top_n_genes) == 1, top_n_genes >= 1)
   engine <- match.arg(engine)
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
     cli::cli_abort("The {.pkg ggplot2} package is required for {.fn plot_gochord}.")
@@ -115,6 +121,13 @@ plot_gochord <- function(proj, condition = NULL, db = NULL, top_n_terms = 10,
   terms <- unique(membership$term_label) # already ordered by p.adjust from `enr`
   chord_matrix <- matrix(0L, nrow = length(genes), ncol = length(terms), dimnames = list(genes, terms))
   chord_matrix[cbind(membership$gene_label, membership$term_label)] <- 1L
+  if (nrow(chord_matrix) > top_n_genes) {
+    n_terms_per_gene <- rowSums(chord_matrix)
+    keep <- order(-n_terms_per_gene, rownames(chord_matrix))[seq_len(top_n_genes)]
+    chord_matrix <- chord_matrix[sort(keep), , drop = FALSE]
+    chord_matrix <- chord_matrix[, colSums(chord_matrix) > 0, drop = FALSE]
+  }
+  colnames(chord_matrix) <- .plot_wrap(colnames(chord_matrix), width = 45)  # keep the legend inside the canvas
 
   p <- GOplot::GOChord(
     chord_matrix,

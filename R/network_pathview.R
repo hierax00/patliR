@@ -256,6 +256,14 @@ network_pathview <- function(proj, condition = NULL,
                  # exists (verified against pathview's real source, see
                  # file header comment); this is the only way to control it.
 
+  ## pathview() looks up its bundled `bods` dataset through the search path,
+  ## so a merely loaded (not attached) namespace fails with "object 'bods'
+  ## not found". Attach it for the duration of the renders, then restore.
+  if (!"package:pathview" %in% search()) {
+    suppressPackageStartupMessages(attachNamespace("pathview"))
+    on.exit(try(detach("package:pathview", unload = FALSE), silent = TRUE), add = TRUE)
+  }
+
   rows <- vector("list", nrow(enr))
   for (i in seq_len(nrow(enr))) {
     pid <- enr$ID[i]

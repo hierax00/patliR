@@ -78,7 +78,7 @@ plot_heatmap <- function(proj, condition = NULL, what = c("compound_target", "co
     }
     conds <- setdiff(names(bin), "compound_id")
     mat <- as.matrix(bin[, conds, drop = FALSE])
-    rownames(mat) <- .plot_label_nodes(proj, conds, bin$compound_id, "compound")
+    rownames(mat) <- .plot_unique_labels(proj, conds, bin$compound_id, "compound")
     storage.mode(mat) <- "double"
     scope_label <- "ALL"
     title <- "Compound x Condition Presence"
@@ -87,13 +87,10 @@ plot_heatmap <- function(proj, condition = NULL, what = c("compound_target", "co
     scope_label <- if (is.null(condition)) "ALL" else paste(conditions, collapse = "+")
     edges_all <- patliRResults(proj, "network_edges")
     long <- edges_all[edges_all$condition %in% conditions, c("compound_id", "uniprot_id", "weight")]
-    long <- stats::aggregate(weight ~ compound_id + uniprot_id, long, max) # pooled scope: keep the strongest hit per pair
     if (nrow(long) == 0) {
       cli::cli_abort("Nothing to plot for {.arg what} = {.val {what}} in this scope.")
     }
-    long$compound_label <- .plot_label_nodes(proj, conditions, long$compound_id, "compound")
-    long$target_label <- .plot_label_nodes(proj, conditions, long$uniprot_id, "target")
-    mat <- as.matrix(stats::xtabs(weight ~ compound_label + target_label, data = long))
+    mat <- .plot_edge_matrix(proj, conditions, long)
     title <- paste0("Compound-Target Binding Probability -- ", scope_label)
   }
 
@@ -104,6 +101,20 @@ plot_heatmap <- function(proj, condition = NULL, what = c("compound_target", "co
     key_cols = c("condition", "what"),
     filename = paste0("heatmap_", what, "_", scope_label, ".pdf")
   )
+}
+
+#' Build by IDs, preserving unknown weights and labelling only after pooling
+#' @keywords internal
+.plot_edge_matrix <- function(proj, conditions, edges) {
+  long <- stats::aggregate(edges["weight"], edges[c("compound_id", "uniprot_id")],
+                           function(x) if (all(is.na(x))) NA_real_ else max(x, na.rm = TRUE))
+  compound_ids <- sort(unique(long$compound_id))
+  target_ids <- sort(unique(long$uniprot_id))
+  mat <- matrix(0, length(compound_ids), length(target_ids), dimnames = list(compound_ids, target_ids))
+  mat[cbind(match(long$compound_id, compound_ids), match(long$uniprot_id, target_ids))] <- long$weight
+  rownames(mat) <- .plot_unique_labels(proj, conditions, compound_ids, "compound")
+  colnames(mat) <- .plot_unique_labels(proj, conditions, target_ids, "target")
+  mat
 }
 
 #' Render a compound x target/condition matrix with `pheatmap()`, save/log
@@ -140,11 +151,16 @@ plot_heatmap <- function(proj, condition = NULL, what = c("compound_target", "co
     pheatmap_filename <- path
   }
 
+  finite <- mat[is.finite(mat)]
+  limits <- if (length(finite)) range(finite) else c(0, 1)
+  if (diff(limits) == 0) limits <- limits + c(-0.5, 0.5)
+  clusterable <- function(x) nrow(x) > 1 && all(is.finite(stats::dist(x)))
   result <- pheatmap::pheatmap(
     mat,
     color = grDevices::colorRampPalette(c("white", "#f39c12", "#c0392b"))(50),
+    breaks = seq(limits[1], limits[2], length.out = 51), na_col = "grey80",
     display_numbers = TRUE, number_format = "%.2f", fontsize_number = 9,
-    cluster_rows = nrow(mat) > 1, cluster_cols = ncol(mat) > 1,
+    cluster_rows = clusterable(mat), cluster_cols = clusterable(t(mat)),
     main = title, angle_col = 45, fontsize_row = 10, fontsize_col = 10,
     filename = pheatmap_filename, width = width, height = height
   )

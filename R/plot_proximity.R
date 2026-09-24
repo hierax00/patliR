@@ -152,23 +152,25 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
   if (nrow(dat) == 0) {
     cli::cli_abort("No {.val network_proximity} rows with a non-NA z_score for the requested condition(s)/disease.")
   }
-  dat$label <- .plot_label_nodes(proj, conditions, dat$compound_id, "compound")
+  dat$label <- .plot_unique_labels(proj, conditions, dat$compound_id, "compound")
   dat <- dat[order(dat$z_score), , drop = FALSE]
-  dat$label <- factor(dat$label, levels = unique(dat$label))
+  dat$compound_id <- factor(dat$compound_id, levels = unique(dat$compound_id))
+  label_lookup <- stats::setNames(dat$label, dat$compound_id)
   dat$significant <- abs(dat$z_score) >= 1.96
   dat$panel <- paste(dat$condition, dat$disease_id, sep = " / ")
   dat$tooltip <- sprintf("%s\nz = %.2f (d_obs = %.2f, null = %.2f +/- %.2f)", dat$label, dat$z_score, dat$d_observed, dat$d_random_mean, dat$d_random_sd)
 
-  p <- ggplot2::ggplot(dat, ggplot2::aes(x = .data$label, y = .data$z_score, colour = .data$significant)) +
+  p <- ggplot2::ggplot(dat, ggplot2::aes(x = .data$compound_id, y = .data$z_score, colour = .data$significant)) +
     ggplot2::geom_hline(yintercept = c(-1.96, 0, 1.96), linetype = c("22", "solid", "22"), colour = "grey60") +
-    ggplot2::geom_segment(ggplot2::aes(xend = .data$label, y = 0, yend = .data$z_score), linewidth = 0.4, alpha = 0.6)
+    ggplot2::geom_segment(ggplot2::aes(xend = .data$compound_id, y = 0, yend = .data$z_score), linewidth = 0.4, alpha = 0.6)
   p <- p + if (engine == "ggiraph" && requireNamespace("ggiraph", quietly = TRUE)) {
-    ggiraph::geom_point_interactive(ggplot2::aes(tooltip = .data$tooltip, data_id = .data$label), size = 2.5)
+    ggiraph::geom_point_interactive(ggplot2::aes(tooltip = .data$tooltip, data_id = .data$compound_id), size = 2.5)
   } else {
     ggplot2::geom_point(size = 2.5)
   }
   p <- p +
     ggplot2::coord_flip() +
+    ggplot2::scale_x_discrete(labels = label_lookup) +
     ggplot2::scale_colour_manual(values = c(`TRUE` = "#c0392b", `FALSE` = "grey40"), name = "|z| >= 1.96") +
     ggplot2::labs(
       title = paste0("Network proximity z-scores -- ", scope_label),
@@ -254,10 +256,14 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
   keep_key <- paste(main_scope$condition, main_scope$disease_id, main_scope$compound_id, sep = "\r")
   dat_null <- dat_null[paste(dat_null$condition, dat_null$disease_id, dat_null$compound_id, sep = "\r") %in% keep_key, , drop = FALSE]
 
-  main_scope$label <- .plot_label_nodes(proj, conditions, main_scope$compound_id, "compound")
-  dat_null$label <- .plot_label_nodes(proj, conditions, dat_null$compound_id, "compound")
-  main_scope$facet <- paste0(main_scope$label, "\n(", main_scope$condition, " / ", main_scope$disease_id, ")")
-  dat_null$facet <- paste0(dat_null$label, "\n(", dat_null$condition, " / ", dat_null$disease_id, ")")
+  main_scope$label <- .plot_unique_labels(proj, conditions, main_scope$compound_id, "compound")
+  main_scope$facet <- as.character(seq_len(nrow(main_scope)))
+  dat_null$facet <- main_scope$facet[match(
+    paste(dat_null$condition, dat_null$disease_id, dat_null$compound_id, sep = "\r"), keep_key
+  )]
+  facet_labels <- stats::setNames(
+    paste0(main_scope$label, "\n(", main_scope$condition, " / ", main_scope$disease_id, ")"), main_scope$facet
+  )
 
   ## p_adjusted may be all-NA (or absent, on a legacy/fabricated table) --
   ## fall back to p_empirical, same defensive pattern as plot_synergy().
@@ -274,7 +280,7 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
       data = main_scope, ggplot2::aes(x = Inf, y = Inf, label = .data$annot),
       hjust = 1.05, vjust = 1.2, size = 2.6, colour = "grey20", inherit.aes = FALSE
     ) +
-    ggplot2::facet_wrap(~facet, scales = "free") +
+    ggplot2::facet_wrap(~facet, scales = "free", labeller = ggplot2::as_labeller(facet_labels)) +
     ggplot2::labs(
       title = paste0("Network proximity null distributions -- ", scope_label),
       subtitle = "Degree-preserving null resamples (network_proximity(store_null = TRUE)); red line = d_observed (Guney et al. 2016 Fig. 1)",

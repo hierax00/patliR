@@ -23,3 +23,31 @@ test_that("plot_gochord() rejects pooling across conditions", {
   proj <- .network_stats_test_setup()
   expect_error(plot_gochord(proj, save = FALSE), "single")
 })
+
+test_that("plot_gochord() rejects explicit empty and multiple conditions", {
+  testthat::skip_if_not_installed("ggplot2")
+  testthat::skip_if_not_installed("GOplot")
+  proj <- .network_stats_test_setup()
+  conditions <- unique(patliRResults(proj, "network_edges")$condition)
+  expect_error(plot_gochord(proj, condition = conditions, save = FALSE), "single")
+  expect_error(plot_gochord(proj, condition = character(), save = FALSE), "single")
+})
+
+test_that("plot_gochord() saves a separate file for each enrichment database", {
+  testthat::skip_if_not_installed("ggplot2")
+  testthat::skip_if_not_installed("GOplot")
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(condition = "A", compound_id = "c1", uniprot_id = "t1", weight = 1)
+  patliRResults(proj, "network_enrichment") <- data.frame(condition = "A", db = c("go", "reactome"), Description = "term", p.adjust = 0.01, geneID = "1/2")
+  testthat::local_mocked_bindings(GOChord = function(...) ggplot2::ggplot(), .package = "GOplot")
+  testthat::local_mocked_bindings(.network_gochord_gene_labels = function(ids) stats::setNames(ids, ids), .package = "patliR")
+  for (db in c("go", "reactome")) {
+    p <- plot_gochord(proj, condition = "A", db = db, width = 2, height = 2)
+    proj <- attr(p, "proj")
+  }
+  log <- patliRResults(proj, "gochord_plot_log")
+  expect_equal(nrow(log), 2L)
+  expect_equal(length(unique(log$path)), 2L)
+  expect_setequal(basename(log$path), c("gochord_A_go.png", "gochord_A_reactome.png"))
+  expect_true(all(file.exists(log$path)))
+})

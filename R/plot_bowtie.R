@@ -69,16 +69,20 @@ plot_bowtie <- function(proj, condition = NULL, top_n_compounds = NULL,
   if (nrow(dat) == 0) {
     cli::cli_abort("No {.val network_bowtie} rows for condition(s) {.val {conditions}}.")
   }
-  dat$compound_label <- .plot_label_nodes(proj, conditions, dat$compound_id, "compound")
-
-  flow <- as.data.frame(table(compound_label = dat$compound_label, bowtie_component = dat$bowtie_component), stringsAsFactors = FALSE)
+  flow <- as.data.frame(table(compound_id = dat$compound_id, bowtie_component = dat$bowtie_component), stringsAsFactors = FALSE)
   flow <- flow[flow$Freq > 0, , drop = FALSE]
   names(flow)[names(flow) == "Freq"] <- "n_targets"
 
   if (!is.null(top_n_compounds)) {
-    totals <- stats::aggregate(n_targets ~ compound_label, flow, sum)
-    keep <- utils::head(totals$compound_label[order(-totals$n_targets)], top_n_compounds)
-    flow <- flow[flow$compound_label %in% keep, , drop = FALSE]
+    totals <- stats::aggregate(n_targets ~ compound_id, flow, sum)
+    keep <- utils::head(totals$compound_id[order(-totals$n_targets)], top_n_compounds)
+    flow <- flow[flow$compound_id %in% keep, , drop = FALSE]
+  }
+  flow$compound_label <- .plot_unique_labels(proj, conditions, flow$compound_id, "compound")
+  label_lookup <- stats::setNames(flow$compound_label, flow$compound_id)
+  stratum_label <- function(x) {
+    label <- unname(label_lookup[as.character(x)])
+    ifelse(is.na(label), as.character(x), label)
   }
 
   component_colors <- c(
@@ -88,11 +92,11 @@ plot_bowtie <- function(proj, condition = NULL, top_n_compounds = NULL,
 
   p <- ggplot2::ggplot(
     flow,
-    ggplot2::aes(axis1 = .data$compound_label, axis2 = .data$bowtie_component, y = .data$n_targets)
+    ggplot2::aes(axis1 = .data$compound_id, axis2 = .data$bowtie_component, y = .data$n_targets)
   ) +
     ggalluvial::geom_alluvium(ggplot2::aes(fill = .data$bowtie_component), width = 1 / 4, alpha = 0.75) +
     ggalluvial::geom_stratum(width = 1 / 4, fill = "grey92", colour = "grey40") +
-    ggplot2::geom_text(stat = ggalluvial::StatStratum, ggplot2::aes(label = ggplot2::after_stat(.data$stratum)), size = 2.8) +
+    ggplot2::geom_text(stat = ggalluvial::StatStratum, ggplot2::aes(label = stratum_label(ggplot2::after_stat(.data$stratum))), size = 2.8) +
     ggplot2::scale_x_discrete(limits = c("compound", "bowtie_component"), expand = c(0.1, 0.1)) +
     ggplot2::scale_fill_manual(values = component_colors, name = "Bowtie\ncomponent") +
     ggplot2::labs(

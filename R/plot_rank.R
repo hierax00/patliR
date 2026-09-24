@@ -127,6 +127,7 @@ plot_rank <- function(proj, condition = NULL, view = c("pareto", "heatmap"),
   if (is.null(x)) x <- "rra_rank"
   if (is.null(y)) {
     present <- .plot_rank_y_priority[.plot_rank_y_priority %in% names(dat)]
+    present <- present[vapply(dat[present], function(x) is.numeric(x) && any(is.finite(x)), logical(1))]
     if (length(present) == 0) {
       cli::cli_abort("No usable numeric column found to default {.arg y} to; pass {.arg y} explicitly.")
     }
@@ -194,7 +195,8 @@ plot_rank <- function(proj, condition = NULL, view = c("pareto", "heatmap"),
   relevance <- if (target_relevance == "breadth") {
     stats::aggregate(compound_id ~ uniprot_id, edges_top, function(x) length(unique(x)))
   } else if (target_relevance == "weight") {
-    stats::aggregate(weight ~ uniprot_id, edges_top, sum)
+    stats::aggregate(edges_top["weight"], edges_top["uniprot_id"],
+                     function(x) if (all(is.na(x))) NA_real_ else sum(x, na.rm = TRUE))
   } else {
     cent <- patliRResults(proj, "network_centrality")
     if (is.null(cent) || nrow(cent) == 0) {
@@ -203,23 +205,23 @@ plot_rank <- function(proj, condition = NULL, view = c("pareto", "heatmap"),
         "i" = "Run {.fn network_centrality} first, or use {.code target_relevance = \"breadth\"}/{.code \"weight\"}."
       ))
     }
-    csub <- cent[cent$condition %in% conditions & cent$node_type == "target", , drop = FALSE]
+    csub <- cent[cent$condition %in% conditions & cent$node_type == "target" &
+                   cent$node_id %in% edges_top$uniprot_id, , drop = FALSE]
+    if (nrow(csub) == 0) cli::cli_abort("No centrality rows for targets hit by the top compounds in this scope.")
     norm_cols <- intersect(c("degree_norm", "betweenness_norm", "hub_score_component"), names(csub))
     csub$composite <- if (length(norm_cols) > 0) rowMeans(as.matrix(csub[, norm_cols, drop = FALSE]), na.rm = TRUE) else NA_real_
-    stats::aggregate(composite ~ node_id, csub, mean, na.rm = TRUE)
+    stats::aggregate(csub["composite"], csub["node_id"],
+                     function(x) if (all(is.na(x))) NA_real_ else mean(x, na.rm = TRUE))
   }
   names(relevance) <- c("uniprot_id", "score")
   relevance <- relevance[order(relevance$score, decreasing = TRUE), , drop = FALSE]
   top_targets <- utils::head(relevance$uniprot_id, top_n_targets)
 
   long <- edges_top[edges_top$uniprot_id %in% top_targets, , drop = FALSE]
-  long <- stats::aggregate(weight ~ compound_id + uniprot_id, long, max)
   if (nrow(long) == 0) {
     cli::cli_abort("Nothing to plot: no edges between the top compounds and the top targets in this scope.")
   }
-  long$compound_label <- .plot_label_nodes(proj, conditions, long$compound_id, "compound")
-  long$target_label <- .plot_label_nodes(proj, conditions, long$uniprot_id, "target")
-  mat <- as.matrix(stats::xtabs(weight ~ compound_label + target_label, data = long))
+  mat <- .plot_edge_matrix(proj, conditions, long)
 
   title <- paste0(
     "Top ", length(top_compounds), " Compounds x Top ", ncol(mat), " Targets (", target_relevance, ") -- ", scope_label
@@ -229,6 +231,6 @@ plot_rank <- function(proj, condition = NULL, view = c("pareto", "heatmap"),
     log_name = "rank_heatmap_plot_log",
     log_row = data.frame(condition = scope_label, target_relevance = target_relevance, path = NA_character_, stringsAsFactors = FALSE),
     key_cols = c("condition", "target_relevance"),
-    filename = paste0("rank_heatmap_", scope_label, ".pdf")
+    filename = paste0("rank_heatmap_", scope_label, "_", target_relevance, ".pdf")
   )
 }

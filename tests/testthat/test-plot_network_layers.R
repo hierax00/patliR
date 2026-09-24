@@ -211,3 +211,29 @@ test_that(".network_layers_plot_data() is reproducible for a fixed seed", {
   expect_equal(pd1$nodes$x, pd2$nodes$x)
   expect_equal(pd1$nodes$y, pd2$nodes$y)
 })
+
+test_that("pooled module colours distinguish condition-local module IDs", {
+  proj <- .test_project()
+  patliRResults(proj, "network_module_membership") <- data.frame(
+    condition = c("A", "B", "B"), node_id = c("c1", "c2", "c1"), module_id = "M1"
+  )
+  info <- patliR:::.network_layers_module_colour_info(proj, c("A", "B"), c("c1", "c2", "missing"))
+  expect_equal(info$group, c("A:M1", "B:M1", "not clustered"))
+  expect_false(identical(unname(info$palette["A:M1"]), unname(info$palette["B:M1"])))
+  single <- patliR:::.network_layers_module_colour_info(proj, "B", c("c1", "c2"))
+  expect_equal(single$group, c("M1", "M1"))
+})
+
+test_that("zero hubs disables labels and invalid hub counts or empty scopes error clearly", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .network_stats_test_setup()
+  g <- patliR:::.network_layered_graph_multi(proj, "FLO-ET")
+  pd <- patliR:::.network_layers_plot_data(proj, g, "FLO-ET", "bipartite", 0, 1)
+  expect_identical(pd$nodes$is_hub, rep(FALSE, nrow(pd$nodes)))
+  expect_no_error(plot_network_layers(proj, condition = "FLO-ET", top_hub_n = 0, save = FALSE))
+  for (n in list(-1, 0.5, NA_real_, Inf, numeric(), c(1, 2), "1")) {
+    expect_error(patliR:::.network_layers_plot_data(proj, g, "FLO-ET", "bipartite", n, 1), "non-negative integer")
+  }
+  expect_error(plot_network_layers(proj, condition = character(), save = FALSE), "at least one condition")
+  expect_error(patliR:::.network_layered_graph_multi(proj, character()), "at least one condition")
+})

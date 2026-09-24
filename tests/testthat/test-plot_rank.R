@@ -7,6 +7,70 @@
   rank_candidates(proj, condition = "FLO-ET")
 }
 
+test_that("plot_rank() chooses a finite default axis within the current scope", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(condition = c("A", "B"), compound_id = "c1", uniprot_id = "t1", weight = 1)
+  rc <- data.frame(condition = c("A", "B"), compound_id = "c1", rra_rank = 1L,
+                   pareto_front = 1L, crit_synergy_best = c(NA, 1), crit_proximity_z = c(Inf, 2),
+                   crit_centrality = c(0.5, 0.8))
+  patliRResults(proj, "rank_candidates") <- rc
+  p <- plot_rank(proj, condition = "A", save = FALSE)
+  expect_identical(rlang::as_label(p$mapping$y), "crit_centrality")
+  rc$crit_centrality[1] <- NaN
+  patliRResults(proj, "rank_candidates") <- rc
+  expect_error(plot_rank(proj, condition = "A", save = FALSE), "No usable numeric column")
+})
+
+test_that("rank heatmaps save distinct files for each target relevance", {
+  testthat::skip_if_not_installed("pheatmap")
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(condition = "A", compound_id = "c1", uniprot_id = "t1", weight = 1)
+  patliRResults(proj, "rank_candidates") <- data.frame(condition = "A", compound_id = "c1", rra_rank = 1L)
+  patliRResults(proj, "network_centrality") <- data.frame(condition = "A", node_id = "t1", node_type = "target", degree_norm = 1)
+  for (relevance in c("breadth", "weight", "centrality")) {
+    p <- plot_rank(proj, condition = "A", view = "heatmap", target_relevance = relevance)
+    proj <- attr(p, "proj")
+  }
+  log <- patliRResults(proj, "rank_heatmap_plot_log")
+  expect_equal(nrow(log), 3L)
+  expect_equal(length(unique(log$path)), 3L)
+  expect_true(all(file.exists(log$path)))
+  expect_true(all(vapply(seq_len(nrow(log)), function(i) grepl(log$target_relevance[i], basename(log$path[i]), fixed = TRUE), logical(1))))
+})
+
+test_that("rank heatmaps retain IDs and NA weights and select only connected centrality targets", {
+  testthat::skip_if_not_installed("pheatmap")
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(condition = "A", compound_id = c("c1", "c2"), uniprot_id = c("t1", "t2"), weight = NA_real_)
+  patliRResults(proj, "rank_candidates") <- data.frame(condition = "A", compound_id = c("c1", "c2"), rra_rank = 1:2)
+  cent <- data.frame(condition = "A", node_id = c("outside", "t1", "t2"), node_type = "target", degree_norm = c(1, NA, NA))
+  patliRResults(proj, "network_centrality") <- cent
+  testthat::local_mocked_bindings(
+    .plot_label_nodes = function(proj, conditions, ids, type) rep("same", length(ids)),
+    .plot_pheatmap_render = function(proj, mat, ...) mat,
+    .package = "patliR"
+  )
+  for (relevance in c("breadth", "weight", "centrality")) {
+    mat <- plot_rank(proj, condition = "A", view = "heatmap", target_relevance = relevance, save = FALSE)
+    expect_equal(dim(mat), c(2L, 2L))
+    expect_equal(colnames(mat), c("same (t1)", "same (t2)"))
+    expect_true(all(is.na(diag(mat))))
+  }
+  mat <- plot_rank(proj, condition = "A", view = "heatmap", target_relevance = "centrality", top_n_targets = 1, save = FALSE)
+  expect_equal(ncol(mat), 1L)
+  cent$degree_norm <- NULL
+  patliRResults(proj, "network_centrality") <- cent
+  expect_no_error(plot_rank(proj, condition = "A", view = "heatmap", target_relevance = "centrality", save = FALSE))
+  cent <- cent[cent$node_id == "outside", , drop = FALSE]
+  patliRResults(proj, "network_centrality") <- cent
+  expect_error(plot_rank(proj, condition = "A", view = "heatmap", target_relevance = "centrality", save = FALSE), "No centrality rows")
+  rc <- patliRResults(proj, "rank_candidates")
+  rc$compound_id <- "absent"
+  patliRResults(proj, "rank_candidates") <- rc
+  expect_error(plot_rank(proj, condition = "A", view = "heatmap", save = FALSE), "No.*network_edges")
+})
+
 test_that("plot_rank() errors clearly without rank_candidates()", {
   testthat::skip_if_not_installed("ggplot2")
   proj <- .network_stats_test_setup()

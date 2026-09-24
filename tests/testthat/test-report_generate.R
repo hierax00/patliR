@@ -8,6 +8,56 @@
   .network_stats_test_setup()
 }
 
+test_that("reports count binary presence independently of network edges", {
+  proj <- .network_stats_test_setup()
+  cmp <- compounds(proj)
+  bin <- binarizedMatrix(proj)
+  bin[["FLO-ET"]] <- 0L
+  bin[["FLO-ET"]][1:3] <- c(1L, NA_integer_, 2L)
+  binarizedMatrix(proj) <- bin
+  cmp$name <- paste0("presence_marker_", seq_len(nrow(cmp)))
+  compounds(proj) <- cmp
+  edges <- patliRResults(proj, "network_edges")
+  edges <- edges[edges$compound_id != bin$compound_id[1], , drop = FALSE]
+  patliRResults(proj, "network_edges") <- edges
+  txt <- patliR:::.report_render_condition(proj, "FLO-ET", 15)
+  section <- sub(".*(<h2>Compounds present.*?)<h2>ADME filtering.*", "\\1", txt)
+  expect_match(section, "Compounds present (1)", fixed = TRUE)
+  expect_match(section, cmp$name[match(bin$compound_id[1], cmp$id)], fixed = TRUE)
+  expect_false(grepl(cmp$name[match(bin$compound_id[2], cmp$id)], section, fixed = TRUE))
+  expect_false(grepl(cmp$name[match(bin$compound_id[3], cmp$id)], section, fixed = TRUE))
+})
+
+test_that("reports include passing, evaluated and unknown counts for every ADME rule", {
+  proj <- .network_stats_test_setup()
+  bin <- binarizedMatrix(proj)
+  bin[["FLO-ET"]] <- 0L
+  bin[["FLO-ET"]][1:3] <- 1L
+  binarizedMatrix(proj) <- bin
+  patliRResults(proj, "adme_filtered") <- data.frame(
+    compound_id = rep(bin$compound_id[1:3], 2), rule = rep(c("mixed", "unknown_only"), each = 3),
+    pass = c(TRUE, FALSE, NA, NA, NA, NA)
+  )
+  tables <- list()
+  testthat::local_mocked_bindings(.report_html_table = function(df, ...) {
+    tables[[length(tables) + 1L]] <<- df
+    "table"
+  }, .package = "patliR")
+  expect_no_error(patliR:::.report_render_condition(proj, "FLO-ET", 15))
+  adme <- tables[[2]]
+  expect_equal(adme$rule, c("mixed", "unknown_only"))
+  expect_equal(adme$passing, c(1, 0))
+  expect_equal(adme$evaluated, c(2L, 0L))
+  expect_equal(adme$unknown, c(1L, 3L))
+  rules <- patliRResults(proj, "adme_filtered")
+  rules$pass <- NA
+  patliRResults(proj, "adme_filtered") <- rules
+  tables <- list()
+  expect_no_error(patliR:::.report_render_condition(proj, "FLO-ET", 15))
+  expect_equal(tables[[2]]$evaluated, c(0L, 0L))
+  expect_equal(tables[[2]]$unknown, c(3L, 3L))
+})
+
 test_that("report_generate() requires network_build() to have run first", {
   proj <- .test_project()
   proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")

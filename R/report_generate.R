@@ -80,8 +80,8 @@ report_generate <- function(proj, condition = NULL, out_dir = NULL, top_n = 15) 
 #' @keywords internal
 .report_render_condition <- function(proj, cond, top_n) {
   cmp <- compounds(proj)
-  edges <- patliRResults(proj, "network_edges")
-  present_ids <- if (!is.null(edges)) sort(unique(edges$compound_id[edges$condition == cond])) else character(0)
+  bin <- binarizedMatrix(proj)
+  present_ids <- bin$compound_id[!is.na(bin[[cond]]) & bin[[cond]] == 1]
   cmp_cond <- cmp[cmp$id %in% present_ids, , drop = FALSE]
 
   header <- sprintf(
@@ -103,8 +103,13 @@ report_generate <- function(proj, condition = NULL, out_dir = NULL, top_n = 15) 
     if (nrow(adme_sub) == 0) {
       .report_not_run("adme_filter() for this condition's compounds")
     } else {
-      agg <- stats::aggregate(pass ~ rule, adme_sub, function(x) sprintf("%d/%d pass", sum(x), length(x)))
-      names(agg) <- c("rule", "pass_fraction")
+      agg <- do.call(rbind, lapply(split(adme_sub$pass, adme_sub$rule), function(x) {
+        passing <- sum(x, na.rm = TRUE)
+        evaluated <- sum(!is.na(x))
+        data.frame(pass_fraction = sprintf("%d/%d pass", passing, evaluated),
+                   passing = passing, evaluated = evaluated, unknown = sum(is.na(x)))
+      }))
+      agg <- data.frame(rule = rownames(agg), agg, row.names = NULL)
       .report_html_table(agg)
     }
   }

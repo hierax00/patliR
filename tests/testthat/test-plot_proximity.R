@@ -109,3 +109,24 @@ test_that("plot_proximity(view = \"null\", top_n =) caps the number of compound 
   vline_layer <- built$data[[2]]
   expect_equal(nrow(vline_layer), 2L)
 })
+
+test_that("plot_proximity() keeps same-named compounds in separate positions and facets", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .proximity_null_fixture(.network_stats_test_setup(), n_compounds = 3)
+  cmp <- compounds(proj)
+  cmp$name <- "same"
+  compounds(proj) <- cmp
+  p <- plot_proximity(proj, condition = "FLO-ET", save = FALSE)
+  built <- ggplot2::ggplot_build(p)
+  expect_equal(length(unique(built$data[[3]]$x)), 3L)
+  expect_equal(length(unique(p$data$label)), 3L)
+
+  p <- plot_proximity(proj, condition = "FLO-ET", view = "null", save = FALSE)
+  built <- ggplot2::ggplot_build(p)
+  expect_equal(length(unique(built$data[[1]]$PANEL)), 3L)
+  expect_equal(length(unique(built$data[[2]]$PANEL)), 3L)
+  expect_message(p <- plot_proximity(proj, condition = "FLO-ET", view = "null", top_n = 2, save = FALSE), "top_n")
+  expect_equal(length(unique(ggplot2::ggplot_build(p)$data[[1]]$PANEL)), 2L)
+  main <- patliRResults(proj, "network_proximity")
+  expect_setequal(unique(p$data$compound_id), main$compound_id[order(-abs(main$z_score))][1:2])
+})

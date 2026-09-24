@@ -52,3 +52,26 @@ test_that("plot_bowtie() requires ggalluvial with a clear message", {
   proj <- .network_stats_test_setup()
   expect_error(plot_bowtie(proj, condition = "FLO-ET", save = FALSE), "ggalluvial")
 })
+
+test_that("plot_bowtie() counts and selects compounds by ID when names coincide", {
+  testthat::skip_if_not_installed("ggplot2")
+  testthat::skip_if_not_installed("ggalluvial")
+  proj <- .network_stats_test_setup()
+  cmp <- compounds(proj)
+  ids <- cmp$id[1:2]
+  cmp$name[1:2] <- "same"
+  compounds(proj) <- cmp
+  patliRResults(proj, "network_bowtie") <- data.frame(
+    condition = "FLO-ET", compound_id = c(ids[1], ids[2], ids[2]),
+    uniprot_id = c("t1", "t1", "t2"), bowtie_component = "core"
+  )
+  p <- plot_bowtie(proj, condition = "FLO-ET", save = FALSE)
+  expect_setequal(p$data$compound_id, ids)
+  expect_equal(sort(p$data$n_targets), c(1L, 2L))
+  built <- ggplot2::ggplot_build(p)
+  expect_equal(sum(built$data[[2]]$x == 1), 2L)
+  expect_true(all(p$data$compound_label %in% built$data[[3]]$label))
+  p <- plot_bowtie(proj, condition = "FLO-ET", top_n_compounds = 1, save = FALSE)
+  expect_equal(p$data$compound_id, ids[2])
+  expect_equal(p$data$n_targets, 2L)
+})

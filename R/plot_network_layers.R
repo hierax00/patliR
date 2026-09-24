@@ -238,6 +238,7 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
 #'   `.network_layered_graph()`.
 #' @keywords internal
 .network_layered_graph_multi <- function(proj, conditions, pathway_db = NULL) {
+  if (length(conditions) == 0) cli::cli_abort("{.arg condition} must select at least one condition.")
   edges_all <- patliRResults(proj, "network_edges")
   ct <- unique(edges_all[edges_all$condition %in% conditions, c("compound_id", "uniprot_id")])
   edges <- data.frame(
@@ -331,6 +332,10 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
 #'   character(1))`.
 #' @keywords internal
 .network_layers_plot_data <- function(proj, g, conditions, layout, top_hub_n, seed, colour_by = "layer") {
+  if (!is.numeric(top_hub_n) || length(top_hub_n) != 1L || !is.finite(top_hub_n) ||
+      top_hub_n < 0 || top_hub_n != floor(top_hub_n)) {
+    cli::cli_abort("{.arg top_hub_n} must be a non-negative integer.")
+  }
   if (!is.null(seed)) {
     old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
     on.exit(if (is.null(old_seed)) rm(".Random.seed", envir = .GlobalEnv) else assign(".Random.seed", old_seed, envir = .GlobalEnv), add = TRUE)
@@ -358,7 +363,7 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
     x = coords[, 1], y = coords[, 2], stringsAsFactors = FALSE
   )
   nodes$label <- .plot_label_nodes(proj, conditions, nodes$name, nodes$layer)
-  hub_cut <- if (nrow(nodes) <= top_hub_n) -Inf else sort(nodes$degree, decreasing = TRUE)[top_hub_n]
+  hub_cut <- if (top_hub_n == 0) Inf else if (nrow(nodes) <= top_hub_n) -Inf else sort(nodes$degree, decreasing = TRUE)[top_hub_n]
   nodes$is_hub <- nodes$degree >= hub_cut & nodes$degree > 0
 
   colour_info <- .network_layers_colour_info(proj, conditions, nodes, colour_by)
@@ -458,6 +463,7 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
 #' level rather than an `NA` colour. Pooled multi-condition scope: a node
 #' built into more than one condition can carry a different `module_id`
 #' per condition -- the first match (by row order in the table) wins; the
+#' module label includes its condition when more than one is pooled. The
 #' common case is a single condition in scope, where this is an exact
 #' join.
 #' @return `list(group, palette, legend_name = "Module")`, same shape as
@@ -473,6 +479,9 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
   }
   mem <- membership_all[membership_all$condition %in% conditions, , drop = FALSE]
   mem <- mem[!duplicated(mem$node_id), , drop = FALSE]
+  if (length(unique(conditions)) > 1) {
+    mem$module_id <- ifelse(is.na(mem$module_id), NA_character_, paste0(mem$condition, ":", mem$module_id))
+  }
   lookup <- stats::setNames(mem$module_id, mem$node_id)
   module_id <- unname(lookup[node_names])
   group <- ifelse(is.na(module_id), "not clustered", module_id)

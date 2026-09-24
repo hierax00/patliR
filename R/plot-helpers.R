@@ -52,8 +52,10 @@ NULL
 #'
 #' @description
 #' `.network_resolve_conditions()` plus the `"ALL"` (pooled) vs.
-#' `"cond1+cond2"` (explicit) label string that the `plot_*` family uses
+#' `"cond1+cond2_<hash>"` (explicit multiple) label string that the `plot_*` family uses
 #' for filenames, plot titles and the `condition` column of every plot log.
+#' Single-condition labels stay unchanged except literal `"ALL"`, which
+#' also gets a hash to distinguish it from the pooled default.
 #'
 #' @param proj A `PatliRProject`.
 #' @param condition `NULL` (pool every built condition) or a character
@@ -62,8 +64,24 @@ NULL
 #' @keywords internal
 .plot_scope <- function(proj, condition) {
   conditions <- .network_resolve_conditions(proj, condition)
+  if (length(conditions) == 0) cli::cli_abort("{.arg condition} must select at least one condition.")
   scope_label <- if (is.null(condition)) "ALL" else paste(conditions, collapse = "+")
+  if (!is.null(condition) && (length(conditions) > 1 || identical(conditions, "ALL"))) {
+    conditions <- sort(unique(conditions))
+    scope_label <- paste0(paste(conditions, collapse = "+"), "_", rlang::hash(conditions))
+  }
   list(conditions = conditions, scope_label = scope_label)
+}
+
+#' Disambiguate display labels without changing node identity
+#' @keywords internal
+.plot_unique_labels <- function(proj, conditions, ids, type) {
+  unique_ids <- unique(ids)
+  labels <- .plot_label_nodes(proj, conditions, unique_ids, type)
+  duplicate <- duplicated(labels) | duplicated(labels, fromLast = TRUE)
+  labels[duplicate] <- paste0(labels[duplicate], " (", unique_ids[duplicate], ")")
+  labels <- make.unique(labels)
+  labels[match(ids, unique_ids)]
 }
 
 #' Save a `plot_*` figure, upsert its log row, and attach the updated

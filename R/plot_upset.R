@@ -78,16 +78,18 @@ plot_upset <- function(proj, condition = NULL, top_n = 15,
 
   edges_all <- patliRResults(proj, "network_edges")
   dat <- unique(edges_all[edges_all$condition %in% conditions, c("condition", "uniprot_id")])
-  combo <- stats::aggregate(condition ~ uniprot_id, dat, function(x) paste(sort(unique(x)), collapse = "|"))
-  sizes <- as.data.frame(table(combo$condition), stringsAsFactors = FALSE)
+  membership <- lapply(split(dat$condition, dat$uniprot_id), function(x) conditions %in% x)
+  combo <- vapply(membership, function(x) paste(as.integer(x), collapse = ""), character(1))
+  members_by_combo <- membership[match(unique(combo), combo)]
+  names(members_by_combo) <- unique(combo)
+  sizes <- as.data.frame(table(combo), stringsAsFactors = FALSE)
   names(sizes) <- c("combo", "n_targets")
   sizes <- sizes[order(-sizes$n_targets), , drop = FALSE]
   sizes <- utils::head(sizes, top_n)
   sizes$combo <- factor(sizes$combo, levels = sizes$combo)
 
   dot <- do.call(rbind, lapply(as.character(sizes$combo), function(cb) {
-    members <- strsplit(cb, "\\|")[[1]]
-    data.frame(combo = cb, condition = conditions, in_set = conditions %in% members, stringsAsFactors = FALSE)
+    data.frame(combo = cb, condition = conditions, in_set = members_by_combo[[cb]], stringsAsFactors = FALSE)
   }))
   dot$combo <- factor(dot$combo, levels = levels(sizes$combo))
 

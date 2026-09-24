@@ -107,3 +107,35 @@ test_that("plot_chemical_space() errors clearly without adme_local()", {
   proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
   expect_error(plot_chemical_space(proj, save = FALSE), "adme_local")
 })
+
+test_that("plot_chemical_space() keeps a compound-subset plot from overwriting the whole-project one", {
+  skip_if_not_installed("ggplot2")
+  proj <- .cs_project()
+  sub_ids <- utils::head(compounds(proj)$id, 4)
+  p_all <- plot_chemical_space(proj, color_by = "family", engine = "static", save = TRUE)
+  proj2 <- attr(p_all, "proj")
+  p_sub <- plot_chemical_space(proj2, compound_ids = sub_ids,
+                               color_by = "family", engine = "static", save = TRUE)
+  proj3 <- attr(p_sub, "proj")
+
+  plots <- list.files(file.path(projectDir(proj3), "plots"), pattern = "[.]png$")
+  expect_true("chemical_space_2d_pca_family.png" %in% plots)
+  expect_equal(sum(grepl("^chemical_space_2d_pca_family_subset_", plots)), 1)
+
+  log_df <- patliRResults(proj3, "chemical_space_log")
+  expect_setequal(unique(log_df$scope), c("", unique(log_df$scope[nzchar(log_df$scope)])))
+  expect_equal(length(unique(log_df$scope)), 2)
+  ## re-plotting the same scope replaces its rows instead of duplicating them
+  p_sub2 <- plot_chemical_space(proj3, compound_ids = sub_ids,
+                                color_by = "family", engine = "static", save = TRUE)
+  expect_equal(nrow(patliRResults(attr(p_sub2, "proj"), "chemical_space_log")), nrow(log_df))
+})
+
+test_that(".chemical_space_scope() is empty for the whole project and distinct per condition/subset", {
+  expect_identical(patliR:::.chemical_space_scope(NULL, NULL), "")
+  expect_identical(patliR:::.chemical_space_scope("EVEG-I", NULL), "EVEG-I")
+  expect_false(identical(patliR:::.chemical_space_scope(NULL, c("a", "b")),
+                         patliR:::.chemical_space_scope(NULL, c("a", "c"))))
+  expect_identical(patliR:::.chemical_space_scope(NULL, c("b", "a")),
+                   patliR:::.chemical_space_scope(NULL, c("a", "b")))
+})

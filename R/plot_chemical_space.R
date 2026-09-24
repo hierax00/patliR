@@ -221,7 +221,11 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
   if (save) {
     if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
     if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
-    tag <- paste0("chemical_space_", dims, "d_", method, "_", color_by)
+    ## scope goes into the file name and the log key: a per-condition or
+    ## compound-subset plot must not overwrite the whole-project one.
+    scope <- .chemical_space_scope(condition, compound_ids)
+    tag <- paste0("chemical_space_", dims, "d_", method, "_", color_by,
+                  if (nzchar(scope)) paste0("_", scope) else "")
     if (dims == 3 && engine == "plotly") {
       ## plotly widget cannot go through ggsave(); save an html file if we can.
       if (requireNamespace("htmlwidgets", quietly = TRUE)) {
@@ -242,7 +246,21 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
     log_df <- adme[, log_cols]
     log_df$method <- method
     log_df$color_by <- color_by
+    log_df$dims <- dims
+    log_df$scope <- scope
     log_df$path <- path
+    old_log <- patliRResults(proj, "chemical_space_log")
+    if (!is.null(old_log) && nrow(old_log) > 0) {
+      ## legacy logs (no dims/scope columns) are treated as whole-project scope
+      if (!"scope" %in% names(old_log)) old_log$scope <- ""
+      if (!"dims" %in% names(old_log)) old_log$dims <- ifelse("dim3" %in% names(old_log), 3, 2)
+      same <- old_log$scope == scope & old_log$method == method &
+        old_log$color_by == color_by & old_log$dims == dims
+      old_log <- old_log[!same, , drop = FALSE]
+      for (nm in setdiff(names(old_log), names(log_df))) log_df[[nm]] <- NA
+      for (nm in setdiff(names(log_df), names(old_log))) old_log[[nm]] <- NA
+      log_df <- rbind(old_log[, names(log_df), drop = FALSE], log_df)
+    }
     patliRResults(proj, "chemical_space_log") <- log_df
     .write_results_csv(proj, "chemical_space_log", log_df)
   }
@@ -250,6 +268,16 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
 
   attr(result, "proj") <- proj
   result
+}
+
+#' Scope suffix for file names / log keys: `""` for the whole project,
+#' otherwise the (sanitised) condition and/or a hash of `compound_ids`.
+#' @keywords internal
+.chemical_space_scope <- function(condition, compound_ids) {
+  parts <- character(0)
+  if (!is.null(condition)) parts <- c(parts, gsub("[^A-Za-z0-9_.-]+", "_", condition))
+  if (!is.null(compound_ids)) parts <- c(parts, paste0("subset_", substr(rlang::hash(sort(unique(compound_ids))), 1, 8)))
+  paste(parts, collapse = "_")
 }
 
 #' @keywords internal

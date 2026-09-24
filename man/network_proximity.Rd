@@ -154,7 +154,12 @@ fixed quantiles. The "closest" distance is recomputed on the resampled
 pair. The disease side of the null is identical for every compound in a
 \verb{(condition, disease)}, so its \code{n_random} resampled sets are drawn once
 and reused across compounds (Guney's reference implementation does the
-same). \code{z_score = (d_observed - mean(d_random)) / sd(d_random)}; a
+same). Because each draw's \verb{T'} is shared by every compound, the null
+distances are computed with one multi-source breadth-first search per
+draw (from \verb{T'}) rather than one search per random source node -- an
+exact reformulation (hop counts are integers), not an approximation, so
+\code{d_random} is identical to the per-draw computation.
+\code{z_score = (d_observed - mean(d_random)) / sd(d_random)}; a
 strongly negative \code{z_score} means the compound's targets are
 topologically closer to the disease genes than expected by chance given
 their degree. \code{p_empirical} is the left-tail permutation p, and

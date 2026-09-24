@@ -67,7 +67,12 @@ NULL
 #' pair. The disease side of the null is identical for every compound in a
 #' `(condition, disease)`, so its `n_random` resampled sets are drawn once
 #' and reused across compounds (Guney's reference implementation does the
-#' same). `z_score = (d_observed - mean(d_random)) / sd(d_random)`; a
+#' same). Because each draw's `T'` is shared by every compound, the null
+#' distances are computed with one multi-source breadth-first search per
+#' draw (from `T'`) rather than one search per random source node -- an
+#' exact reformulation (hop counts are integers), not an approximation, so
+#' `d_random` is identical to the per-draw computation.
+#' `z_score = (d_observed - mean(d_random)) / sd(d_random)`; a
 #' strongly negative `z_score` means the compound's targets are
 #' topologically closer to the disease genes than expected by chance given
 #' their degree. `p_empirical` is the left-tail permutation p, and
@@ -295,15 +300,25 @@ network_proximity <- function(proj, condition = NULL, disease,
     ## hoisted out of the per-compound loop (spec 1.8 [SHOULD]).
     g_names <- igraph::V(g)$name
     target_string <- disease_string[disease_string %in% g_names]
+    ## The null draws are held as integer vertex indices (node_names is
+    ## V(g)$name in vertex order), not names: the batched distance step
+    ## below indexes the graph directly, and a match() against ~17k names
+    ## per draw would otherwise cost more than the draw itself.
     t_rand_list <- if (length(target_string) > 0) {
+      target_idx <- match(target_string, node_names)
       lapply(seq_len(n_random), function(j)
-        .network_resample_matched(target_string, node_names, bins, bin_of_node))
+        .network_resample_matched_idx(target_idx, bins, bin_of_node))
     } else {
       vector("list", n_random)
     }
 
-    cond_rows <- vector("list", length(compounds))
-    cond_null_rows <- vector("list", length(compounds))
+    ## Pass 1 -- resolve every compound's S and draw its n_random
+    ## degree-matched S' sets, in the same compound-then-draw order the
+    ## draws were always taken in (nothing else in this loop touches the
+    ## RNG), so a given seed yields exactly the same random sets as the
+    ## historical one-draw-then-one-distances() loop.
+    source_by_cp <- vector("list", length(compounds))
+    s_rand_by_cp <- vector("list", length(compounds))
     for (i in seq_along(compounds)) {
       cp <- compounds[i]
       source_string <- unique(stats::na.omit(uni_to_string[target_sets[[cp]]]))
@@ -314,20 +329,36 @@ network_proximity <- function(proj, condition = NULL, disease,
           proj, step = "network_proximity", id = cp,
           message = paste0("condition '", cond, "': no mappable/graph-present target(s) for this compound or the disease gene set; skipped")
         )
-        cond_rows[[i]] <- NULL
         next
       }
+      source_by_cp[[i]] <- source_string
+      source_idx <- match(source_string, node_names)
+      s_rand_by_cp[[i]] <- lapply(seq_len(n_random), function(j)
+        .network_resample_matched_idx(source_idx, bins, bin_of_node))
+    }
+    scored <- which(!vapply(source_by_cp, is.null, logical(1)))
+
+    ## Pass 2 -- every compound's null distances at once: one multi-source
+    ## BFS per draw (from that draw's T'), instead of |S'| BFS runs per
+    ## (compound, draw). See .network_closest_distance_null().
+    d_random_by_cp <- vector("list", length(compounds))
+    if (length(scored) > 0) {
+      d_random_by_cp[scored] <- .network_closest_distance_null(g, s_rand_by_cp[scored], t_rand_list)
+    }
+
+    cond_rows <- vector("list", length(compounds))
+    cond_null_rows <- vector("list", length(compounds))
+    for (i in scored) {
+      cp <- compounds[i]
+      source_string <- source_by_cp[[i]]
 
       n_overlap <- length(intersect(unique(source_string), unique(target_string)))
       d_observed <- .network_closest_distance(g, source_string, target_string)
-      ## The raw, un-filtered per-draw distances -- captured here, before
-      ## the is.finite() filter below, so store_null = TRUE can persist
-      ## exactly what fed into d_random_mean/d_random_sd/z_score without
-      ## changing how any of those are computed.
-      d_random_raw <- vapply(seq_len(n_random), function(j) {
-        s_rand <- .network_resample_matched(source_string, node_names, bins, bin_of_node)
-        .network_closest_distance(g, s_rand, t_rand_list[[j]])
-      }, numeric(1))
+      ## The raw, un-filtered per-draw distances -- kept before the
+      ## is.finite() filter below, so store_null = TRUE can persist exactly
+      ## what fed into d_random_mean/d_random_sd/z_score without changing
+      ## how any of those are computed.
+      d_random_raw <- d_random_by_cp[[i]]
       d_random <- d_random_raw[is.finite(d_random_raw)]
 
       if (store_null) {
@@ -516,10 +547,27 @@ network_proximity <- function(proj, condition = NULL, disease,
 #' @keywords internal
 .network_resample_matched <- function(string_ids, node_names, bins, bin_of_node) {
   stopifnot(all(string_ids %in% node_names))
-  idx <- match(string_ids, node_names)
+  node_names[.network_resample_matched_idx(match(string_ids, node_names), bins, bin_of_node)]
+}
+
+#' Index form of [.network_resample_matched()]
+#'
+#' @description
+#' Same draw, same RNG consumption (one `sample.int()` per occupied bin, in
+#' ascending bin order), but takes and returns integer positions into the
+#' node vector `bins` indexes rather than node names -- so a caller making
+#' thousands of draws against a ~17k-node graph (the [network_proximity()]
+#' null) pays the name -> index `match()` once, not once per draw. For
+#' index `idx` the two forms return `node_names[out]` and `out` for the
+#' same random stream.
+#' @param idx Integer positions (into the node vector `bins` /
+#'   `bin_of_node` are aligned to) of the nodes to replace.
+#' @return Integer vector of node positions, length `length(idx)`.
+#' @keywords internal
+.network_resample_matched_idx <- function(idx, bins, bin_of_node) {
   by_bin <- split(seq_along(idx), bin_of_node[idx])
 
-  out <- character(length(string_ids))
+  out <- integer(length(idx))
   for (bs in names(by_bin)) {
     slots <- by_bin[[bs]]
     pool <- bins[[as.integer(bs)]]
@@ -531,10 +579,10 @@ network_proximity <- function(proj, condition = NULL, disease,
     } else {
       pool[sample.int(length(pool), k, replace = TRUE)]
     }
-    out[slots] <- node_names[picks]
+    out[slots] <- picks
   }
-  if (any(!nzchar(out))) {
-    cli::cli_abort("{.fn .network_resample_matched}: {sum(!nzchar(out))} output slot(s) unfilled -- a `string_ids` entry has no bin.")
+  if (any(out == 0L)) {
+    cli::cli_abort("{.fn .network_resample_matched}: {sum(out == 0L)} output slot(s) unfilled -- a `string_ids` entry has no bin.")
   }
   out
 }
@@ -558,6 +606,92 @@ network_proximity <- function(proj, condition = NULL, disease,
   d[!is.finite(d)] <- NA_real_
   row_min <- apply(d, 1, min, na.rm = TRUE)
   mean(row_min[is.finite(row_min)])
+}
+
+#' Guney "closest" distance for every (compound, draw) of the proximity null
+#'
+#' @description
+#' Batched, exact equivalent of calling [.network_closest_distance()] once
+#' per random draw -- `.network_closest_distance(g, V(g)$name[s_rand[[k]][[j]]],
+#' V(g)$name[t_rand[[j]]])` for every compound `k` and draw `j` -- which
+#' costs `|S'|` breadth-first searches per `(k, j)` and dominated
+#' [network_proximity()]'s run time on a real interactome (tens of
+#' thousands of BFS runs per disease).
+#'
+#' @details
+#' The "closest" measure only needs, for each source node `s`, the hop
+#' distance from `s` to the *nearest* member of the draw's target set
+#' `T'_j`: `min_{t in T'_j} d(s, t)`. That is a multi-source BFS from
+#' `T'_j`, which gives the value for every node at once. It is run as a
+#' single-source BFS from a virtual super-node: `g` is copied as a
+#' directed graph (every undirected edge in both directions, matching
+#' `distances()`'s default `mode = "all"`), and one extra vertex per draw
+#' gets out-edges to that draw's `T'_j` and no in-edges -- so no path can
+#' pass through another draw's super-node -- and `distances(mode = "out")`
+#' from it minus 1 is `min_{t in T'_j} d(s, t)`, `Inf` where unreachable.
+#' The random `T'_j` is shared by every compound (drawn once per
+#' `(condition, disease)`), so the cost falls from
+#' `sum_k |S_k| * n_random` BFS runs to `n_random`.
+#'
+#' Hop counts are integers, so the per-source minima are identical to the
+#' old per-draw `distances()` matrix row minima; each draw's value is then
+#' `mean()` over its unique, finite per-source minima -- the same
+#' reduction, in the same function, as [.network_closest_distance()]
+#' (a source with no finite path to `T'_j` is dropped; `NaN` if none has
+#' one) -- so `d_random`, and every statistic built on it, is unchanged.
+#'
+#' Memory: the draws are processed in chunks so that the
+#' `draws x needed-source-nodes` distance block stays at or below
+#' `max_cells` doubles (default `1e7`, ~80 MB); only the columns of nodes
+#' that actually occur in some `S'` are materialised.
+#'
+#' @param g The LCC `igraph` (undirected, unweighted hops).
+#' @param s_rand List over compounds; each a list over the `n_random`
+#'   draws of integer vertex indices (the random `S'`).
+#' @param t_rand List over the `n_random` draws of integer vertex indices
+#'   (the random `T'`, shared by every compound).
+#' @param max_cells Upper bound on the cells of one chunk's distance block.
+#' @return List parallel to `s_rand`, each a numeric vector of length
+#'   `length(t_rand)` (the raw per-draw `d_random`, non-finite where the
+#'   draw had no finite path).
+#' @keywords internal
+.network_closest_distance_null <- function(g, s_rand, t_rand, max_cells = 1e7) {
+  n <- igraph::vcount(g)
+  n_draws <- length(t_rand)
+  out <- lapply(s_rand, function(x) rep(NA_real_, n_draws))
+  if (n_draws == 0L || length(s_rand) == 0L) return(out)
+
+  el <- igraph::as_edgelist(g, names = FALSE)
+  base_edges <- as.vector(rbind(c(el[, 1], el[, 2]), c(el[, 2], el[, 1])))
+  rm(el)
+
+  ## only the columns of nodes that ever occur in some S' are needed
+  needed <- sort(unique(unlist(s_rand, use.names = FALSE)))
+  col_of <- integer(n)
+  col_of[needed] <- seq_along(needed)
+  ## unique() as in .network_closest_distance(): a with-replacement
+  ## fallback draw can repeat a node, and the measure is over the node set.
+  s_cols <- lapply(s_rand, function(draws) lapply(draws, function(s) col_of[unique(s)]))
+
+  per_chunk <- as.integer(max(1, min(n_draws, floor(max_cells / length(needed)))))
+  for (first in seq(1L, n_draws, by = per_chunk)) {
+    js <- first:min(n_draws, first + per_chunk - 1L)
+    super <- n + seq_along(js)
+    t_sets <- lapply(t_rand[js], unique)
+    super_edges <- as.vector(rbind(rep(super, lengths(t_sets)), unlist(t_sets, use.names = FALSE)))
+    g2 <- igraph::make_graph(c(base_edges, super_edges), n = n + length(js), directed = TRUE)
+    D <- igraph::distances(g2, v = super, to = needed, mode = "out", weights = NA)
+    D <- D - 1
+    rm(g2)
+    for (k in seq_along(s_rand)) {
+      out[[k]][js] <- vapply(seq_along(js), function(r) {
+        d <- D[r, s_cols[[k]][[js[r]]]]
+        mean(d[is.finite(d)])
+      }, numeric(1))
+    }
+    rm(D)
+  }
+  out
 }
 
 #' @keywords internal

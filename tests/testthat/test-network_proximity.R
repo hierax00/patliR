@@ -421,6 +421,157 @@ test_that("network_proximity() drops stale scores after a compound loses all edg
   expect_equal(after$compound_id[after$disease_id == "D_OTHER"], other_disease$compound_id)
 })
 
+## ---- Reference (pre-batching) null computation, kept as the oracle -------
+## Verbatim copies of the per-draw implementation network_proximity() used
+## before the null distances were batched into one multi-source BFS per
+## draw (.network_closest_distance_null()): one character-based
+## degree-matched draw and one igraph::distances() call per (compound,
+## draw). Slow, but independent of the code under test.
+.ref_resample_matched <- function(string_ids, node_names, bins, bin_of_node) {
+  idx <- match(string_ids, node_names)
+  by_bin <- split(seq_along(idx), bin_of_node[idx])
+  out <- character(length(string_ids))
+  for (bs in names(by_bin)) {
+    slots <- by_bin[[bs]]
+    pool <- bins[[as.integer(bs)]]
+    k <- length(slots)
+    picks <- if (k <= length(pool)) {
+      pool[sample.int(length(pool), k)]
+    } else {
+      pool[sample.int(length(pool), k, replace = TRUE)]
+    }
+    out[slots] <- node_names[picks]
+  }
+  out
+}
+
+.ref_closest_distance <- function(g, source_ids, target_ids) {
+  d <- igraph::distances(g, v = unique(source_ids), to = unique(target_ids), weights = NA)
+  d[!is.finite(d)] <- NA_real_
+  row_min <- suppressWarnings(apply(d, 1, min, na.rm = TRUE))
+  mean(row_min[is.finite(row_min)])
+}
+
+## The null exactly as the old loop drew and scored it: all T' draws
+## first, then each compound's S' draws in compound order.
+.ref_proximity_null <- function(g, source_sets, target_string, n_random, seed, bins, bin_of_node) {
+  node_names <- igraph::V(g)$name
+  restore <- patliR:::.with_seed(seed)
+  on.exit(restore(), add = TRUE)
+  t_rand <- lapply(seq_len(n_random), function(j)
+    .ref_resample_matched(target_string, node_names, bins, bin_of_node))
+  lapply(source_sets, function(s) vapply(seq_len(n_random), function(j) {
+    .ref_closest_distance(g, .ref_resample_matched(s, node_names, bins, bin_of_node), t_rand[[j]])
+  }, numeric(1)))
+}
+
+test_that(".network_closest_distance_null() equals the per-draw .network_closest_distance() (chunked, Inf, duplicates)", {
+  ## Synthetic scale-free graph plus a detached 3-node component, so some
+  ## draws have sources with no finite path to T' (dropped, as before) and
+  ## some have none at all (NaN, as before); a duplicated source node in a
+  ## draw exercises the unique(). A tiny max_cells forces many chunks.
+  set.seed(11)
+  g <- igraph::sample_pa(300, m = 2, directed = FALSE)
+  g <- igraph::add_vertices(g, 3)
+  g <- igraph::add_edges(g, c(301, 302, 302, 303))
+  igraph::V(g)$name <- paste0("n", seq_len(igraph::vcount(g)))
+  nm <- igraph::V(g)$name
+  n_random <- 23
+  t_rand <- lapply(seq_len(n_random), function(j) sample.int(300, 15))
+  s_rand <- lapply(1:4, function(k) lapply(seq_len(n_random), function(j) sample.int(303, 6)))
+  s_rand[[1]][[1]] <- c(301L, 302L)              # entirely off T''s component
+  s_rand[[2]][[3]] <- c(5L, 5L, 303L, 7L)        # duplicate + one unreachable
+  t_rand[[4]] <- c(t_rand[[4]], t_rand[[4]][1])  # duplicate target
+
+  got <- patliR:::.network_closest_distance_null(g, s_rand, t_rand, max_cells = 50)
+  want <- lapply(s_rand, function(draws) vapply(seq_len(n_random), function(j)
+    .ref_closest_distance(g, nm[draws[[j]]], nm[t_rand[[j]]]), numeric(1)))
+
+  expect_identical(got, want)
+  expect_true(is.nan(got[[1]][1]))
+  expect_true(is.finite(got[[2]][3]))
+  ## the chunk size does not change anything
+  expect_identical(patliR:::.network_closest_distance_null(g, s_rand, t_rand), want)
+})
+
+test_that(".network_resample_matched_idx() consumes the RNG exactly like .network_resample_matched()", {
+  set.seed(3)
+  g <- igraph::sample_pa(400, m = 2, directed = FALSE)
+  igraph::V(g)$name <- paste0("n", seq_len(400))
+  deg <- igraph::degree(g)
+  bins <- patliR:::.network_value_bins(deg, min_per_bin = 30)
+  bon <- integer(length(deg))
+  for (b in seq_along(bins)) bon[bins[[b]]] <- b
+  ids <- names(deg)[c(1:5, 50, 399)]
+  set.seed(99); a <- replicate(20, patliR:::.network_resample_matched(ids, names(deg), bins, bon), simplify = FALSE)
+  set.seed(99); b <- replicate(20, patliR:::.network_resample_matched_idx(match(ids, names(deg)), bins, bon), simplify = FALSE)
+  set.seed(99); r <- replicate(20, .ref_resample_matched(ids, names(deg), bins, bon), simplify = FALSE)
+  expect_identical(a, r)
+  expect_identical(lapply(b, function(i) names(deg)[i]), r)
+})
+
+test_that("network_proximity() batched null reproduces the per-draw reference implementation exactly (STRINGdb mocked)", {
+  ## Regression for the null-distance batching: same seed => same random
+  ## draws => identical d_random per draw, and therefore identical
+  ## d_random_mean / d_random_sd / z_score / p_empirical, versus the old
+  ## one-distances()-per-draw loop reimplemented above as the oracle.
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  cond <- "FLO-ET"
+  edges <- patliRResults(proj, "network_edges")
+  ct <- unique(edges[edges$condition == cond, c("compound_id", "uniprot_id")])
+  cmp_uni <- unique(ct$uniprot_id)
+  disease_uni <- c(cmp_uni[1:2], paste0("DIS", seq_len(8)))
+  proj <- disease_genes_import(
+    proj, data.frame(uniprot_id = disease_uni),
+    disease_id = "D_REF", disease_name = "synthetic", source = "synthetic"
+  )
+  fake <- .fake_string_db(c(cmp_uni, disease_uni))
+  testthat::local_mocked_bindings(.network_stringdb = function(...) fake, .package = "patliR")
+
+  n_random <- 40
+  proj <- network_proximity(proj, condition = cond, disease = "D_REF",
+                            n_random = n_random, seed = 20240, store_null = TRUE)
+  res <- patliRResults(proj, "network_proximity")
+  nul <- patliRResults(proj, "network_proximity_null")
+
+  ## oracle, on the same LCC / bins / mapping network_proximity() used
+  lcc <- patliR:::.network_string_lcc(proj, 9606, "12.0", 400)
+  g <- lcc$graph
+  to_string <- function(u) {
+    s <- unique(stats::na.omit(fake$map(data.frame(uniprot_id = u), "uniprot_id")$STRING_id))
+    s[s %in% igraph::V(g)$name]
+  }
+  compounds <- unique(ct$compound_id)
+  source_sets <- lapply(split(ct$uniprot_id, ct$compound_id)[compounds], to_string)
+  source_sets <- source_sets[lengths(source_sets) > 0]
+  target_string <- to_string(disease_uni)
+  ref <- .ref_proximity_null(g, source_sets, target_string, n_random, 20240,
+                             lcc$bins, lcc$bin_of_node)
+
+  expect_setequal(res$compound_id, names(ref))
+  for (cp in names(ref)) {
+    got <- nul[nul$compound_id == cp, ]
+    got <- got$d_random[order(got$draw)]
+    want_raw <- ref[[cp]]
+    expect_identical(got, ifelse(is.finite(want_raw), want_raw, NA_real_))
+
+    want <- want_raw[is.finite(want_raw)]
+    row <- res[res$compound_id == cp, ]
+    d_obs <- .ref_closest_distance(g, source_sets[[cp]], target_string)
+    expect_identical(row$d_observed, d_obs)
+    want_sd <- if (length(want) > 1) stats::sd(want) else NA_real_
+    expect_identical(row$d_random_mean, mean(want))
+    expect_identical(row$d_random_sd, want_sd)
+    expect_identical(
+      row$z_score,
+      if (!is.na(want_sd) && want_sd > 0) (d_obs - mean(want)) / want_sd else NA_real_
+    )
+    expect_identical(row$p_empirical, (1 + sum(want <= d_obs)) / (length(want) + 1))
+    expect_identical(row$n_random, length(want))
+  }
+})
+
 test_that("network_proximity() end-to-end is not exercised automatically -- needs a real STRING download", {
   testthat::skip_if_not_installed("STRINGdb")
   skip_on_cran()

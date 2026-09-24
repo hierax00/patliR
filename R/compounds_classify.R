@@ -132,34 +132,49 @@ compounds_classify <- function(proj, compound_ids = NULL,
     req,
     max_tries = 4,
     is_transient = function(resp) {
-      httr2::resp_status(resp) %in% c(429, 503) ||
-        !identical(httr2::resp_content_type(resp), "application/json")
+      httr2::resp_status(resp) %in% c(429, 503) || is.null(.npclassifier_parse_body(resp))
     },
     backoff = function(n) 2^n
   )
 
   resp <- httr2::req_perform(req)
 
-  if (!identical(httr2::resp_content_type(resp), "application/json")) {
+  ## Judge the response by its BODY, not its Content-Type header: the live
+  ## endpoint answers valid JSON labelled "text/html", which the earlier
+  ## header check treated as a failure for every compound.
+  body <- .npclassifier_parse_body(resp)
+  if (is.null(body)) {
     body_preview <- tryCatch(
       substr(httr2::resp_body_string(resp), 1, 300),
       error = function(e) "<could not read response body>"
     )
     stop(
-      "NPClassifier returned content-type '", httr2::resp_content_type(resp),
-      "' instead of JSON, even after retrying with backoff. The endpoint ",
-      "returns valid JSON for isolated requests, so this usually means it ",
-      "is rate-limiting or blocking rapid sequential requests, not that ",
-      "this SMILES is malformed. ",
+      "NPClassifier returned a body that is not the expected JSON (content-type '",
+      httr2::resp_content_type(resp), "'), even after retrying with backoff. ",
+      "This usually means the endpoint is rate-limiting or blocking rapid ",
+      "sequential requests, not that this SMILES is malformed. ",
       "Response body preview: ", body_preview
     )
   }
-
-  body <- httr2::resp_body_json(resp)
   list(
     pathway = if (length(body$pathway_results) > 0) body$pathway_results[[1]] else NA_character_,
     superclass = if (length(body$superclass_results) > 0) body$superclass_results[[1]] else NA_character_,
     class = if (length(body$class_results) > 0) body$class_results[[1]] else NA_character_,
     isglycoside = isTRUE(body$isglycoside)
   )
+}
+
+#' Parse an NPClassifier response body as JSON, ignoring its Content-Type
+#'
+#' The live endpoint returns valid JSON with `Content-Type: text/html`, so
+#' the header cannot be used to judge success.
+#'
+#' @param resp An `httr2` response.
+#' @return The parsed list, or `NULL` if the body is not a JSON object with
+#'   a `pathway_results` field.
+#' @keywords internal
+.npclassifier_parse_body <- function(resp) {
+  body <- tryCatch(httr2::resp_body_json(resp, check_type = FALSE), error = function(e) NULL)
+  if (!is.list(body) || !"pathway_results" %in% names(body)) return(NULL)
+  body
 }

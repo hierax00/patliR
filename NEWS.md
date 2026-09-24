@@ -1,5 +1,30 @@
 # patliR (development version)
 
+## Bug fixes: `prep_*`, `plot_*`, `report_generate()`, `tox_report()`
+
+- **`prep_binarize()`** now computes the Q1 (`q`) presence threshold over
+  *all* compounds' averaged abundances, as documented; it previously used
+  only the non-zero compounds, which could mark detected compounds absent.
+  This can change which compounds are "present" in existing projects.
+- **`prep_as_condition()`** assigns presence by `compound_id` instead of by
+  row position, so a reordered or incomplete matrix no longer mislabels
+  compounds.
+- **`plot_*` file names** now include `target_relevance` (rank heatmap) and
+  `db` (GOChord), and multi-condition (or literal `"ALL"`) scopes get a
+  hash suffix, so different variants no longer overwrite each other.
+- **`report_generate()`** takes the compounds present per condition from the
+  binarized matrix, and the ADME summary reports passing / evaluated /
+  unknown per rule instead of dropping `NA`s.
+- **`prep_structure2d(engine = "chemminer")`** is rejected up front (it was
+  never implemented); use `engine = "rcdk"`.
+- **`plot_target_chord()`** aborts when the cached raw STRING actions file is
+  unreadable instead of silently skipping `actions_score_threshold`.
+- Smaller `plot_*` edge cases: all-failing ADME rules (`plot_adme_upset()`),
+  constant descriptors and `save = FALSE` rewriting the log
+  (`plot_chemical_space()`), `NA` weights drawn as 0 (heatmap, bow-tie,
+  proximity), and `plot_gochord()` now requires exactly one condition.
+- **`tox_report()`** treats a 0-row results table as "nothing to report".
+
 ## New `targets_disease_profile()` / `plot_disease_network()`, and `network_kegg_topology()`
 
 - **New `targets_disease_profile()`.** Organizes every predicted target's

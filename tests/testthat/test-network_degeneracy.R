@@ -415,3 +415,412 @@ test_that("network_degeneracy(annotation = 'enriched') warns instead of silently
   res <- patliRResults(proj2, "network_degeneracy")
   if (nrow(res) > 0) expect_true(all(is.na(res$functional_similarity)))
 })
+
+## Frozen pre-optimization cores: keep bodies verbatim as regression oracles.
+
+.ndeg_old_degeneracy_direct <- function(proj, cond, ct, all_compounds, sem_data,
+                                        g2go, ann_counts, measure, combine, universe,
+                                        n_random, project_pool_entrez, edges_all) {
+  ## compound -> distinct Entrez (many-to-many UniProt -> Entrez)
+  uni_all <- unique(ct$uniprot_id)
+  u2e <- .network_uniprot_to_entrez_map(uni_all)
+  compound_entrez <- lapply(split(ct$uniprot_id, ct$compound_id), function(u) {
+    unique(stats::na.omit(unlist(u2e[unique(u)], use.names = FALSE)))
+  })
+
+  ## resampling pool
+  pool <- switch(universe,
+    project   = project_pool_entrez,
+    condition = unique(stats::na.omit(unlist(u2e, use.names = FALSE))),
+    genome    = names(g2go)
+  )
+  pool <- unique(as.character(pool))
+  pool <- pool[pool %in% names(g2go)]        # annotated genes only (14-U2)
+
+  ## Cap the pool for the term x term matrix's sake, but never at the cost
+  ## of evicting a compound's own (annotated) targets: .network_resample_matched()
+  ## looks up each observed gene's own annotation-count bin to draw its
+  ## replacement, and the pairwise loop below intersects each compound's
+  ## target set with `pool` before scoring, so a gene missing from `pool`
+  ## silently drops out of every pair it's in.
+  cp_res <- .network_cap_pool_keep_observed(
+    pool, unlist(compound_entrez, use.names = FALSE), cap = 1500L
+  )
+  pool <- cp_res$pool
+  pool_capped <- cp_res$capped
+
+  if (length(pool) < 2) {
+    proj <- .log_append(proj, step = "network_degeneracy", id = NA_character_,
+      message = paste0("condition '", cond, "': resampling pool (universe = '", universe,
+                       "') has < 2 annotated genes; no rows"))
+    return(list(rows = .empty_network_degeneracy_row(), proj = proj))
+  }
+
+  ## annotation-count bins over the pool (shared helper with proximity)
+  pool_counts <- ann_counts[pool]
+  bins <- .network_value_bins(pool_counts, min_per_bin = 100)
+  bin_of_node <- integer(length(pool))
+  for (b in seq_along(bins)) bin_of_node[bins[[b]]] <- b
+  if (length(bins) < 3) {
+    cli::cli_warn(c(
+      "!" = "{.fn network_degeneracy}: condition {.val {cond}} resampling pool (universe = {.val {universe}}, {length(pool)} gene{?s}) yields only {length(bins)} annotation-count bin{?s}.",
+      "i" = "The permutation null is close to uniform sampling; a larger {.arg universe} gives a sharper null."
+    ))
+  }
+  if (pool_capped) {
+    cli::cli_warn(c(
+      "!" = "{.fn network_degeneracy}: condition {.val {cond}} universe = {.val {universe}} pool capped at {length(pool)} gene{?s} (every observed target kept; the rest randomly subsampled) for the term-similarity matrix."
+    ))
+  }
+
+  ## term x term similarity matrix over the pool's term union, ONCE
+  terms_pool <- sort(unique(unlist(g2go[pool], use.names = FALSE)))
+  sim_mat <- GOSemSim::termSim(terms_pool, terms_pool, semData = sem_data, method = measure)
+  if (is.null(dim(sim_mat))) {
+    sim_mat <- matrix(sim_mat, nrow = length(terms_pool), ncol = length(terms_pool),
+                      dimnames = list(terms_pool, terms_pool))
+  }
+
+  ## genes that lost all annotation after the drop filter (log once)
+  lost <- setdiff(unique(unlist(compound_entrez, use.names = FALSE)), names(g2go))
+  if (length(lost) > 0) {
+    proj <- .log_append(proj, step = "network_degeneracy", id = NA_character_,
+      message = paste0("condition '", cond, "': ", length(lost),
+                       " Entrez gene(s) had no GO annotation after the drop filter and were excluded from scoring"))
+  }
+
+  pairs <- utils::combn(all_compounds, 2, simplify = FALSE)
+  pair_rows <- vector("list", length(pairs))
+  n_skipped <- 0L
+
+  for (i in seq_along(pairs)) {
+    a <- pairs[[i]][1]; b <- pairs[[i]][2]
+    ea_all <- compound_entrez[[a]]; eb_all <- compound_entrez[[b]]
+    if (is.null(ea_all)) ea_all <- character(0)
+    if (is.null(eb_all)) eb_all <- character(0)
+    ## scored sets: annotated AND in the resampling pool (14-U2)
+    ea <- intersect(ea_all, pool)
+    eb <- intersect(eb_all, pool)
+
+    if (length(ea) == 0 || length(eb) == 0) {
+      n_skipped <- n_skipped + 1L
+      next
+    }
+
+    tv_a <- unlist(g2go[ea], use.names = FALSE)
+    tv_b <- unlist(g2go[eb], use.names = FALSE)
+    sim_obs <- .network_go_bma(tv_a, tv_b, sim_mat, combine)
+
+    sim_rand <- vapply(seq_len(n_random), function(j) {
+      ra <- .network_resample_matched(ea, pool, bins, bin_of_node)
+      rb <- .network_resample_matched(eb, pool, bins, bin_of_node)
+      .network_go_bma(unlist(g2go[ra], use.names = FALSE),
+                      unlist(g2go[rb], use.names = FALSE), sim_mat, combine, check = FALSE)
+    }, numeric(1))
+    sim_rand <- sim_rand[is.finite(sim_rand)]
+
+    sim_mean <- if (length(sim_rand) > 0) mean(sim_rand) else NA_real_
+    sim_sd   <- if (length(sim_rand) > 1) stats::sd(sim_rand) else NA_real_
+    z_score  <- if (!is.na(sim_sd) && sim_sd > 0 && !is.na(sim_obs)) {
+      (sim_obs - sim_mean) / sim_sd
+    } else NA_real_
+    p_emp <- if (length(sim_rand) > 0 && !is.na(sim_obs)) {
+      (1 + sum(sim_rand >= sim_obs)) / (length(sim_rand) + 1)
+    } else NA_real_
+
+    tj <- length(intersect(ct$uniprot_id[ct$compound_id == a],
+                           ct$uniprot_id[ct$compound_id == b])) /
+          length(union(ct$uniprot_id[ct$compound_id == a],
+                       ct$uniprot_id[ct$compound_id == b]))
+    deg <- if (is.na(sim_obs)) NA_real_ else sim_obs * (1 - tj)
+
+    pair_rows[[i]] <- data.frame(
+      condition = cond, compound_a = a, compound_b = b,
+      n_targets_a = length(ct$uniprot_id[ct$compound_id == a]),
+      n_targets_b = length(ct$uniprot_id[ct$compound_id == b]),
+      n_genes_a_mapped = length(ea_all), n_genes_b_mapped = length(eb_all),
+      n_pathways_a = NA_integer_, n_pathways_b = NA_integer_,
+      target_jaccard = tj, functional_similarity = sim_obs,
+      sim_random_mean = sim_mean, sim_random_sd = sim_sd,
+      z_score = z_score, p_empirical = p_emp, p_adjusted = NA_real_,
+      degeneracy_score = deg,
+      stringsAsFactors = FALSE
+    )
+  }
+
+  pair_rows <- pair_rows[!vapply(pair_rows, is.null, logical(1))]
+  out <- if (length(pair_rows) == 0) {
+    .network_degeneracy_direct_empty()
+  } else {
+    do.call(rbind, pair_rows)
+  }
+  proj <- .log_append(proj, step = "network_degeneracy", id = NA_character_,
+    message = paste0("condition '", cond, "' (annotation = 'direct'): ", nrow(out),
+                     " pair(s) scored, ", n_skipped,
+                     " pair(s) skipped (a compound has no Entrez-mapped, annotated target), seed-driven null n_random = ", n_random))
+  list(rows = out, proj = proj)
+}
+
+.ndeg_old_degeneracy_pathway <- function(proj, cond, ct, all_compounds, annotation,
+                                         sem_data, measure, combine, pathway_db) {
+  target_pathway <- .network_target_pathway_edges(proj, cond, unique(ct$uniprot_id), pathway_db = pathway_db)
+  cp <- if (!is.null(target_pathway) && nrow(target_pathway) > 0) {
+    unique(merge(ct, target_pathway, by = "uniprot_id")[, c("compound_id", "pathway_id")])
+  } else {
+    data.frame(compound_id = character(0), pathway_id = character(0), stringsAsFactors = FALSE)
+  }
+  target_sets <- split(ct$uniprot_id, ct$compound_id)
+  pathway_sets <- split(cp$pathway_id, cp$compound_id)
+
+  if (annotation == "enriched" && nrow(cp) > 0 && !any(grepl("^GO:", cp$pathway_id))) {
+    cli::cli_warn(c(
+      "!" = "{.fn network_degeneracy}: condition {.val {cond}} (annotation = \"enriched\") has no GO-prefixed enriched pathway IDs.",
+      "i" = "{.field functional_similarity} needs GO terms ({.fn GOSemSim::mgoSim}); every pair in this condition will score {.val NA}. Re-run {.fn network_enrich} with a GO database, or use {.code annotation = \"direct\"}."
+    ))
+  }
+
+  pairs <- utils::combn(all_compounds, 2, simplify = FALSE)
+  pair_rows <- vector("list", length(pairs))
+  n_skipped <- 0L
+
+  for (i in seq_along(pairs)) {
+    a <- pairs[[i]][1]; b <- pairs[[i]][2]
+    ta <- target_sets[[a]]; tb <- target_sets[[b]]
+    pa <- pathway_sets[[a]]; pb <- pathway_sets[[b]]
+    if (is.null(pa)) pa <- character(0)
+    if (is.null(pb)) pb <- character(0)
+
+    if (length(union(pa, pb)) == 0) {
+      n_skipped <- n_skipped + 1L
+      next
+    }
+    target_jaccard <- length(intersect(ta, tb)) / length(union(ta, tb))
+
+    fs <- if (annotation == "jaccard") {
+      length(intersect(pa, pb)) / length(union(pa, pb))
+    } else {
+      ## enriched: GO semantic similarity over the enriched-term sets
+      go_a <- unique(pa[grepl("^GO:", pa)])
+      go_b <- unique(pb[grepl("^GO:", pb)])
+      if (length(go_a) == 0 || length(go_b) == 0) NA_real_
+      else GOSemSim::mgoSim(go_a, go_b, semData = sem_data, measure = measure, combine = combine)
+    }
+    deg <- if (is.na(fs)) NA_real_ else fs * (1 - target_jaccard)
+
+    pair_rows[[i]] <- data.frame(
+      condition = cond, compound_a = a, compound_b = b,
+      n_targets_a = length(ta), n_targets_b = length(tb),
+      n_genes_a_mapped = NA_integer_, n_genes_b_mapped = NA_integer_,
+      n_pathways_a = length(pa), n_pathways_b = length(pb),
+      target_jaccard = target_jaccard, functional_similarity = fs,
+      sim_random_mean = NA_real_, sim_random_sd = NA_real_,
+      z_score = NA_real_, p_empirical = NA_real_, p_adjusted = NA_real_,
+      degeneracy_score = deg,
+      stringsAsFactors = FALSE
+    )
+  }
+
+  pair_rows <- pair_rows[!vapply(pair_rows, is.null, logical(1))]
+  out <- if (length(pair_rows) == 0) .network_degeneracy_direct_empty() else do.call(rbind, pair_rows)
+  proj <- .log_append(proj, step = "network_degeneracy", id = NA_character_,
+    message = paste0("condition '", cond, "' (annotation = '", annotation, "'): ", nrow(out),
+                     " pair(s) scored, ", n_skipped,
+                     " pair(s) skipped (neither compound has a target in a significant pathway)"))
+  list(rows = out, proj = proj, n_skipped = n_skipped)
+}
+
+.ndeg_old_go_bma <- function(terms_a, terms_b, sim_mat, combine = "BMA", check = TRUE) {
+  if (check) {
+    terms_a <- terms_a[!is.na(terms_a) & terms_a %in% rownames(sim_mat)]
+    terms_b <- terms_b[!is.na(terms_b) & terms_b %in% colnames(sim_mat)]
+  }
+  if (length(terms_a) == 0 || length(terms_b) == 0) return(NA_real_)
+  S <- sim_mat[terms_a, terms_b, drop = FALSE]
+  if (!sum(!is.na(S))) return(NA_real_)
+
+  .cs <- function(M) {
+    if (is.vector(M) || nrow(M) == 1 || ncol(M) == 1) {
+      if (combine == "avg") return(round(mean(M, na.rm = TRUE), 3))
+      return(round(max(M, na.rm = TRUE), 3))
+    }
+    na <- is.na(M)
+    rna <- rowSums(na) == ncol(M)
+    if (any(rna)) { M <- M[!rna, , drop = FALSE]; na <- na[!rna, , drop = FALSE] }
+    cna <- colSums(na) == nrow(M)
+    if (any(cna)) M <- M[, !cna, drop = FALSE]
+    if (is.vector(M) || nrow(M) == 1 || ncol(M) == 1) {
+      if (combine == "avg") return(round(mean(M, na.rm = TRUE), 3))
+      return(round(max(M, na.rm = TRUE), 3))
+    }
+    result <- switch(combine,
+      avg   = mean(M, na.rm = TRUE),
+      max   = max(M, na.rm = TRUE),
+      rcmax = max(mean(apply(M, 1, max, na.rm = TRUE)),
+                  mean(apply(M, 2, max, na.rm = TRUE))),
+      ## BMA (rcmax.avg)
+      sum(apply(M, 1, max, na.rm = TRUE), apply(M, 2, max, na.rm = TRUE)) / sum(dim(M))
+    )
+    round(result, 3)
+  }
+  .cs(S)
+}
+
+## Synthetic semantic scores include duplicate annotations, missing similarities,
+## a wholly unscorable term, and an empty gene annotation set.
+.ndeg_synthetic <- function() {
+  terms <- paste0('GO:', seq_len(7))
+  sim <- outer(seq_len(7), seq_len(7), function(a, b) 1 / (1 + abs(a - b)))
+  dimnames(sim) <- list(terms, terms)
+  sim[2, 4] <- sim[4, 2] <- NA_real_
+  sim[7, ] <- sim[, 7] <- NA_real_
+  g2go <- list(g1 = terms[c(1, 2)], g2 = terms[c(2, 3, 4)],
+               g3 = terms[5], g4 = terms[c(4, 6)], g5 = terms[7],
+               g6 = character(), g7 = terms[c(1, 4, 5, 6)], g8 = terms[2])
+  mapping <- list(u1 = c('g1', 'g2'), u2 = 'g3', u3 = c('g2', 'g4'),
+                  u4 = 'g5', u5 = 'unannotated', u6 = character(), u7 = 'g6')
+  ct <- data.frame(compound_id = c('A', 'A', 'B', 'B', 'C', 'D', 'E', 'F', 'G'),
+                   uniprot_id = c('u1', 'u2', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u1'))
+  list(sim = sim, mapping = mapping,
+       args = list(proj = list(), cond = 'synthetic', ct = ct,
+                   all_compounds = sort(unique(ct$compound_id)), sem_data = NULL,
+                   g2go = g2go, ann_counts = lengths(g2go), measure = 'Wang',
+                   combine = 'BMA', universe = 'project', n_random = 70,
+                   project_pool_entrez = names(g2go), edges_all = ct))
+}
+
+## Give the frozen functions the package helpers but the frozen GO reducer.
+.ndeg_oracle <- function(fun) {
+  env <- new.env(parent = asNamespace('patliR'))
+  env$.network_go_bma <- .ndeg_old_go_bma
+  environment(fun) <- env
+  fun
+}
+
+test_that('optimized direct core is identical to the frozen core, including RNG', {
+  skip_if_not_installed('GOSemSim')
+  fixture <- .ndeg_synthetic()
+  calls <- 0L
+  local_mocked_bindings(
+    termSim = function(t1, t2, semData, method) {
+      calls <<- calls + 1L
+      fixture$sim[t1, t2, drop = FALSE]
+    }, .package = 'GOSemSim'
+  )
+  local_mocked_bindings(
+    .network_uniprot_to_entrez_map = function(u) fixture$mapping[u],
+    .log_append = function(proj, ...) proj
+  )
+  old <- .ndeg_oracle(.ndeg_old_degeneracy_direct)
+  for (combine in c('BMA', 'max', 'avg', 'rcmax')) {
+    for (n_random in c(1, 70)) {
+      args <- fixture$args
+      args$combine <- combine
+      args$n_random <- n_random
+      set.seed(492)
+      expected <- suppressWarnings(do.call(old, args))
+      expected_rng <- .Random.seed
+      set.seed(492)
+      calls <- 0L
+      actual <- suppressWarnings(do.call(patliR:::.network_degeneracy_direct, args))
+      expect_identical(actual, expected)
+      expect_identical(.Random.seed, expected_rng)
+      expect_identical(calls, 1L)
+      expect_identical(p.adjust(actual$rows$p_empirical, 'BH'),
+                       p.adjust(expected$rows$p_empirical, 'BH'))
+    }
+  }
+  ## Capping consumes random numbers before the pair loop; preserve that too.
+  extra <- paste0('extra', seq_len(1500))
+  fixture$args$g2go[extra] <- rep(list('GO:1'), length(extra))
+  fixture$args$ann_counts <- lengths(fixture$args$g2go)
+  fixture$args$project_pool_entrez <- names(fixture$args$g2go)
+  fixture$args$n_random <- 3
+  set.seed(492)
+  expected <- suppressWarnings(do.call(old, fixture$args))
+  expected_rng <- .Random.seed
+  set.seed(492)
+  actual <- suppressWarnings(do.call(patliR:::.network_degeneracy_direct, fixture$args))
+  expect_identical(actual, expected)
+  expect_identical(.Random.seed, expected_rng)
+})
+
+test_that('compiled bin draws preserve multi-bin sampling and replacement RNG', {
+  bins <- list(c(1L, 4L, 7L), c(2L, 5L, 8L), c(3L, 6L))
+  bin_of_node <- c(1L, 2L, 3L, 1L, 2L, 3L, 1L, 2L)
+  for (idx in list(c(8L, 1L, 3L, 4L), c(3L, 6L, 3L))) {
+    draw <- patliR:::.network_degeneracy_sampler(idx, bins, bin_of_node)
+    set.seed(932)
+    expected <- replicate(20, patliR:::.network_resample_matched_idx(idx, bins, bin_of_node),
+                          simplify = FALSE)
+    expected_rng <- .Random.seed
+    set.seed(932)
+    expect_identical(replicate(20, draw(), simplify = FALSE), expected)
+    expect_identical(.Random.seed, expected_rng)
+  }
+})
+
+test_that('batched term maxima preserve the pooled-term score and NA edge cases', {
+  fixture <- .ndeg_synthetic()
+  sim <- fixture$sim
+  ## Deliberately asymmetric too: forward/reverse caches must remain distinct.
+  sim[3, 1] <- 0.3145
+  gene_terms <- lapply(fixture$args$g2go, match, table = rownames(sim))
+  maxima <- patliR:::.network_go_gene_maxima(gene_terms, sim)
+  sets <- list(1L, 2L, 3L, 5L, 6L, c(1L, 2L), c(1L, 1L, 7L), c(3L, 5L))
+  pair <- expand.grid(a = seq_along(sets), b = seq_along(sets))
+  a <- sets[pair$a]; b <- sets[pair$b]
+  ## Cross the 64-draw batch boundary.
+  a <- c(a, a); b <- c(b, b)
+  for (combine in c('BMA', 'max', 'avg', 'rcmax')) {
+    expected <- vapply(seq_along(a), function(i) {
+      .ndeg_old_go_bma(unlist(gene_terms[a[[i]]], use.names = FALSE),
+                       unlist(gene_terms[b[[i]]], use.names = FALSE),
+                       sim, combine, check = FALSE)
+    }, numeric(1))
+    expect_identical(patliR:::.network_go_gene_scores(a, b, gene_terms, sim, maxima, combine),
+                     expected)
+  }
+  ## Singleton term universe and a wholly empty batch.
+  one <- matrix(0.1235, 1, 1)
+  gt <- list(1L)
+  expect_identical(patliR:::.network_go_gene_scores(list(1L), list(1L), gt, one,
+                     patliR:::.network_go_gene_maxima(gt, one), 'BMA'), round(0.1235, 3))
+  expect_identical(patliR:::.network_go_gene_scores(list(6L), list(6L), gene_terms,
+                     sim, maxima, 'BMA'), NA_real_)
+})
+
+test_that('enriched core reuses one term matrix and preserves mgoSim results', {
+  skip_if_not_installed('GOSemSim')
+  fixture <- .ndeg_synthetic()
+  calls <- 0L
+  local_mocked_bindings(
+    termSim = function(t1, t2, semData, method) {
+      calls <<- calls + 1L
+      fixture$sim[t1, t2, drop = FALSE]
+    }, .package = 'GOSemSim'
+  )
+  local_mocked_bindings(
+    .network_target_pathway_edges = function(...) {
+      data.frame(uniprot_id = c('u1', 'u1', 'u2', 'u3', 'u4', 'u5'),
+                 pathway_id = c('GO:1', 'GO:2', 'GO:3', 'GO:4', 'GO:7', 'hsa00010'))
+    },
+    .log_append = function(proj, ...) proj
+  )
+  args <- fixture$args[c('proj', 'cond', 'ct', 'all_compounds', 'sem_data', 'measure', 'combine')]
+  args["pathway_db"] <- list(NULL)
+  old <- .ndeg_oracle(.ndeg_old_degeneracy_pathway)
+  for (annotation in c('enriched', 'jaccard')) {
+    args$annotation <- annotation
+    for (combine in c('BMA', 'max', 'avg', 'rcmax')) {
+      args$combine <- combine
+      calls <- 0L
+      expected <- do.call(old, args)
+      old_calls <- calls
+      calls <- 0L
+      actual <- do.call(patliR:::.network_degeneracy_pathway, args)
+      expect_identical(actual, expected)
+      expect_identical(calls, if (annotation == 'enriched') 1L else 0L)
+      if (annotation == 'enriched') expect_gt(old_calls, calls)
+    }
+  }
+})

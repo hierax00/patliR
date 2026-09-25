@@ -473,6 +473,17 @@ network_degeneracy <- function(proj, condition = NULL,
                       dimnames = list(terms_pool, terms_pool))
   }
 
+  ## Keep pooled annotations (including duplicates), not gene-level BMA:
+  ## BMA of gene scores is not BMA of the original pooled GO terms.
+  gene_terms <- lapply(g2go[pool], match, table = terms_pool)
+  maxima <- if (combine != "avg") .network_go_gene_maxima(gene_terms, sim_mat) else NULL
+  ## The reduced caches replace the larger term matrix for best-match scores.
+  if (combine != "avg") sim_mat <- NULL
+  target_sets <- split(ct$uniprot_id, ct$compound_id)
+  scored_genes <- lapply(compound_entrez, function(x) match(intersect(x, pool), pool))
+  samplers <- lapply(scored_genes, .network_degeneracy_sampler,
+                     bins = bins, bin_of_node = bin_of_node)
+
   ## genes that lost all annotation after the drop filter (log once)
   lost <- setdiff(unique(unlist(compound_entrez, use.names = FALSE)), names(g2go))
   if (length(lost) > 0) {
@@ -491,24 +502,26 @@ network_degeneracy <- function(proj, condition = NULL,
     if (is.null(ea_all)) ea_all <- character(0)
     if (is.null(eb_all)) eb_all <- character(0)
     ## scored sets: annotated AND in the resampling pool (14-U2)
-    ea <- intersect(ea_all, pool)
-    eb <- intersect(eb_all, pool)
+    ea <- scored_genes[[a]]
+    eb <- scored_genes[[b]]
 
     if (length(ea) == 0 || length(eb) == 0) {
       n_skipped <- n_skipped + 1L
       next
     }
 
-    tv_a <- unlist(g2go[ea], use.names = FALSE)
-    tv_b <- unlist(g2go[eb], use.names = FALSE)
-    sim_obs <- .network_go_bma(tv_a, tv_b, sim_mat, combine)
-
-    sim_rand <- vapply(seq_len(n_random), function(j) {
-      ra <- .network_resample_matched(ea, pool, bins, bin_of_node)
-      rb <- .network_resample_matched(eb, pool, bins, bin_of_node)
-      .network_go_bma(unlist(g2go[ra], use.names = FALSE),
-                      unlist(g2go[rb], use.names = FALSE), sim_mat, combine, check = FALSE)
-    }, numeric(1))
+    ## Preserve pair -> iteration -> a, b -> bin RNG order exactly. Never
+    ## share draws between pairs, even when they contain the same compound.
+    draws_a <- draws_b <- vector("list", length(seq_len(n_random)) + 1L)
+    draws_a[[1L]] <- ea
+    draws_b[[1L]] <- eb
+    for (j in seq_len(n_random)) {
+      draws_a[[j + 1L]] <- samplers[[a]]()
+      draws_b[[j + 1L]] <- samplers[[b]]()
+    }
+    sims <- .network_go_gene_scores(draws_a, draws_b, gene_terms, sim_mat, maxima, combine)
+    sim_obs <- sims[1L]
+    sim_rand <- sims[-1L]
     sim_rand <- sim_rand[is.finite(sim_rand)]
 
     sim_mean <- if (length(sim_rand) > 0) mean(sim_rand) else NA_real_
@@ -520,16 +533,14 @@ network_degeneracy <- function(proj, condition = NULL,
       (1 + sum(sim_rand >= sim_obs)) / (length(sim_rand) + 1)
     } else NA_real_
 
-    tj <- length(intersect(ct$uniprot_id[ct$compound_id == a],
-                           ct$uniprot_id[ct$compound_id == b])) /
-          length(union(ct$uniprot_id[ct$compound_id == a],
-                       ct$uniprot_id[ct$compound_id == b]))
+    tj <- length(intersect(target_sets[[a]], target_sets[[b]])) /
+          length(union(target_sets[[a]], target_sets[[b]]))
     deg <- if (is.na(sim_obs)) NA_real_ else sim_obs * (1 - tj)
 
     pair_rows[[i]] <- data.frame(
       condition = cond, compound_a = a, compound_b = b,
-      n_targets_a = length(ct$uniprot_id[ct$compound_id == a]),
-      n_targets_b = length(ct$uniprot_id[ct$compound_id == b]),
+      n_targets_a = length(target_sets[[a]]),
+      n_targets_b = length(target_sets[[b]]),
       n_genes_a_mapped = length(ea_all), n_genes_b_mapped = length(eb_all),
       n_pathways_a = NA_integer_, n_pathways_b = NA_integer_,
       target_jaccard = tj, functional_similarity = sim_obs,
@@ -553,6 +564,85 @@ network_degeneracy <- function(proj, condition = NULL,
   list(rows = out, proj = proj)
 }
 
+## Compile the invariant bin/slot lookup once per compound. The sample.int
+## calls, including the replacement fallback, match .network_resample_matched_idx.
+.network_degeneracy_sampler <- function(idx, bins, bin_of_node) {
+  slots <- split(seq_along(idx), bin_of_node[idx])
+  pools <- bins[as.integer(names(slots))]
+  n <- length(idx)
+  function() {
+    out <- integer(n)
+    for (b in seq_along(slots)) {
+      k <- length(slots[[b]])
+      pool <- pools[[b]]
+      out[slots[[b]]] <- pool[sample.int(length(pool), k, replace = k > length(pool))]
+    }
+    out
+  }
+}
+
+## For each GO term, cache its best match to each gene's annotations.
+## Keep both directions: NA handling must also work for asymmetric matrices.
+## This is O(terms * genes) storage, independent of the number of permutations.
+.network_go_gene_maxima <- function(gene_terms, sim_mat) {
+  forward <- reverse <- matrix(-Inf, nrow(sim_mat), length(gene_terms))
+  for (g in seq_along(gene_terms)) {
+    for (t in gene_terms[[g]]) {
+      forward[, g] <- pmax(forward[, g], sim_mat[, t], na.rm = TRUE)
+      reverse[, g] <- pmax(reverse[, g], sim_mat[t, ], na.rm = TRUE)
+    }
+  }
+  list(forward = forward, reverse = reverse)
+}
+
+## Vectorize best matches over a batch of draws. Terms retain their original
+## order and multiplicity, including annotations shared by different genes.
+.network_go_draw_maxima <- function(terms, genes, maxima) {
+  sizes <- lengths(terms)
+  owner <- rep.int(seq_along(terms), sizes)
+  term_ids <- unlist(terms, use.names = FALSE)
+  best <- rep(-Inf, length(term_ids))
+  for (k in seq_len(max(c(0L, lengths(genes))))) {
+    gene_ids <- vapply(genes, function(g) g[k], integer(1))
+    best <- pmax(best, maxima[cbind(term_ids, gene_ids[owner])], na.rm = TRUE)
+  }
+  split(best, factor(owner, levels = seq_along(terms)))
+}
+
+.network_go_gene_scores <- function(a, b, gene_terms, sim_mat, maxima, combine) {
+  out <- numeric(length(a))
+  ## Bound temporary vectors even for large n_random and heavily annotated sets.
+  for (start in seq.int(1L, length(a), by = 64L)) {
+    ix <- seq.int(start, min(length(a), start + 63L))
+    ta <- lapply(a[ix], function(g) unlist(gene_terms[g], use.names = FALSE))
+    tb <- lapply(b[ix], function(g) unlist(gene_terms[g], use.names = FALSE))
+    if (combine == "avg") {
+      ## Keep mean()'s accumulation order exactly, including rounding-boundary
+      ## cases. Sums of pre-aggregated gene-pair means can change the last bit.
+      out[ix] <- vapply(seq_along(ix), function(j) {
+        .network_go_bma(ta[[j]], tb[[j]], sim_mat, combine, check = FALSE)
+      }, numeric(1))
+      next
+    }
+    r <- .network_go_draw_maxima(ta, b[ix], maxima$forward)
+    c <- .network_go_draw_maxima(tb, a[ix], maxima$reverse)
+    out[ix] <- vapply(seq_along(ix), function(j) {
+      rr <- r[[j]][r[[j]] != -Inf]
+      cc <- c[[j]][c[[j]] != -Inf]
+      if (!length(rr) || !length(cc)) return(NA_real_)
+      score <- if (combine == "max" || length(rr) == 1L || length(cc) == 1L) {
+        max(rr, cc)
+      } else if (combine == "rcmax") {
+        max(mean(rr), mean(cc))
+      } else {
+        sum(rr, cc) / (length(rr) + length(cc))
+      }
+      round(score, 3)
+    }, numeric(1))
+  }
+  out
+}
+
 #' `annotation = "enriched"` / `"jaccard"` core for one condition.
 #' Returns `list(rows, proj, n_skipped)`.
 #' @keywords internal
@@ -566,6 +656,15 @@ network_degeneracy <- function(proj, condition = NULL,
   }
   target_sets <- split(ct$uniprot_id, ct$compound_id)
   pathway_sets <- split(cp$pathway_id, cp$compound_id)
+  go_sets <- lapply(pathway_sets, function(p) unique(p[grepl("^GO:", p)]))
+  go_sim <- NULL
+  if (annotation == "enriched" && sum(lengths(go_sets) > 0L) >= 2L) {
+    terms <- unique(unlist(go_sets, use.names = FALSE))
+    go_sim <- GOSemSim::termSim(terms, terms, semData = sem_data, method = measure)
+    if (is.null(dim(go_sim))) {
+      go_sim <- matrix(go_sim, length(terms), length(terms), dimnames = list(terms, terms))
+    }
+  }
 
   if (annotation == "enriched" && nrow(cp) > 0 && !any(grepl("^GO:", cp$pathway_id))) {
     cli::cli_warn(c(
@@ -595,10 +694,10 @@ network_degeneracy <- function(proj, condition = NULL,
       length(intersect(pa, pb)) / length(union(pa, pb))
     } else {
       ## enriched: GO semantic similarity over the enriched-term sets
-      go_a <- unique(pa[grepl("^GO:", pa)])
-      go_b <- unique(pb[grepl("^GO:", pb)])
+      go_a <- go_sets[[a]]
+      go_b <- go_sets[[b]]
       if (length(go_a) == 0 || length(go_b) == 0) NA_real_
-      else GOSemSim::mgoSim(go_a, go_b, semData = sem_data, measure = measure, combine = combine)
+      else round(GOSemSim::combineScores(go_sim[go_a, go_b, drop = FALSE], combine), 3)
     }
     deg <- if (is.na(fs)) NA_real_ else fs * (1 - target_jaccard)
 

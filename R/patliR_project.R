@@ -136,6 +136,7 @@ patliR_load <- function(project_dir, cache_dir = NULL) {
 #' @keywords internal
 .patliR_results_colclasses <- c(
   string_version = "character",
+  version        = "character",   # network_bowtie_summary: STRING release "11.0"
   condition      = "character"
 )
 

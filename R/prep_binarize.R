@@ -163,8 +163,13 @@ prep_binarize <- function(proj, data, id_col = "Name",
     )
   }
 
-  matrixRaw(proj)      <- matrix_raw
-  binarizedMatrix(proj) <- binarized
+  ## set both slots together: the validity check requires matrix_raw and
+  ## binarized to carry the same condition columns at all times, so
+  ## assigning them one after the other fails when the project already has
+  ## a different condition set (e.g. a condition added by prep_as_condition()).
+  proj@matrix_raw <- matrix_raw
+  proj@binarized <- binarized
+  methods::validObject(proj)
   projectLog(proj) <- rbind(projectLog(proj), do.call(rbind, log_rows))
 
   .write_step_csv(proj, "02_matrix_raw.csv", matrix_raw)

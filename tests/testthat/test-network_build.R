@@ -361,3 +361,15 @@ test_that(".network_upsert() back-fills a purely-added column as NA on pre-exist
   expect_equal(out$z[out$condition == "X"], -2.0)
   expect_type(out$n_overlap, "integer")
 })
+
+test_that("a STRING release column named `version` survives a results CSV round-trip as character", {
+  expect_identical(unname(patliR:::.patliR_results_colclasses[["version"]]), "character")
+  proj <- .test_project()
+  dir.create(file.path(projectDir(proj), "results"), showWarnings = FALSE)
+  utils::write.csv(
+    data.frame(species = 9606, version = "11.0", n_nodes = 10L, stringsAsFactors = FALSE),
+    file.path(projectDir(proj), "results", "network_bowtie_summary.csv"), row.names = FALSE
+  )
+  got <- patliRResults(patliR_load(projectDir(proj)), "network_bowtie_summary")
+  expect_identical(got$version, "11.0")
+})

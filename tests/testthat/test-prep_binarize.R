@@ -132,3 +132,16 @@ test_that("prep_binarize() validates min_replicates", {
   expect_error(prep_binarize(proj, dat, min_replicates = 0))
   expect_error(prep_binarize(proj, dat, min_replicates = 1.5))
 })
+
+test_that("prep_binarize() can be re-run on a project that already has an extra condition", {
+  proj <- .test_project()
+  dat <- data.frame(Name = c("a", "b", "c"), `R1-A` = c(5, 0, 3), `R2-A` = c(6, 0, 2), check.names = FALSE)
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+  proj <- prep_as_condition(proj, condition = "EXTRA")
+  expect_true("EXTRA" %in% names(binarizedMatrix(proj)))
+
+  ## used to abort with "matrix_raw and binarized must have the same condition columns"
+  proj2 <- prep_binarize(proj, dat, min_replicates = 2)
+  expect_setequal(names(binarizedMatrix(proj2))[-1], "A")
+  expect_setequal(names(matrixRaw(proj2))[-1], "A")
+})

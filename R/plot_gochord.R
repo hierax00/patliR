@@ -1,4 +1,4 @@
-#' @include AllGenerics.R internal.R network_enrich.R
+#' @include AllGenerics.R internal.R network_enrich.R plot-helpers.R
 NULL
 
 ## Uses GOplot::GOChord() for the ribbon geometry. Called with `nlfc = 0`
@@ -40,12 +40,22 @@ NULL
 #'   `top_n_genes` genes shared by the most of the drawn terms are kept
 #'   (ties broken alphabetically); terms left without genes are dropped.
 #'   Use `Inf` to draw every gene.
+#' @param palette Ribbon/term colours. `"contrast"` (default): a
+#'   colour-blind-safe qualitative palette (Okabe-Ito / Tol) ordered so
+#'   neighbouring terms never look alike (`GOplot`'s own
+#'   [grDevices::rainbow()] ramp makes adjacent terms nearly identical).
+#'   `"grey"`: greys alternating dark/light, for black-and-white print.
+#'   `"default"`: `GOplot`'s rainbow. Ribbons keep their dark outline in
+#'   every palette. See `.plot_contrast_palette()`.
 #' @param engine `"static"` (default) or `"ggiraph"`, save/out_dir/width/
 #'   height/dpi -- same as [plot_network_layers()].
 #'
 #' @return A `ggplot` object or `girafe` htmlwidget. If `save = TRUE`
 #'   (default), also writes a PNG and logs it to
-#'   `patliRResults(proj, "gochord_plot_log")`.
+#'   `patliRResults(proj, "gochord_plot_log")` (keyed by condition, `db` and
+#'   `palette`; file `gochord_<condition>_<db>.png`, with a `_grey` /
+#'   `_rainbow` suffix for the other palettes so they never overwrite the
+#'   default figure).
 #'
 #' @examples
 #' \dontrun{
@@ -71,11 +81,13 @@ NULL
 #'
 #' @export
 plot_gochord <- function(proj, condition = NULL, db = NULL, top_n_terms = 10, top_n_genes = 40,
+                          palette = c("contrast", "grey", "default"),
                           engine = c("static", "ggiraph"), save = TRUE, out_dir = NULL,
                           width = 14, height = 14, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
   stopifnot(is.numeric(top_n_terms), length(top_n_terms) == 1, top_n_terms >= 1)
   stopifnot(is.numeric(top_n_genes), length(top_n_genes) == 1, top_n_genes >= 1)
+  palette <- match.arg(palette)
   engine <- match.arg(engine)
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
     cli::cli_abort("The {.pkg ggplot2} package is required for {.fn plot_gochord}.")
@@ -129,19 +141,39 @@ plot_gochord <- function(proj, condition = NULL, db = NULL, top_n_terms = 10, to
   }
   colnames(chord_matrix) <- .plot_wrap(colnames(chord_matrix), width = 45)  # keep the legend inside the canvas
 
+  ## one distinct colour per drawn term (GOChord() indexes ribbon.col by
+  ## column and builds its legend from unique() of the colours, so they
+  ## must be distinct and exactly ncol() long)
+  ribbon_cols <- .plot_contrast_palette(ncol(chord_matrix), palette)
   p <- GOplot::GOChord(
     chord_matrix,
     title = paste0("Gene-term membership -- ", cond, " (", enr$db[1], ")"),
-    nlfc = 0
+    nlfc = 0,
+    ribbon.col = ribbon_cols
   )
+  ## Legend: the same colours as the ribbons, a title that names the
+  ## database (GOChord() always says "GO Terms"), and no stray "shape NA"
+  ## key from GOChord()'s invisible label points.
+  if (inherits(p, "ggplot")) {
+    p <- p + ggplot2::guides(
+      shape = "none",
+      size = ggplot2::guide_legend(
+        .gochord_legend_title(enr$db[1]), ncol = 4, byrow = TRUE,
+        override.aes = list(shape = 22, fill = ribbon_cols, colour = "black", size = 8)
+      )
+    )
+  }
 
   if (save) {
     if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")
     if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
-    path <- file.path(out_dir, paste0("gochord_", cond, "_", enr$db[1], ".png"))
+    path <- file.path(out_dir, .gochord_filename(cond, enr$db[1], palette))
     ggplot2::ggsave(path, p, width = width, height = height, dpi = dpi, bg = "white")
-    log_row <- data.frame(condition = cond, db = enr$db[1], path = path, n_terms = nrow(enr), stringsAsFactors = FALSE)
-    log_df <- .network_upsert(proj, "gochord_plot_log", log_row, c("condition", "db"))
+    log_row <- data.frame(condition = cond, db = enr$db[1], palette = palette, path = path,
+                          n_terms = nrow(enr), stringsAsFactors = FALSE)
+    ## logs written before `palette` existed hold the default figure's row
+    proj <- .plot_log_backfill(proj, "gochord_plot_log", "palette", "contrast")
+    log_df <- .network_upsert(proj, "gochord_plot_log", log_row, c("condition", "db", "palette"))
     patliRResults(proj, "gochord_plot_log") <- log_df
     .write_results_csv(proj, "gochord_plot_log", log_df)
   }
@@ -149,6 +181,23 @@ plot_gochord <- function(proj, condition = NULL, db = NULL, top_n_terms = 10, to
   result <- if (engine == "static") p else ggiraph::girafe(ggobj = p)
   if (save) attr(result, "proj") <- proj
   result
+}
+
+#' File name of a `plot_gochord()` figure: the default (`"contrast"`)
+#' palette keeps the historical name, the others get a suffix
+#' @keywords internal
+.gochord_filename <- function(cond, db, palette = "contrast") {
+  suffix <- switch(palette, contrast = "", grey = "_grey", default = "_rainbow", paste0("_", palette))
+  paste0("gochord_", cond, "_", db, suffix, ".png")
+}
+
+#' Legend title naming the enrichment database
+#' @keywords internal
+.gochord_legend_title <- function(db) {
+  switch(tolower(as.character(db)),
+    go = "GO terms", reactome = "Reactome pathways", kegg = "KEGG pathways",
+    paste0(db, " terms")
+  )
 }
 
 #' Entrez -> gene symbol lookup for `plot_gochord()`

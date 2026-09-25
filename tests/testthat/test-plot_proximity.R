@@ -145,3 +145,22 @@ test_that("plot_proximity(view = 'z') builds with several disease panels (refere
   expect_no_error(ggplot2::ggplot_gtable(ggplot2::ggplot_build(p)))
   expect_s3_class(p$facet, "FacetGrid")
 })
+
+test_that("plot_proximity(view = 'z') prints z beside every significant compound and names the disease", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(condition = "A", compound_id = paste0("c", 1:4), uniprot_id = "t1")
+  patliRResults(proj, "disease_genes") <- data.frame(disease_id = "MONDO_1", disease_name = "hypertensive disorder", uniprot_id = "P1")
+  patliRResults(proj, "network_proximity") <- data.frame(
+    condition = "A", compound_id = paste0("c", 1:4), disease_id = "MONDO_1",
+    d_observed = 1, d_random_mean = 1.1, d_random_sd = 0.03, z_score = c(-4.2, -2.5, -1, 2.1),
+    stringsAsFactors = FALSE
+  )
+  p <- plot_proximity(proj, condition = "A", save = FALSE)
+  txt <- Filter(function(l) inherits(l$geom, "GeomText"), p$layers)
+  expect_length(txt, 1)
+  expect_setequal(as.character(txt[[1]]$data$compound_id), c("c1", "c2", "c4"))
+  expect_setequal(txt[[1]]$data$z_text, c("-4.20", "-2.50", "2.10"))
+  expect_match(p$labels$subtitle, "hypertensive disorder (MONDO_1)", fixed = TRUE)
+  expect_no_error(ggplot2::ggplot_build(p))
+})

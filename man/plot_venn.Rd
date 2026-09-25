@@ -9,6 +9,7 @@ plot_venn(
   condition = NULL,
   disease = NULL,
   sets = c("compound_targets", "disease_targets"),
+  label_top = 15,
   save = TRUE,
   out_dir = NULL,
   width = 6,
@@ -35,6 +36,15 @@ and the only supported value) -- kept as an explicit argument, not
 hardcoded, so a third set (e.g. STRING bowtie core membership) can be
 added later without changing the function's contract.}
 
+\item{label_top}{Integer, default \code{15}. Names the \code{label_top} shared
+targets (in both sets) hit by the most compounds in scope, as a
+ranked list beside the diagram with each target's compound count
+(gene symbols when \code{clusterProfiler} + \code{org.Hs.eg.db} are installed,
+UniProt IDs otherwise). \code{0} draws the bare diagram. The list needs the
+\code{patchwork} package; without it the names go into the caption. When
+\code{width} is not given, a labeled figure is saved 9 inches wide instead
+of 6.}
+
 \item{save}{Logical, default \code{TRUE}. Whether to also write the plot to
 disk (in addition to returning it).}
 
@@ -49,8 +59,13 @@ to \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}.}
 }
 \value{
 A \code{ggplot} object (\code{ggVennDiagram} builds on \code{ggplot2}, no
-separate \code{engine} argument). If \code{save = TRUE} (default), also writes
-a PNG and logs it to \code{patliRResults(proj, "venn_plot_log")}.
+separate \code{engine} argument; a \code{patchwork} -- also a \code{ggplot} -- when
+the shared-target list is drawn). \code{attr(., "shared_targets")} holds
+every shared target (\code{target_id}, \code{label}, \code{n_compounds}), ranked.
+The disease name (from \code{\link[=disease_genes_fetch]{disease_genes_fetch()}} /
+\code{\link[=targets_disease_profile]{targets_disease_profile()}}) is shown next to its ID when available. If
+\code{save = TRUE} (default), also writes a PNG and logs it to
+\code{patliRResults(proj, "venn_plot_log")}.
 }
 \description{
 Two-set overlap: \code{"compound_targets"} (every UniProt ID any compound

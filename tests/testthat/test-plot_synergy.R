@@ -164,3 +164,42 @@ test_that("plot_synergy() draws the P2 quadrant name and its count as separate s
   expect_true(any(grepl("n = 1 P2 pair", labels, fixed = TRUE)))
   expect_false(any(grepl("\n", labels, fixed = TRUE)))
 })
+
+test_that(".synergy_label_rows() labels P2 pairs, or the pairs nearest to P2 when a panel has none", {
+  dat <- data.frame(
+    panel = c("A", "A", "A", "B", "B", "B"),
+    is_p2 = c(TRUE, TRUE, FALSE, FALSE, FALSE, FALSE),
+    synergy_score = c(0.2, NA, NA, NA, NA, NA),
+    s_ab = c(0.5, 0.4, -0.1, -0.2, -0.6, 0.3),
+    za_plot = c(-3, -2, -1, -4, -3, 0.5), zb_plot = c(-1, -1, -0.5, -2, -1, 1),
+    stringsAsFactors = FALSE
+  )
+  out <- patliR:::.synergy_label_rows(dat, 5)
+  expect_identical(out$label_kind[out$panel == "A"], c("P2", "P2"))
+  expect_equal(out$synergy_score[out$panel == "A"][1], 0.2)
+  ## panel B: no P2 -> both-proximal pairs only (z < 0), highest s_AB first
+  b <- out[out$panel == "B", ]
+  expect_identical(b$label_kind, c("nearest", "nearest"))
+  expect_equal(b$s_ab, c(-0.2, -0.6))
+  expect_equal(nrow(patliR:::.synergy_label_rows(dat, 1)), 2L)
+  expect_equal(nrow(patliR:::.synergy_label_rows(dat, 0)), 0L)
+})
+
+test_that("plot_synergy() shows the disease name and reports unlabeled P2 pairs", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(condition = "A", compound_id = "c1", uniprot_id = "t1")
+  patliRResults(proj, "disease_genes") <- data.frame(disease_id = "d1", disease_name = "test disorder", uniprot_id = "P1")
+  patliRResults(proj, "network_synergy") <- data.frame(
+    condition = "A", disease_id = "d1", compound_a = c("c1", "c2", "c1"), compound_b = c("c2", "c3", "c3"),
+    z_score_a = c(-3, -1, -2), z_score_b = c(-2, -4, -2.5), s_ab = c(0.5, 0.2, 0.3), separated = TRUE,
+    cheng_class = "P2", synergy_score = c(1, 2, 3), stringsAsFactors = FALSE
+  )
+  testthat::local_mocked_bindings(
+    .synergy_finish_both = function(proj, p_main, p_sab, ...) list(main = p_main, sab = p_sab),
+    .package = "patliR"
+  )
+  expect_message(plots <- plot_synergy(proj, condition = "A", top_n = 2, save = FALSE), "not labeled")
+  expect_match(plots$main$labels$subtitle, "test disorder (d1)", fixed = TRUE)
+  expect_match(plots$sab$labels$subtitle, "test disorder (d1)", fixed = TRUE)
+})

@@ -167,3 +167,29 @@ test_that("plot_rank(view = 'pareto') draws shortened front-1 labels with x head
   expect_identical(lab$compound_label, long_id)
   expect_equal(p$scales$get_scales("x")$expand, ggplot2::expansion(mult = 0.12))
 })
+
+test_that("plot_rank(view = 'pareto') names every front-1 compound, or all / none on request", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .test_project()
+  ids <- paste0("c", 1:5)
+  patliRResults(proj, "network_edges") <- data.frame(condition = "A", compound_id = ids, uniprot_id = "t1", weight = 1)
+  patliRResults(proj, "rank_candidates") <- data.frame(
+    condition = "A", compound_id = ids, rra_rank = 1:5, pareto_front = c(1L, 1L, 2L, 1L, NA),
+    crit_centrality = c(0.9, 0.1, 0.5, 0.3, 0.2), stringsAsFactors = FALSE
+  )
+  text_data <- function(p) {
+    l <- Filter(function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")), p$layers)
+    if (length(l) == 0) NULL else l[[1]]$data
+  }
+  expect_setequal(text_data(plot_rank(proj, condition = "A", save = FALSE))$compound_id, c("c1", "c2", "c4"))
+  expect_setequal(text_data(plot_rank(proj, condition = "A", label = "all", save = FALSE))$compound_id, ids)
+  expect_null(text_data(plot_rank(proj, condition = "A", label = "none", save = FALSE)))
+  expect_error(plot_rank(proj, condition = "A", label = "top", save = FALSE))
+
+  ## a non-default label set is saved and logged separately
+  p1 <- plot_rank(proj, condition = "A", save = TRUE, width = 3, height = 3)
+  p2 <- plot_rank(attr(p1, "proj"), condition = "A", label = "all", save = TRUE, width = 3, height = 3)
+  log <- patliRResults(attr(p2, "proj"), "rank_plot_log")
+  expect_setequal(log$label, c("front", "all"))
+  expect_setequal(basename(log$path), c("rank_pareto_A.png", "rank_pareto_A_labels_all.png"))
+})

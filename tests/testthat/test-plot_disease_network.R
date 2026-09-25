@@ -152,8 +152,40 @@ test_that("plot_disease_network() labels only the top_n_labels diseases with the
   patliRResults(proj, "targets_disease_profile") <- profile
   p <- plot_disease_network(proj, condition = "FLO-ET", top_n_labels = 2, save = FALSE)
   lab <- Filter(function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")), p$layers)[[1]]$data
-  expect_setequal(lab$id, c("D1", "D2"))
-  p0 <- plot_disease_network(proj, condition = "FLO-ET", top_n_labels = 0, save = FALSE)
-  lab0 <- Filter(function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")), p0$layers)[[1]]$data
-  expect_equal(nrow(lab0), 0)
+  expect_setequal(lab$id[lab$layer == "disease"], c("D1", "D2"))
+  p0 <- plot_disease_network(proj, condition = "FLO-ET", top_n_labels = 0, top_n_targets = 0,
+                             label_compounds = FALSE, save = FALSE)
+  lab0 <- Filter(function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")), p0$layers)
+  expect_length(lab0, 0)
+})
+
+test_that(".disease_network_top_targets() ranks by compounds hitting the target, then association score", {
+  ct <- data.frame(compound_id = c("c1", "c2", "c3", "c1", "c2", "c1", "c3"),
+                   uniprot_id = c("T1", "T1", "T1", "T2", "T2", "T3", "T4"), stringsAsFactors = FALSE)
+  td <- data.frame(target_id = c("T1", "T2", "T3", "T4"), association_score = c(0.1, 0.2, 0.3, 0.9),
+                   stringsAsFactors = FALSE)
+  expect_identical(patliR:::.disease_network_top_targets(ct, td, 10), c("T1", "T2", "T4", "T3"))
+  expect_identical(patliR:::.disease_network_top_targets(ct, td, 2), c("T1", "T2"))
+  expect_identical(patliR:::.disease_network_top_targets(ct, td, 0), character(0))
+})
+
+test_that("plot_disease_network() labels diseases, the top targets and the compounds", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .network_stats_test_setup()
+  edges <- patliRResults(proj, "network_edges")
+  flo <- edges[edges$condition == "FLO-ET", , drop = FALSE]
+  targets <- unique(flo$uniprot_id)
+  testthat::skip_if(length(targets) < 3, "fixture needs at least 3 FLO-ET targets")
+  cmp <- flo$compound_id[match(targets[1:3], flo$uniprot_id)]
+  patliRResults(proj, "targets_disease_profile") <- .disease_network_fake_profile(cmp, targets[1:3], disease_id = "D1",
+                                                                                 disease_name = "Named disease")
+  p <- plot_disease_network(proj, condition = "FLO-ET", top_n_targets = 2, save = FALSE)
+  lab <- Filter(function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")), p$layers)[[1]]$data
+  expect_equal(sum(lab$layer == "target"), 2)
+  expect_setequal(lab$id[lab$layer == "compound"], unique(cmp))
+  expect_identical(lab$short_label[lab$layer == "disease"], "Named disease")
+  expect_match(p$labels$subtitle, "Named disease (D1)", fixed = TRUE)
+
+  expect_error(plot_disease_network(proj, condition = "FLO-ET", top_n_targets = -1, save = FALSE), "top_n_targets")
+  expect_error(plot_disease_network(proj, condition = "FLO-ET", label_compounds = NA, save = FALSE), "label_compounds")
 })

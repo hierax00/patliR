@@ -80,3 +80,60 @@ test_that("plot_gochord() keeps only the top_n_genes most shared genes and wraps
   plot_gochord(proj, condition = "FLO-ET", top_n_genes = Inf, save = FALSE)
   expect_equal(nrow(seen), length(entrez))
 })
+
+test_that("plot_gochord() passes one distinct ribbon colour per term, in the chosen palette", {
+  testthat::skip_if_not_installed("ggplot2")
+  testthat::skip_if_not_installed("GOplot")
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(condition = "A", compound_id = "c1", uniprot_id = "t1", weight = 1)
+  patliRResults(proj, "network_enrichment") <- data.frame(
+    condition = "A", db = "reactome", Description = paste("term", 1:6), p.adjust = seq(0.001, 0.006, by = 0.001),
+    geneID = c("1/2", "2/3", "3/4", "4/5", "5/6", "6/1"), stringsAsFactors = FALSE
+  )
+  seen <- list()
+  testthat::local_mocked_bindings(
+    GOChord = function(data, ..., ribbon.col) { seen[[length(seen) + 1]] <<- list(n = ncol(data), col = ribbon.col); ggplot2::ggplot() },
+    .package = "GOplot"
+  )
+  testthat::local_mocked_bindings(.network_gochord_gene_labels = function(ids) stats::setNames(ids, ids), .package = "patliR")
+  for (pal in c("contrast", "grey", "default")) {
+    p <- plot_gochord(proj, condition = "A", palette = pal, save = TRUE, width = 2, height = 2)
+    proj <- attr(p, "proj")
+  }
+  expect_equal(vapply(seen, function(s) length(s$col), 1L), rep(6L, 3))
+  expect_true(all(vapply(seen, function(s) !anyDuplicated(s$col), logical(1))))
+  expect_identical(seen[[1]]$col, patliR:::.plot_contrast_palette(6, "contrast"))
+  grey <- grDevices::col2rgb(seen[[2]]$col)
+  expect_true(all(grey[1, ] == grey[3, ]))
+  expect_identical(seen[[3]]$col, grDevices::rainbow(6))
+
+  ## legend: database-specific title, no stray shape key
+  expect_identical(p$guides$guides$shape, "none")
+
+  log <- patliRResults(proj, "gochord_plot_log")
+  expect_setequal(log$palette, c("contrast", "grey", "default"))
+  expect_setequal(basename(log$path), c("gochord_A_reactome.png", "gochord_A_reactome_grey.png", "gochord_A_reactome_rainbow.png"))
+  expect_error(plot_gochord(proj, condition = "A", palette = "neon", save = FALSE))
+})
+
+test_that("gochord helpers: file names and legend titles", {
+  expect_identical(patliR:::.gochord_filename("EFLO-S", "go"), "gochord_EFLO-S_go.png")
+  expect_identical(patliR:::.gochord_filename("EFLO-S", "go", "grey"), "gochord_EFLO-S_go_grey.png")
+  expect_identical(patliR:::.gochord_legend_title("reactome"), "Reactome pathways")
+  expect_identical(patliR:::.gochord_legend_title("go"), "GO terms")
+})
+
+test_that("an old gochord log without a palette column is updated in place by the default figure", {
+  testthat::skip_if_not_installed("ggplot2")
+  testthat::skip_if_not_installed("GOplot")
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(condition = "A", compound_id = "c1", uniprot_id = "t1", weight = 1)
+  patliRResults(proj, "network_enrichment") <- data.frame(condition = "A", db = "go", Description = "term", p.adjust = 0.01, geneID = "1/2")
+  patliRResults(proj, "gochord_plot_log") <- data.frame(condition = "A", db = "go", path = "old.png", n_terms = 1)
+  testthat::local_mocked_bindings(GOChord = function(...) ggplot2::ggplot(), .package = "GOplot")
+  testthat::local_mocked_bindings(.network_gochord_gene_labels = function(ids) stats::setNames(ids, ids), .package = "patliR")
+  p <- plot_gochord(proj, condition = "A", width = 2, height = 2)
+  log <- patliRResults(attr(p, "proj"), "gochord_plot_log")
+  expect_equal(nrow(log), 1L)
+  expect_identical(log$palette, "contrast")
+})

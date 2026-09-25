@@ -11,7 +11,9 @@ family hulls -- every compound shown against all three axes at once}
   color_by,
   is_categorical,
   draw_hulls,
-  method
+  method,
+  label_rows = NULL,
+  label = "none"
 )
 }
 \description{

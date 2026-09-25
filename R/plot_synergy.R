@@ -46,7 +46,13 @@ NULL
 #' - **text labels** -- the `top_n` `P2` pairs with the highest
 #'   `synergy_score` (descending, `NA` last -- `synergy_score` is `NA` for
 #'   singleton-flagged `P2` pairs even though they are still classified
-#'   `P2`) are labeled by compound name, via [.plot_label_nodes()].
+#'   `P2`) are labeled by compound name (bold), via [.plot_label_nodes()].
+#'   A panel with no `P2` pair labels (italic) its `top_n` pairs nearest to
+#'   `P2` instead: both compounds proximal (`z < 0`), highest `s_AB`. A
+#'   message reports `P2` pairs left unlabeled by `top_n`.
+#' - **disease** -- named (from [disease_genes_fetch()] /
+#'   [targets_disease_profile()], ID in brackets) in the subtitle for a
+#'   single disease, in the panel strips otherwise.
 #'
 #' @section Requires `separation = "network"` results to show anything but grey:
 #' `cheng_class` / `s_ab` / `separated` are only non-`NA` when
@@ -81,6 +87,7 @@ NULL
 #'   panel. **Breaking change from patliR <= 0.1.x**: the old default was
 #'   `10`, chosen for the previous complementarity/joint_closeness scatter;
 #'   `5` keeps the new, much more selective `P2`-only label set legible.
+#'   A panel without `P2` pairs labels its `top_n` pairs nearest to `P2`.
 #' @param engine `"static"` (default) or `"ggiraph"`, save/out_dir/width/
 #'   height/dpi -- same as [plot_network_layers()].
 #'
@@ -154,7 +161,11 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
     }
   }
 
-  dat$panel <- paste(dat$condition, dat$disease_id, sep = " / ")
+  ## disease name, not only its ID, in the panel strips / subtitle
+  dat$disease_label <- .plot_disease_label(proj, dat$disease_id)
+  dat$panel <- paste(dat$condition, dat$disease_label, sep = " / ")
+  diseases <- unique(dat$disease_label)
+  disease_line <- if (length(diseases) == 1) paste0("Disease: ", diseases, "\n") else ""
 
   ## Companion panel: s_AB distribution across every pair in scope.
   n_sab <- sum(!is.na(dat$s_ab))
@@ -170,7 +181,7 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
       ggplot2::labs(
         title = paste0("s_AB distribution -- ", scope_label),
         subtitle = .plot_wrap(
-          "Menche et al. (2015) network separation across every scored pair; s_AB >= 0 (right of the red line) = topologically separated",
+          paste0(disease_line, "Menche et al. (2015) network separation across every scored pair; s_AB >= 0 (right of the red line) = topologically separated"),
           .plot_wrap_width(width, 7.5)
         ),
         x = "s_AB", y = "Pair count"
@@ -180,7 +191,7 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
         plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"),
         plot.title.position = "plot"
       )
-    if (length(unique(dat$panel)) > 1) ps <- ps + ggplot2::facet_wrap(~panel)
+    if (length(unique(dat$panel)) > 1) ps <- ps + ggplot2::facet_wrap(~panel, labeller = ggplot2::label_wrap_gen(40))
     ps
   }
 
@@ -227,7 +238,8 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
   label_b <- .plot_label_nodes(proj, conditions, dat$compound_b, "compound")
   dat$pair_label <- paste(label_a, "+", label_b)
   ## drawn labels shorten each name; the tooltip keeps pair_label in full
-  dat$short_label <- paste(.plot_truncate(label_a, 20), "+", .plot_truncate(label_b, 20))
+  ## (two lines: half as wide, so neighbouring pair labels can be repelled apart)
+  dat$short_label <- paste0(.plot_truncate(label_a, 20), "\n+ ", .plot_truncate(label_b, 20))
   dat$tooltip <- sprintf(
     "%s\nz_a=%.2f  z_b=%.2f\ns_ab=%s (%s)\nclass=%s",
     dat$pair_label, dat$za_plot, dat$zb_plot,
@@ -255,15 +267,16 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
   ann_p2$quadrant_label <- "  Complementary Exposure (P2) quadrant"
   ann_p2$count_label <- sprintf("  n = %d P2 pair%s", ann_p2$n_p2, ifelse(ann_p2$n_p2 == 1, "", "s"))
 
-  ## top_n P2 pairs by synergy_score (descending, NA last), per panel.
-  p2_rows <- dat[is_p2, , drop = FALSE]
-  top <- if (nrow(p2_rows) > 0 && top_n > 0) {
-    do.call(rbind, lapply(split(p2_rows, p2_rows$panel), function(d) {
-      d <- d[order(d$synergy_score, decreasing = TRUE, na.last = TRUE), , drop = FALSE]
-      utils::head(d, top_n)
-    }))
-  } else {
-    p2_rows[FALSE, , drop = FALSE]
+  ## top_n P2 pairs by synergy_score (descending, NA last), per panel; a
+  ## panel without any P2 pair labels its top_n pairs nearest to P2 instead
+  ## (see .synergy_label_rows()).
+  top <- .synergy_label_rows(dat, top_n)
+  n_p2_total <- sum(is_p2)
+  n_p2_labeled <- sum(top$label_kind == "P2")
+  if (n_p2_total > n_p2_labeled) {
+    cli::cli_inform(c(
+      "i" = "{n_p2_total - n_p2_labeled} of {n_p2_total} P2 pair{?s} not labeled ({.code top_n = {top_n}} per panel, by synergy_score); raise {.arg top_n} to name them all."
+    ))
   }
 
   shape_values <- c(P1 = 16, P2 = 17, P3 = 15, P4 = 18, P5 = 3, P6 = 4)
@@ -289,9 +302,12 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
   if (nrow(top) > 0) {
     p <- p + .plot_text_layer(
       data = top, mapping = ggplot2::aes(x = .data$za_plot, y = .data$zb_plot, label = .data$short_label),
-      size = 2.6, colour = "grey15", inherit.aes = FALSE, show.legend = FALSE,
-      repel_args = list(box.padding = 0.3, min.segment.length = 0.2, segment.colour = "grey60",
-                        max.overlaps = Inf, seed = 1),
+      size = 2.5, lineheight = 0.9, inherit.aes = FALSE, show.legend = FALSE,
+      colour = ifelse(top$label_kind == "P2", "grey10", "grey30"),
+      fontface = ifelse(top$label_kind == "P2", "bold", "italic"),
+      repel_args = list(box.padding = 0.35, min.segment.length = 0, segment.colour = "grey50",
+                        segment.size = 0.25, force = 2, max.time = 2,
+                        bg.colour = "white", bg.r = 0.12, max.overlaps = Inf, seed = 1),
       text_args = list(vjust = -1)
     )
   }
@@ -321,8 +337,11 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
     ggplot2::labs(
       title = paste0("Compound pair Cheng classification -- ", scope_label),
       subtitle = .plot_wrap(paste0(
+        disease_line,
         "x = z_score (more proximal compound), y = z_score (less proximal); shaded region = both individually proximal (z < 0);\n",
-        "colour = separated (s_AB >= 0, Menche et al. 2015); shape = Cheng class P1-P6 (Cheng, Kovacs & Barabasi 2019); size = |s_AB|"
+        "colour = separated (s_AB >= 0, Menche et al. 2015); shape = Cheng class P1-P6 (Cheng, Kovacs & Barabasi 2019); size = |s_AB|",
+        if (any(top$label_kind == "P2")) "\nbold labels = P2 (Complementary Exposure) pairs, highest synergy_score" else "",
+        if (any(top$label_kind == "nearest")) "\nitalic labels = no P2 pair in the panel: the both-proximal pairs nearest to separation (highest s_AB)" else ""
       ), .plot_wrap_width(width, 7.5)),
       x = "z_score (more proximal compound of the pair)",
       y = "z_score (less proximal compound of the pair)"
@@ -332,9 +351,44 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
       plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"),
       plot.title.position = "plot"
     )
-  if (length(unique(dat$panel)) > 1) p <- p + ggplot2::facet_wrap(~panel)
+  if (length(unique(dat$panel)) > 1) p <- p + ggplot2::facet_wrap(~panel, labeller = ggplot2::label_wrap_gen(40))
 
   .synergy_finish_both(proj, p, p_sab, scope_label, engine, save, out_dir, width, height, dpi)
+}
+
+#' Pairs to label in `plot_synergy()`
+#'
+#' @description
+#' Per panel: the `top_n` `P2` (Complementary Exposure) pairs by
+#' `synergy_score` (descending, `NA` last), `label_kind = "P2"`. A panel
+#' with no `P2` pair at all instead labels its `top_n` pairs nearest to
+#' `P2` -- both compounds individually proximal (`z < 0`) and the highest
+#' `s_ab` (closest to topological separation) -- as `label_kind =
+#' "nearest"`, so the figure still names the most relevant pairs.
+#' @param dat Plot data with `panel`, `is_p2`, `synergy_score`, `s_ab`,
+#'   `za_plot`, `zb_plot`.
+#' @param top_n Pairs per panel; `0` labels nothing.
+#' @return Subset of `dat` with a `label_kind` column.
+#' @keywords internal
+.synergy_label_rows <- function(dat, top_n) {
+  empty <- dat[FALSE, , drop = FALSE]
+  empty$label_kind <- character(0)
+  if (top_n <= 0 || nrow(dat) == 0) return(empty)
+  out <- lapply(split(dat, dat$panel), function(d) {
+    p2 <- d[d$is_p2, , drop = FALSE]
+    if (nrow(p2) > 0) {
+      p2 <- p2[order(p2$synergy_score, decreasing = TRUE, na.last = TRUE), , drop = FALSE]
+      p2 <- utils::head(p2, top_n)
+      p2$label_kind <- rep("P2", nrow(p2))
+      return(p2)
+    }
+    near <- d[!is.na(d$s_ab) & !is.na(d$za_plot) & !is.na(d$zb_plot) & d$za_plot < 0 & d$zb_plot < 0, , drop = FALSE]
+    near <- utils::head(near[order(-near$s_ab, near$za_plot + near$zb_plot), , drop = FALSE], top_n)
+    near$label_kind <- rep("nearest", nrow(near))
+    near
+  })
+  out <- do.call(rbind, out)
+  if (is.null(out)) empty else out
 }
 
 #' A self-explanatory empty panel for `plot_synergy()`'s two figures

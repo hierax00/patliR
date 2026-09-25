@@ -24,6 +24,10 @@ NULL
 #' the compound's targets sit significantly *closer* to the disease module
 #' than the degree-matched null model, i.e. topologically meaningful
 #' proximity, which is what [network_proximity()] is actually testing for.
+#' Every compound is named on the axis, and each significant one also
+#' carries its `z` value beside the point. Diseases are shown by name
+#' (from [disease_genes_fetch()] / [targets_disease_profile()]) with the ID
+#' in brackets, in the subtitle (single disease) or the panel strips.
 #'
 #' `view = "null"`: the literal permutation-histogram figure (Guney et al.
 #' 2016 Fig. 1; Menche et al. 2015 SI) -- one facet per `(condition,
@@ -157,7 +161,10 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
   dat$compound_id <- factor(dat$compound_id, levels = unique(dat$compound_id))
   label_lookup <- stats::setNames(dat$label, dat$compound_id)
   dat$significant <- abs(dat$z_score) >= 1.96
-  dat$panel <- paste(dat$condition, dat$disease_id, sep = " / ")
+  ## disease name, not only its ID, wherever the disease is named
+  dat$disease_label <- .plot_disease_label(proj, dat$disease_id)
+  dat$panel <- paste(dat$condition, dat$disease_label, sep = " / ")
+  dat$z_text <- sprintf("%.2f", dat$z_score)
   dat$tooltip <- sprintf("%s\nz = %.2f (d_obs = %.2f, null = %.2f +/- %.2f)", dat$label, dat$z_score, dat$d_observed, dat$d_random_mean, dat$d_random_sd)
 
   p <- ggplot2::ggplot(dat, ggplot2::aes(x = .data$compound_id, y = .data$z_score, colour = .data$significant)) +
@@ -175,6 +182,20 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
   } else {
     ggplot2::geom_point(size = 2.5)
   }
+  ## every significant compound is named on the axis; its z value is
+  ## printed beside the point, on the outer side of the lollipop
+  sig <- dat[dat$significant, , drop = FALSE]
+  if (nrow(sig) > 0) {
+    sig$hjust <- ifelse(sig$z_score < 0, 1.35, -0.35)
+    p <- p + ggplot2::geom_text(
+      data = sig, ggplot2::aes(x = .data$compound_id, y = .data$z_score, label = .data$z_text, hjust = .data$hjust),
+      size = 2.5, colour = "#922b21", inherit.aes = FALSE, show.legend = FALSE
+    )
+    ## room for the printed value beyond the most extreme points
+    span <- diff(range(c(dat$z_score, -1.96, 1.96)))
+    p <- p + ggplot2::expand_limits(y = c(min(dat$z_score) - 0.2 * span, max(dat$z_score, 1.96) + 0.2 * span * any(sig$z_score > 0)))
+  }
+  diseases <- unique(dat$disease_label)
   p <- p +
     ggplot2::coord_flip() +
     ggplot2::scale_x_discrete(labels = label_lookup) +
@@ -182,7 +203,11 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
     ggplot2::labs(
       title = paste0("Network proximity z-scores -- ", scope_label),
       subtitle = .plot_wrap(
-        "More negative = targets significantly closer to the disease module than the degree-matched null model",
+        paste0(
+          if (length(diseases) == 1) paste0("Disease: ", diseases, "\n") else "",
+          "More negative = targets significantly closer to the disease module than the degree-matched null model; ",
+          "numbers = z of the significant compounds"
+        ),
         .plot_wrap_width(width, 8)
       ),
       x = NULL, y = "z-score"
@@ -279,8 +304,11 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
   dat_null$facet <- main_scope$facet[match(
     paste(dat_null$condition, dat_null$disease_id, dat_null$compound_id, sep = "\r"), keep_key
   )]
+  main_scope$disease_label <- .plot_disease_label(proj, main_scope$disease_id, with_id = FALSE)
+  diseases <- unique(.plot_disease_label(proj, main_scope$disease_id))
   facet_labels <- stats::setNames(
-    paste0(.plot_truncate(main_scope$label, 32), "\n(",main_scope$condition, " / ", main_scope$disease_id, ")"), main_scope$facet
+    paste0(.plot_truncate(main_scope$label, 32), "\n(", main_scope$condition, " / ",
+           .plot_truncate(main_scope$disease_label, 28), ")"), main_scope$facet
   )
 
   ## p_adjusted may be all-NA (or absent, on a legacy/fabricated table) --
@@ -302,7 +330,10 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
     ggplot2::labs(
       title = paste0("Network proximity null distributions -- ", scope_label),
       subtitle = .plot_wrap(
-        "Degree-preserving null resamples (network_proximity(store_null = TRUE)); red line = d_observed (Guney et al. 2016 Fig. 1)",
+        paste0(
+          if (length(diseases) == 1) paste0("Disease: ", diseases, "\n") else "",
+          "Degree-preserving null resamples (network_proximity(store_null = TRUE)); red line = d_observed (Guney et al. 2016 Fig. 1)"
+        ),
         .plot_wrap_width(width, 8)
       ),
       x = "d_random (null draw)", y = "Count"

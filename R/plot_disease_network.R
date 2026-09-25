@@ -44,6 +44,13 @@ NULL
 #' @param top_n_labels Integer, default `25`: only this many disease nodes
 #'   -- those with the most associated targets -- get a text label (full
 #'   names stay in the `ggiraph` tooltips). `0` draws no label.
+#' @param top_n_targets Integer, default `15`: the targets hit by the most
+#'   compounds in the figure (ties broken by their highest disease
+#'   association score) get a text label (gene symbol when `clusterProfiler`
+#'   + `org.Hs.eg.db` are installed, UniProt ID otherwise). `0` labels no
+#'   target.
+#' @param label_compounds Logical, default `TRUE`: label every compound node
+#'   with its (truncated) name. Set `FALSE` for a very large compound set.
 #' @param engine `"static"` (default) or `"ggiraph"`.
 #'
 #' @return A `ggplot`/`girafe` object, with `attr(., "proj")` set when
@@ -60,10 +67,18 @@ NULL
 #' @seealso [targets_disease_profile()], [plot_network_layers()]
 #' @export
 plot_disease_network <- function(proj, condition = NULL, disease = NULL, max_rank = NULL,
-                                  compound_ids = NULL, top_n_labels = 25, engine = c("static", "ggiraph"),
+                                  compound_ids = NULL, top_n_labels = 25,
+                                  top_n_targets = 15, label_compounds = TRUE,
+                                  engine = c("static", "ggiraph"),
                                   save = TRUE, out_dir = NULL, width = 9, height = 7, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
   stopifnot(is.numeric(top_n_labels), length(top_n_labels) == 1, !is.na(top_n_labels), top_n_labels >= 0)
+  if (!(is.numeric(top_n_targets) && length(top_n_targets) == 1 && !is.na(top_n_targets) && top_n_targets >= 0)) {
+    cli::cli_abort("{.arg top_n_targets} must be a single number >= 0.")
+  }
+  if (!(is.logical(label_compounds) && length(label_compounds) == 1 && !is.na(label_compounds))) {
+    cli::cli_abort("{.arg label_compounds} must be {.code TRUE} or {.code FALSE}.")
+  }
   engine <- match.arg(engine)
   engine <- .plot_require(engine)
   scope <- .plot_scope(proj, condition)
@@ -190,20 +205,52 @@ plot_disease_network <- function(proj, condition = NULL, disease = NULL, max_ran
       "i" = "{.fn plot_disease_network}: {length(disease_nodes)} disease nodes -- only the {min(top_n_labels, length(disease_nodes))} with the most targets are labeled; narrow the figure with {.arg disease}, {.arg max_rank} (e.g. {.code max_rank = 1}) or {.arg compound_ids}."
     ))
   }
-  p <- p + .plot_text_layer(
-    data = disease_labels, mapping = ggplot2::aes(x = .data$x, y = .data$y, label = .data$short_label),
-    size = 3.1, fontface = "bold", colour = "grey15", inherit.aes = FALSE,
-    repel_args = list(box.padding = 0.4, min.segment.length = 0.2, segment.colour = "grey40",
-                      bg.colour = "white", bg.r = 0.12, max.overlaps = Inf, seed = 1),
-    text_args = list(vjust = -1.6)
+  ## targets: the top_n_targets hit by the most compounds (ties: highest
+  ## disease association score); compounds: all of them, names shortened
+  top_targets <- .disease_network_top_targets(ct_edges, td_edges, top_n_targets)
+  target_labels <- nodes[nodes$layer == "target" & nodes$id %in% top_targets, , drop = FALSE]
+  target_labels$short_label <- .plot_truncate(target_labels$label, 14)
+  compound_labels <- if (label_compounds) nodes[nodes$layer == "compound", , drop = FALSE] else nodes[0, , drop = FALSE]
+  compound_labels$short_label <- .plot_truncate(compound_labels$label, 20)
+  label_df <- rbind(
+    disease_labels[, c("id", "layer", "x", "y", "short_label")],
+    target_labels[, c("id", "layer", "x", "y", "short_label")],
+    compound_labels[, c("id", "layer", "x", "y", "short_label")]
+  )
+  if (nrow(label_df) > 0) {
+    ## one repelled layer for every label, so labels of different node types
+    ## avoid each other too; text colour = a darker shade of the node colour
+    text_col <- c(disease = "#7b241c", target = "#1b4f72", compound = "#8a4b0f")
+    p <- p + .plot_text_layer(
+      data = label_df, mapping = ggplot2::aes(x = .data$x, y = .data$y, label = .data$short_label),
+      size = unname(c(disease = 3.1, target = 2.5, compound = 2.4)[label_df$layer]),
+      fontface = unname(c(disease = "bold", target = "bold.italic", compound = "plain")[label_df$layer]),
+      colour = unname(text_col[label_df$layer]), inherit.aes = FALSE, show.legend = FALSE,
+      ## point.size = the drawn node size, so labels clear the large disease blocks
+      repel_args = list(point.size = unname(c(disease = 9, target = 2.6, compound = 3.2)[label_df$layer]),
+                        box.padding = 0.25, point.padding = 0.15, min.segment.length = 0.2,
+                        segment.colour = "grey55", segment.size = 0.25,
+                        bg.colour = "white", bg.r = 0.12, max.overlaps = Inf, seed = 1),
+      text_args = list(vjust = -1.2)
+    )
+  }
+  n_dis <- length(unique(td_edges$disease_id))
+  subtitle <- paste0(
+    "disease nodes enlarged, with a convex-hull halo over their associated targets",
+    if (n_dis == 1) paste0(" -- ", .plot_disease_label(proj, disease_nodes)) else "",
+    "\nlabels: ",
+    paste(c(
+      if (nrow(disease_labels) > 0) if (nrow(disease_labels) < n_dis) paste0(nrow(disease_labels), " of ", n_dis, " diseases (most targets)") else "diseases",
+      if (nrow(target_labels) > 0) paste0("top ", nrow(target_labels), " targets by number of compounds (italic)"),
+      if (nrow(compound_labels) > 0) "compounds"
+    ), collapse = ", ")
   )
   p <- p +
     ggplot2::scale_colour_manual(values = palette, name = "Layer") +
     ggplot2::scale_size_identity() +
     ggplot2::labs(
       title = paste0("Compound-target-disease network -- ", scope_label),
-      subtitle = .plot_wrap("disease nodes enlarged, with a convex-hull halo over their associated targets",
-                            .plot_wrap_width(width, 7.5))
+      subtitle = .plot_wrap(subtitle, .plot_wrap_width(width, 7.5))
     ) +
     ggplot2::theme_void() +
     ggplot2::theme(
@@ -222,4 +269,26 @@ plot_disease_network <- function(proj, condition = NULL, disease = NULL, max_ran
     key_cols = "condition",
     engine = engine, save = save, out_dir = out_dir, width = width, height = height, dpi = dpi
   )
+}
+
+#' Targets to label in `plot_disease_network()`
+#' @description Ranked by the number of distinct compounds hitting the
+#'   target in the drawn subgraph, then by its highest disease association
+#'   score, then by ID.
+#' @param ct_edges Compound-target edges (`compound_id`, `uniprot_id`).
+#' @param td_edges Target-disease edges (`target_id`, `association_score`).
+#' @param n Number of targets to return.
+#' @return Character vector of at most `n` target IDs, best first.
+#' @keywords internal
+.disease_network_top_targets <- function(ct_edges, td_edges, n) {
+  if (n <= 0 || nrow(ct_edges) == 0) return(character(0))
+  e <- unique(ct_edges[, c("compound_id", "uniprot_id"), drop = FALSE])
+  n_cmp <- table(e$uniprot_id)
+  ids <- names(n_cmp)
+  best <- vapply(ids, function(t) {
+    s <- td_edges$association_score[td_edges$target_id == t]
+    if (length(s) == 0 || all(is.na(s))) -Inf else max(s, na.rm = TRUE)
+  }, numeric(1))
+  ord <- order(-as.integer(n_cmp), -best, ids)
+  utils::head(ids[ord], n)
 }

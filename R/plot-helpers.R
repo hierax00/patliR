@@ -275,6 +275,118 @@ NULL
   }
 }
 
+#' Resolve disease IDs to their human-readable names
+#'
+#' @description
+#' Looks the IDs up in `disease_genes$disease_name` (from
+#' [disease_genes_fetch()]), then `targets_disease_profile$disease_name`,
+#' then `targets_disease$disease_name` when that column exists -- the first
+#' non-empty name wins.
+#' @param proj A `PatliRProject`.
+#' @param ids Character vector of disease IDs (e.g. `"MONDO_0005044"`).
+#' @return Named character vector (names = `ids`), `NA` where no name is
+#'   recorded.
+#' @keywords internal
+.plot_disease_names <- function(proj, ids) {
+  ids <- as.character(ids)
+  out <- stats::setNames(rep(NA_character_, length(ids)), ids)
+  for (slot in c("disease_genes", "targets_disease_profile", "targets_disease")) {
+    todo <- is.na(out)
+    if (!any(todo)) break
+    tab <- tryCatch(patliRResults(proj, slot), error = function(e) NULL)
+    if (is.null(tab) || nrow(tab) == 0 || !all(c("disease_id", "disease_name") %in% names(tab))) next
+    tab <- tab[!is.na(tab$disease_name) & nzchar(tab$disease_name), c("disease_id", "disease_name"), drop = FALSE]
+    lookup <- stats::setNames(as.character(tab$disease_name), tab$disease_id)
+    out[todo] <- unname(lookup[ids[todo]])
+  }
+  out
+}
+
+#' Display label for a disease: `"name (ID)"`, the ID alone when no name is
+#' recorded, the name alone when it already contains the ID
+#' @param proj A `PatliRProject`.
+#' @param ids Character vector of disease IDs.
+#' @param with_id Logical; `FALSE` drops the `" (ID)"` suffix.
+#' @return Character vector, same length as `ids`.
+#' @keywords internal
+.plot_disease_label <- function(proj, ids, with_id = TRUE) {
+  ids <- as.character(ids)
+  nm <- unname(.plot_disease_names(proj, ids))
+  has_name <- !is.na(nm) & nzchar(nm)
+  ## "inflammatory response (GO:0006954)" already carries its ID, in either
+  ## the GO:0006954 or GO_0006954 spelling
+  contains_id <- has_name & (mapply(grepl, ids, nm, fixed = TRUE) |
+                               mapply(grepl, sub("_", ":", ids, fixed = TRUE), nm, fixed = TRUE))
+  out <- ids
+  out[has_name] <- if (with_id) {
+    ifelse(contains_id[has_name], nm[has_name], paste0(nm[has_name], " (", ids[has_name], ")"))
+  } else {
+    nm[has_name]
+  }
+  out
+}
+
+#' Qualitative palette in which neighbouring colours never look alike
+#'
+#' @description
+#' For figures that place categories side by side (e.g. the term arcs and
+#' ribbons of [plot_gochord()]), where a hue ramp such as
+#' [grDevices::rainbow()] makes adjacent categories nearly identical.
+#' \describe{
+#'   \item{`"contrast"`}{12 colours from the Okabe-Ito and Tol
+#'     colour-blind-safe sets, ordered so consecutive colours differ as much
+#'     as possible in lightness and hue (smallest CIELAB distance between
+#'     neighbours > 80). Beyond 12, the cycle repeats darkened, then
+#'     lightened, so every colour stays distinct.}
+#'   \item{`"grey"`}{`n` greys (for black-and-white print) spread from near
+#'     black to near white and interleaved dark, light, dark, light, so two
+#'     neighbours are always about half the grey range apart.}
+#'   \item{`"default"`}{[grDevices::rainbow()] -- the previous behaviour.}
+#' }
+#' @param n Number of colours.
+#' @param palette `"contrast"`, `"grey"` or `"default"`.
+#' @return Character vector of `n` distinct hex colours.
+#' @keywords internal
+.plot_contrast_palette <- function(n, palette = c("contrast", "grey", "default")) {
+  palette <- match.arg(palette)
+  n <- as.integer(n)
+  if (is.na(n) || n <= 0) return(character(0))
+  if (palette == "default") return(grDevices::rainbow(n))
+  if (palette == "grey") {
+    levels <- seq(0.12, 0.95, length.out = max(n, 2))[seq_len(n)]
+    if (n == 1) levels <- 0.35
+    half <- ceiling(n / 2)
+    ord <- as.vector(rbind(seq_len(half), half + seq_len(half)))
+    ord <- ord[ord <= n]
+    return(grDevices::gray(levels[ord]))
+  }
+  ## order chosen to maximise the smallest CIELAB distance between
+  ## consecutive colours (every neighbour pair differs by dE > 80)
+  base <- c("#0072B2", "#D55E00", "#56B4E9", "#F0E442", "#882255", "#E69F00",
+            "#CC79A7", "#117733", "#EE8866", "#009E73", "#332288", "#BBBBBB")
+  mix <- function(cols, target, w) {
+    m <- grDevices::col2rgb(cols) / 255
+    t <- grDevices::col2rgb(target) / 255
+    m <- m * (1 - w) + as.vector(t) * w
+    grDevices::rgb(m[1, ], m[2, ], m[3, ])
+  }
+  cycles <- ceiling(n / length(base))
+  out <- unlist(lapply(seq_len(cycles), function(k) {
+    if (k == 1) return(base)
+    ## alternate darker / lighter shades of the base cycle, further each round
+    w <- min(0.2 + 0.15 * ((k - 2) %/% 2), 0.7)
+    if (k %% 2 == 0) mix(base, "black", w) else mix(base, "white", w)
+  }))
+  out <- toupper(out[seq_len(n)])
+  ## guarantee distinct values (GOplot's legend uses unique() of the colours)
+  dup <- duplicated(out)
+  while (any(dup)) {
+    out[dup] <- toupper(mix(out[dup], "grey50", 0.1))
+    dup <- duplicated(out)
+  }
+  out
+}
+
 #' Look up display labels for a set of network nodes
 #'
 #' @description

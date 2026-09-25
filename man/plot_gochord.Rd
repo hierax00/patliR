@@ -10,6 +10,7 @@ plot_gochord(
   db = NULL,
   top_n_terms = 10,
   top_n_genes = 40,
+  palette = c("contrast", "grey", "default"),
   engine = c("static", "ggiraph"),
   save = TRUE,
   out_dir = NULL,
@@ -41,6 +42,14 @@ top terms the ribbons and gene labels are unreadable, so only the
 (ties broken alphabetically); terms left without genes are dropped.
 Use \code{Inf} to draw every gene.}
 
+\item{palette}{Ribbon/term colours. \code{"contrast"} (default): a
+colour-blind-safe qualitative palette (Okabe-Ito / Tol) ordered so
+neighbouring terms never look alike (\code{GOplot}'s own
+\code{\link[grDevices:rainbow]{grDevices::rainbow()}} ramp makes adjacent terms nearly identical).
+\code{"grey"}: greys alternating dark/light, for black-and-white print.
+\code{"default"}: \code{GOplot}'s rainbow. Ribbons keep their dark outline in
+every palette. See \code{.plot_contrast_palette()}.}
+
 \item{engine}{\code{"static"} (default) or \code{"ggiraph"}, save/out_dir/width/
 height/dpi -- same as \code{\link[=plot_network_layers]{plot_network_layers()}}.}
 
@@ -59,7 +68,10 @@ to \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}.}
 \value{
 A \code{ggplot} object or \code{girafe} htmlwidget. If \code{save = TRUE}
 (default), also writes a PNG and logs it to
-\code{patliRResults(proj, "gochord_plot_log")}.
+\code{patliRResults(proj, "gochord_plot_log")} (keyed by condition, \code{db} and
+\code{palette}; file \verb{gochord_<condition>_<db>.png}, with a \verb{_grey} /
+\verb{_rainbow} suffix for the other palettes so they never overwrite the
+default figure).
 }
 \description{
 The \code{top_n_terms} most significant \code{\link[=network_enrich]{network_enrich()}} pathway/GO terms

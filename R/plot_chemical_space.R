@@ -72,10 +72,38 @@ NULL
 #'   with a tooltip per point. `"static"`: plain `ggplot2`. `"plotly"`:
 #'   rotatable 3D (only meaningful with `dims = 3`; needs the `plotly`
 #'   package).
+#' @param label What to print next to each point: `"none"` (default, the
+#'   unlabeled figure), `"id"` (compound ID, e.g. `C0001`), `"pubchem"`
+#'   (PubChem CID from `compounds(proj)$pubchem_id`, falling back to the
+#'   compound ID when missing), `"index"` (a short number, the compound's
+#'   row in `compounds(proj)` -- stable across conditions and subsets) or
+#'   `"name"` (compound name, truncated). Labels are small, carry a white
+#'   halo and are repelled from each other when `ggrepel` is installed. A
+#'   labeled figure is saved under its own file name (suffix
+#'   `_labeled_<label>`) and log row, so it never overwrites the unlabeled
+#'   one. See **Label key** below.
+#' @param label_top `NULL` (default: label every compound) or a positive
+#'   integer: label only the `label_top` most isolated compounds (largest
+#'   mean distance to their 3 nearest neighbours in the projection -- the
+#'   chemically atypical ones, whose labels also fit without colliding) --
+#'   useful when a large panel would otherwise be illegible. Ignored when
+#'   `label = "none"`.
 #' @param save Logical, default `TRUE`. If `TRUE`, also writes a PNG.
 #' @param out_dir Directory to write the PNG to (only used if
 #'   `save = TRUE`). Defaults to `file.path(projectDir(proj), "plots")`.
-#' @param width,height,dpi Passed to [ggplot2::ggsave()].
+#' @param width,height,dpi Passed to [ggplot2::ggsave()]. For a labeled
+#'   figure of ~100 compounds, `width = 10, height = 8` leaves the labels
+#'   more room.
+#'
+#' @section Label key:
+#' Whenever `label != "none"`, the result carries `attr(result,
+#' "label_key")`: one row per plotted compound with `index`, `compound_id`,
+#' `pubchem_id`, `name`, the `color_by` value (e.g. the family), `labeled`
+#' (whether it got a text label under `label_top`) and its coordinates. For
+#' `label = "id"`, `"pubchem"` or `"index"` and `save = TRUE`, the same
+#' table is also written as a CSV next to the PNG
+#' (`<png name>_key.csv`) -- the lookup from a printed number/ID back to
+#' the compound.
 #'
 #' @return A `girafe` htmlwidget (`engine = "ggiraph"`) or a `ggplot`
 #'   object (`engine = "static"`). If `save = TRUE` (the default), the PNG
@@ -84,6 +112,7 @@ NULL
 #'   `results/chemical_space_log.csv`, retrievable via
 #'   `attr(result, "proj")`. This project attribute is also returned when
 #'   `save = FALSE`, retaining descriptor-exclusion logs without writing files.
+#'   With `label != "none"`, also `attr(result, "label_key")` (see above).
 #'
 #' @examples
 #' \dontrun{
@@ -96,6 +125,10 @@ NULL
 #' plot_chemical_space(proj, color_by = "ro5_pass", engine = "static", save = FALSE)
 #' # three axes, one hull per family, rotatable:
 #' plot_chemical_space(proj, dims = 3, color_by = "family", engine = "plotly", save = FALSE)
+#' # numbered points plus a key table (index -> id -> name -> family):
+#' p <- plot_chemical_space(proj, color_by = "ro5_pass", engine = "static",
+#'                          label = "index", save = FALSE)
+#' head(attr(p, "label_key"))
 #' }
 #'
 #' @export
@@ -105,11 +138,18 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
                                  color_by = "family",
                                  show_hulls = TRUE, seed = NULL,
                                  engine = c("ggiraph", "static", "plotly"),
+                                 label = c("none", "id", "pubchem", "index", "name"),
+                                 label_top = NULL,
                                  save = TRUE, out_dir = NULL,
                                  width = 7, height = 6, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
   method <- match.arg(method)
   engine <- match.arg(engine)
+  label <- match.arg(label)
+  if (!is.null(label_top) &&
+      !(is.numeric(label_top) && length(label_top) == 1 && !is.na(label_top) && label_top >= 1)) {
+    cli::cli_abort("{.arg label_top} must be {.code NULL} or a single positive number.")
+  }
   stopifnot(is.character(color_by), length(color_by) == 1)
   stopifnot(dims %in% c(2, 3))
   dims <- as.integer(dims)
@@ -194,6 +234,18 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
     cli::cli_warn("{.arg show_hulls} ignored: {.arg color_by = {color_by}} is not categorical.")
   }
 
+  label_key <- NULL
+  label_rows <- NULL
+  if (label != "none") {
+    label_key <- .chemical_space_label_key(adme, cmp, label, label_top, color_by, dims)
+    adme$plot_label <- label_key$plot_label[match(adme$compound_id, label_key$compound_id)]
+    adme$compound_label <- paste0(
+      "[", label_key$index[match(adme$compound_id, label_key$compound_id)], "] ", adme$compound_label
+    )
+    label_rows <- adme[adme$compound_id %in% label_key$compound_id[label_key$labeled], , drop = FALSE]
+    label_key$plot_label <- NULL
+  }
+
   axis_labels <- if (method == "pca") {
     pca <- attr(coords, "pca")
     ve <- summary(pca)$importance["Proportion of Variance", seq_len(dims)] * 100
@@ -203,11 +255,11 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
   }
 
   result <- if (dims == 3 && engine == "plotly") {
-    .chemical_space_plotly3d(adme, axis_labels, color_by, is_categorical, draw_hulls, method)
+    .chemical_space_plotly3d(adme, axis_labels, color_by, is_categorical, draw_hulls, method, label_rows)
   } else if (dims == 3) {
-    .chemical_space_static3d(adme, axis_labels, color_by, is_categorical, draw_hulls, method)
+    .chemical_space_static3d(adme, axis_labels, color_by, is_categorical, draw_hulls, method, label_rows, label)
   } else {
-    p <- .chemical_space_ggplot(adme, axis_labels, color_by, is_categorical, draw_hulls, engine, method)
+    p <- .chemical_space_ggplot(adme, axis_labels, color_by, is_categorical, draw_hulls, engine, method, label_rows, label)
     if (engine == "static") {
       p
     } else if (requireNamespace("ggiraph", quietly = TRUE)) {
@@ -224,8 +276,7 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
     ## scope goes into the file name and the log key: a per-condition or
     ## compound-subset plot must not overwrite the whole-project one.
     scope <- .chemical_space_scope(condition, compound_ids)
-    tag <- paste0("chemical_space_", dims, "d_", method, "_", color_by,
-                  if (nzchar(scope)) paste0("_", scope) else "")
+    tag <- .chemical_space_file_tag(dims, method, color_by, scope, label)
     if (dims == 3 && engine == "plotly") {
       ## plotly widget cannot go through ggsave(); save an html file if we can.
       if (requireNamespace("htmlwidgets", quietly = TRUE)) {
@@ -238,9 +289,16 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
       }
     } else {
       p_static <- if (dims == 3) result else
-        .chemical_space_ggplot(adme, axis_labels, color_by, is_categorical, draw_hulls, "static", method)
+        .chemical_space_ggplot(adme, axis_labels, color_by, is_categorical, draw_hulls, "static", method, label_rows, label)
       path <- file.path(out_dir, paste0(tag, ".png"))
       ggplot2::ggsave(path, p_static, width = width, height = if (dims == 3) max(height, 5) else height, dpi = dpi, bg = "white")
+    }
+    ## the key table (index -> id -> name -> family) next to the figure,
+    ## for labels that are not self-explanatory
+    if (!is.null(label_key) && label %in% c("id", "pubchem", "index")) {
+      key_path <- file.path(out_dir, paste0(tag, "_key.csv"))
+      utils::write.csv(label_key, key_path, row.names = FALSE)
+      attr(label_key, "path") <- key_path
     }
     log_cols <- c("compound_id", "dim1", "dim2", if (dims == 3) "dim3", "color_value")
     log_df <- adme[, log_cols]
@@ -248,14 +306,18 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
     log_df$color_by <- color_by
     log_df$dims <- dims
     log_df$scope <- scope
+    log_df$label <- label
     log_df$path <- path
     old_log <- patliRResults(proj, "chemical_space_log")
     if (!is.null(old_log) && nrow(old_log) > 0) {
-      ## legacy logs (no dims/scope columns) are treated as whole-project scope
+      ## legacy logs (no dims/scope/label columns) are treated as the
+      ## whole-project, unlabeled figure
       if (!"scope" %in% names(old_log)) old_log$scope <- ""
       if (!"dims" %in% names(old_log)) old_log$dims <- ifelse("dim3" %in% names(old_log), 3, 2)
+      if (!"label" %in% names(old_log)) old_log$label <- "none"
+      old_log$label[is.na(old_log$label)] <- "none"
       same <- old_log$scope == scope & old_log$method == method &
-        old_log$color_by == color_by & old_log$dims == dims
+        old_log$color_by == color_by & old_log$dims == dims & old_log$label == label
       old_log <- old_log[!same, , drop = FALSE]
       for (nm in setdiff(names(old_log), names(log_df))) log_df[[nm]] <- NA
       for (nm in setdiff(names(log_df), names(old_log))) old_log[[nm]] <- NA
@@ -267,7 +329,127 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
   if (save) .write_log_csv(proj)
 
   attr(result, "proj") <- proj
+  if (!is.null(label_key)) attr(result, "label_key") <- label_key
   result
+}
+
+#' File-name stem (and log identity) of a chemical-space figure
+#' @description `chemical_space_<dims>d_<method>_<color_by>[_<scope>]`, plus
+#'   `_labeled_<label>` for a labeled figure so it never overwrites the
+#'   unlabeled one.
+#' @keywords internal
+.chemical_space_file_tag <- function(dims, method, color_by, scope = "", label = "none") {
+  paste0("chemical_space_", dims, "d_", method, "_", color_by,
+         if (nzchar(scope)) paste0("_", scope) else "",
+         if (!identical(label, "none")) paste0("_labeled_", label) else "")
+}
+
+#' Label key for a labeled chemical-space figure
+#'
+#' @description
+#' One row per plotted compound: `index` (row of the compound in
+#' `compounds(proj)`, so a number means the same compound in every
+#' condition/subset figure), `compound_id`, `pubchem_id`, `name`, the
+#' `color_by` value, `labeled` (selected for a text label) and the
+#' coordinates, sorted by `index`. `plot_label` holds the text actually
+#' drawn for `label`.
+#' @param adme Plotted rows (`compound_id`, `dim1`, `dim2`, [`dim3`],
+#'   `color_value`).
+#' @param cmp `compounds(proj)`.
+#' @param label_top `NULL` (all) or the number of compounds farthest from
+#'   the projection centre to label.
+#' @return `data.frame`.
+#' @keywords internal
+.chemical_space_label_key <- function(adme, cmp, label, label_top = NULL, color_by = "color", dims = 2) {
+  idx <- match(adme$compound_id, cmp$id)
+  ## compounds absent from compounds(proj) (hand-built adme tables) are
+  ## numbered after the known ones
+  missing_idx <- is.na(idx)
+  if (any(missing_idx)) idx[missing_idx] <- nrow(cmp) + seq_len(sum(missing_idx))
+  pub <- if ("pubchem_id" %in% names(cmp)) as.character(cmp$pubchem_id[match(adme$compound_id, cmp$id)]) else rep(NA_character_, nrow(adme))
+  nm <- if ("name" %in% names(cmp)) as.character(cmp$name[match(adme$compound_id, cmp$id)]) else rep(NA_character_, nrow(adme))
+  key <- data.frame(
+    index = as.integer(idx), compound_id = adme$compound_id, pubchem_id = pub, name = nm,
+    group = adme$color_value, stringsAsFactors = FALSE
+  )
+  names(key)[names(key) == "group"] <- color_by
+  coord_cols <- intersect(c("dim1", "dim2", if (dims == 3) "dim3"), names(adme))
+  for (cc in coord_cols) key[[cc]] <- adme[[cc]]
+
+  key$labeled <- TRUE
+  if (!is.null(label_top) && label_top < nrow(key)) {
+    keep <- order(-.chemical_space_isolation(adme[coord_cols]), key$index)[seq_len(label_top)]
+    key$labeled <- seq_len(nrow(key)) %in% keep
+  }
+
+  blank <- function(x) is.na(x) | !nzchar(x) | x == "NA"
+  key$plot_label <- switch(label,
+    id = key$compound_id,
+    pubchem = ifelse(blank(key$pubchem_id), key$compound_id, key$pubchem_id),
+    index = as.character(key$index),
+    name = .plot_truncate(ifelse(blank(key$name), key$compound_id, key$name), 18),
+    key$compound_id
+  )
+  key <- key[order(key$index), , drop = FALSE]
+  rownames(key) <- NULL
+  key
+}
+
+#' How isolated each point is in the projection
+#' @description Mean distance to the `k` nearest neighbours on range-scaled
+#'   axes. The most isolated compounds are the chemically atypical ones, and
+#'   the ones whose labels fit without colliding -- what `label_top` keeps.
+#' @param coords `data.frame`/matrix of coordinates (one column per axis).
+#' @return Numeric vector, one value per row.
+#' @keywords internal
+.chemical_space_isolation <- function(coords, k = 3) {
+  m <- as.matrix(coords)
+  n <- nrow(m)
+  if (n < 2) return(rep(0, n))
+  m <- apply(m, 2, function(x) {
+    r <- diff(range(x))
+    if (!is.finite(r) || r == 0) rep(0, length(x)) else (x - min(x)) / r
+  })
+  m <- matrix(m, nrow = n)
+  d <- as.matrix(stats::dist(m))
+  diag(d) <- Inf
+  k <- min(k, n - 1)
+  apply(d, 1, function(row) mean(sort(row)[seq_len(k)]))
+}
+
+#' Caption naming what the per-compound labels are (`NULL` when unlabeled)
+#' @keywords internal
+.chemical_space_label_caption <- function(label, label_rows, n_points) {
+  if (identical(label, "none") || is.null(label_rows)) return(NULL)
+  what <- switch(label,
+    id = "compound ID", pubchem = "PubChem CID (compound ID where missing)",
+    index = "compound index (row of compounds(proj))", name = "compound name (truncated)", label
+  )
+  txt <- paste0(
+    "Labels: ", what,
+    if (nrow(label_rows) < n_points) paste0("; ", nrow(label_rows), " of ", n_points, " compounds labeled (the most isolated)") else "",
+    if (label %in% c("id", "pubchem", "index")) "; key table (index, ID, name, family) saved as <figure>_key.csv" else ""
+  )
+  .plot_wrap(txt, 100)
+}
+
+#' Text layer for the per-compound labels of a chemical-space panel
+#' @keywords internal
+.chemical_space_label_layer <- function(label_rows, label, n_points, x = "dim1", y = "dim2", size = NULL) {
+  if (is.null(size)) {
+    ## small text: ~100 labels must fit a 7-inch panel; long names smaller still
+    size <- if (n_points > 60) 1.9 else 2.4
+    if (identical(label, "name")) size <- size - 0.2
+  }
+  .plot_text_layer(
+    data = label_rows,
+    mapping = ggplot2::aes(x = .data[[x]], y = .data[[y]], label = .data$plot_label),
+    size = size, colour = "grey10", show.legend = FALSE, inherit.aes = FALSE,
+    repel_args = list(bg.colour = "white", bg.r = 0.12, box.padding = 0.12, point.padding = 0.05,
+                      min.segment.length = 0.15, segment.colour = "grey45", segment.size = 0.2,
+                      force = 0.6, max.time = 2, max.overlaps = Inf, seed = 1),
+    text_args = list(vjust = -0.7)
+  )
 }
 
 #' Scope suffix for file names / log keys: `""` for the whole project,
@@ -316,7 +498,8 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
 #' 3D chemical space as a rotatable plotly scatter with a translucent
 #' alpha-hull mesh ("halo") per family
 #' @keywords internal
-.chemical_space_plotly3d <- function(adme, axis_labels, color_by, is_categorical, draw_hulls, method) {
+.chemical_space_plotly3d <- function(adme, axis_labels, color_by, is_categorical, draw_hulls, method,
+                                     label_rows = NULL) {
   pal <- .chemical_space_palette(sort(unique(adme$color_value)))
   p <- plotly::plot_ly()
   if (draw_hulls) {
@@ -336,6 +519,13 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
     text = ~compound_label, hoverinfo = "text",
     marker = list(size = 4, opacity = 0.9)
   )
+  if (!is.null(label_rows) && nrow(label_rows) > 0) {
+    p <- plotly::add_text(
+      p, data = label_rows, x = ~dim1, y = ~dim2, z = ~dim3, text = ~plot_label,
+      textfont = list(size = 9, color = "#1a1a1a"), textposition = "top center",
+      hoverinfo = "skip", showlegend = FALSE, inherit = FALSE
+    )
+  }
   plotly::layout(
     p,
     title = paste0("Chemical space (", toupper(method), ", 3D) -- ", color_by),
@@ -350,7 +540,8 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
 #' 3D chemical space, static: a 3-panel matrix of PC pairs, each with 2D
 #' family hulls -- every compound shown against all three axes at once
 #' @keywords internal
-.chemical_space_static3d <- function(adme, axis_labels, color_by, is_categorical, draw_hulls, method) {
+.chemical_space_static3d <- function(adme, axis_labels, color_by, is_categorical, draw_hulls, method,
+                                     label_rows = NULL, label = "none") {
   if (!requireNamespace("patchwork", quietly = TRUE)) {
     cli::cli_abort(c(
       "Static 3D (the 3-panel PC matrix) needs the {.pkg patchwork} package.",
@@ -376,10 +567,19 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
         )
       }
     }
-    g +
+    g <- g +
       ggplot2::geom_point(ggplot2::aes(colour = .data$color_value), size = 2.4, alpha = 0.8) +
       ggplot2::labs(x = axis_labels[ij[1]], y = axis_labels[ij[2]], colour = color_by) +
       ggplot2::theme_minimal(base_size = 9)
+    if (!is.null(label_rows) && nrow(label_rows) > 0) {
+      lr <- label_rows
+      lr$px <- lr[[paste0("dim", ij[1])]]
+      lr$py <- lr[[paste0("dim", ij[2])]]
+      ## three panels share the figure width: labels one step smaller
+      g <- g + .chemical_space_label_layer(lr, label, nrow(adme), x = "px", y = "py",
+                                           size = if (nrow(adme) > 60) 1.5 else 2)
+    }
+    g
   }
   panels <- lapply(pairs, panel)
   ## same single-legend fix as .chemical_space_ggplot()
@@ -394,7 +594,8 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
   patchwork::wrap_plots(panels, nrow = 1, guides = "collect") +
     patchwork::plot_annotation(
       title = paste0("Chemical space (", toupper(method), ", 3 axes) -- ", color_by),
-      subtitle = "every compound against all three principal components; filled areas are per-family hulls"
+      subtitle = "every compound against all three principal components; filled areas are per-family hulls",
+      caption = .chemical_space_label_caption(label, label_rows, nrow(adme))
     ) &
     ggplot2::theme(legend.position = "right")
 }
@@ -445,7 +646,8 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
 #' within one extract, not whole molecule classes like DNA/peptides/
 #' graphenes).
 #' @keywords internal
-.chemical_space_ggplot <- function(adme, axis_labels, color_by, is_categorical, draw_hulls, engine, method) {
+.chemical_space_ggplot <- function(adme, axis_labels, color_by, is_categorical, draw_hulls, engine, method,
+                                   label_rows = NULL, label = "none") {
   tooltip_txt <- sprintf("%s\n%s: %s", adme$compound_label, color_by, adme$color_value)
   origin <- c(mean(range(adme$dim1)), mean(range(adme$dim2)))
   pad <- 0.12 * c(diff(range(adme$dim1)), diff(range(adme$dim2)))
@@ -492,6 +694,12 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
     )
   }
 
+  ## Per-compound labels (label != "none") go under the family labels, so
+  ## the larger bold family names stay on top.
+  if (!is.null(label_rows) && nrow(label_rows) > 0) {
+    p <- p + .chemical_space_label_layer(label_rows, label, nrow(adme))
+  }
+
   ## Direct on-plot family labels near each group's centroid, in addition
   ## to the legend -- this is the part of the reference figure that makes
   ## it readable at a glance without cross-referencing a legend.
@@ -529,12 +737,14 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
       colour = color_by,
       title = paste0("Chemical space (", toupper(method), "), coloured by ", color_by),
       subtitle = paste0(axis_labels[1], "  |  ", axis_labels[2],
-                         if (!is_categorical) "  -- continuous colour_by: hull outlines/labels not drawn" else "")
+                         if (!is_categorical) "  -- continuous colour_by: hull outlines/labels not drawn" else ""),
+      caption = .chemical_space_label_caption(label, label_rows, nrow(adme))
     ) +
     ggplot2::theme_void() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(size = 12, face = "bold"),
       plot.subtitle = ggplot2::element_text(size = 9, colour = "grey40"),
+      plot.caption = ggplot2::element_text(size = 7.5, colour = "grey40", hjust = 0),
       plot.background = ggplot2::element_rect(fill = "white", colour = NA),
       legend.position = "right"
     )

@@ -72,6 +72,10 @@ whether they cross that threshold -- a very negative \code{z_score} means
 the compound's targets sit significantly \emph{closer} to the disease module
 than the degree-matched null model, i.e. topologically meaningful
 proximity, which is what \code{\link[=network_proximity]{network_proximity()}} is actually testing for.
+Every compound is named on the axis, and each significant one also
+carries its \code{z} value beside the point. Diseases are shown by name
+(from \code{\link[=disease_genes_fetch]{disease_genes_fetch()}} / \code{\link[=targets_disease_profile]{targets_disease_profile()}}) with the ID
+in brackets, in the subtitle (single disease) or the panel strips.
 
 \code{view = "null"}: the literal permutation-histogram figure (Guney et al.
 2016 Fig. 1; Menche et al. 2015 SI) -- one facet per \verb{(condition, disease_id, compound_id)} in scope, a histogram of that compound's raw

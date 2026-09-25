@@ -63,6 +63,11 @@ NULL
 #' @param top_n_targets Integer, default `20` -- `view = "heatmap"` only.
 #' @param target_relevance `"breadth"` (default), `"weight"`, or
 #'   `"centrality"` -- `view = "heatmap"` only, see the section above.
+#' @param label `view = "pareto"` only: `"front"` (default) names every
+#'   Pareto-front-1 (non-dominated) compound; `"all"` names every compound
+#'   (front 1 in dark bold, the rest in grey); `"none"` draws no names.
+#'   Names are truncated and repelled (`ggrepel`), never dropped for
+#'   overlap.
 #' @param engine `"static"` (default) or `"ggiraph"` -- `view = "pareto"`
 #'   only (`pheatmap` has no interactive engine, same contract difference
 #'   [plot_heatmap()] documents).
@@ -86,11 +91,13 @@ plot_rank <- function(proj, condition = NULL, view = c("pareto", "heatmap"),
                        x = NULL, y = NULL,
                        top_n_compounds = 15, top_n_targets = 20,
                        target_relevance = c("breadth", "weight", "centrality"),
+                       label = c("front", "all", "none"),
                        engine = c("static", "ggiraph"),
                        save = TRUE, out_dir = NULL, width = NULL, height = 6, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
   view <- match.arg(view)
   target_relevance <- match.arg(target_relevance)
+  label <- match.arg(label)
   engine <- match.arg(engine)
   stopifnot(is.numeric(top_n_compounds), length(top_n_compounds) == 1, top_n_compounds >= 1)
   stopifnot(is.numeric(top_n_targets), length(top_n_targets) == 1, top_n_targets >= 1)
@@ -110,7 +117,7 @@ plot_rank <- function(proj, condition = NULL, view = c("pareto", "heatmap"),
 
   if (view == "pareto") {
     engine <- .plot_require(engine)
-    .plot_rank_pareto(proj, dat, conditions, scope_label, x, y, engine, save, out_dir, width, height, dpi)
+    .plot_rank_pareto(proj, dat, conditions, scope_label, x, y, engine, save, out_dir, width, height, dpi, label)
   } else {
     if (!requireNamespace("pheatmap", quietly = TRUE)) {
       cli::cli_abort("The {.pkg pheatmap} package is required for {.fn plot_rank}({.code view = \"heatmap\"}).")
@@ -123,7 +130,8 @@ plot_rank <- function(proj, condition = NULL, view = c("pareto", "heatmap"),
 .plot_rank_y_priority <- c("crit_synergy_best", "crit_proximity_z", "crit_module_r_index", "crit_hub_penalty", "crit_centrality", "crit_adme_pass_frac")
 
 #' @keywords internal
-.plot_rank_pareto <- function(proj, dat, conditions, scope_label, x, y, engine, save, out_dir, width, height, dpi) {
+.plot_rank_pareto <- function(proj, dat, conditions, scope_label, x, y, engine, save, out_dir, width, height, dpi,
+                              label = "front") {
   if (is.null(x)) x <- "rra_rank"
   if (is.null(y)) {
     present <- .plot_rank_y_priority[.plot_rank_y_priority %in% names(dat)]
@@ -142,7 +150,7 @@ plot_rank <- function(proj, condition = NULL, view = c("pareto", "heatmap"),
   dat$compound_label <- labels
   dat$tooltip <- sprintf("%s\n%s = %s\n%s = %s\nrra_rank = %d, front = %d", dat$compound_label, x, signif(dat[[x]], 3), y, signif(dat[[y]], 3), dat$rra_rank, dat$pareto_front)
 
-  front1 <- dat[dat$pareto_front == 1L, , drop = FALSE]
+  front1 <- .plot_rank_label_rows(dat, label)
   if (is.null(width)) width <- 8
 
   p <- ggplot2::ggplot(dat, ggplot2::aes(x = .data[[x]], y = .data[[y]], colour = .data$front_f))
@@ -156,12 +164,15 @@ plot_rank <- function(proj, condition = NULL, view = c("pareto", "heatmap"),
   ## edge (the worst rra_rank) otherwise runs off the panel.
   if (nrow(front1) > 0) {
     front1$short_label <- .plot_truncate(front1$compound_label)
+    is_f1 <- front1$pareto_front == 1L & !is.na(front1$pareto_front)
     p <- p + .plot_text_layer(
       data = front1,
       mapping = ggplot2::aes(x = .data[[x]], y = .data[[y]], label = .data$short_label),
-      size = 2.6, colour = "grey15", inherit.aes = FALSE,
+      size = 2.6, inherit.aes = FALSE,
+      colour = ifelse(is_f1, "grey10", "grey45"),
+      fontface = ifelse(is_f1 & label == "all", "bold", "plain"),
       repel_args = list(box.padding = 0.3, min.segment.length = 0.2, segment.colour = "grey60",
-                        max.overlaps = Inf, seed = 1),
+                        bg.colour = "white", bg.r = 0.1, max.overlaps = Inf, seed = 1),
       text_args = list(vjust = -1)
     )
   }
@@ -183,13 +194,30 @@ plot_rank <- function(proj, condition = NULL, view = c("pareto", "heatmap"),
       plot.title.position = "plot"
     )
   if (length(unique(dat$panel)) > 1) p <- p + ggplot2::facet_wrap(~panel)
+  ## a non-default label set gets its own file and log row; logs written
+  ## before `label` existed hold the default ("front") figure
+  if (save) proj <- .plot_log_backfill(proj, "rank_plot_log", "label", "front")
   .plot_finish(
     proj, p,
     name = "rank_plot_log",
-    filename = paste0("rank_pareto_", scope_label, ".png"),
-    log_row = data.frame(condition = scope_label, view = "pareto", path = NA_character_, stringsAsFactors = FALSE),
-    key_cols = c("condition", "view"),
+    filename = paste0("rank_pareto_", scope_label, if (label != "front") paste0("_labels_", label) else "", ".png"),
+    log_row = data.frame(condition = scope_label, view = "pareto", label = label, path = NA_character_, stringsAsFactors = FALSE),
+    key_cols = c("condition", "view", "label"),
     engine = engine, save = save, out_dir = out_dir, width = width, height = height, dpi = dpi
+  )
+}
+
+#' Compounds to name on the Pareto view
+#' @description `"front"`: every front-1 (non-dominated) compound; `"all"`:
+#'   every compound; `"none"`: nothing.
+#' @return Subset of `dat`.
+#' @keywords internal
+.plot_rank_label_rows <- function(dat, label = c("front", "all", "none")) {
+  label <- match.arg(label)
+  switch(label,
+    front = dat[!is.na(dat$pareto_front) & dat$pareto_front == 1L, , drop = FALSE],
+    all = dat,
+    none = dat[FALSE, , drop = FALSE]
   )
 }
 

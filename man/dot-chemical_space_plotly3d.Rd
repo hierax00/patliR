@@ -11,7 +11,8 @@ alpha-hull mesh ("halo") per family}
   color_by,
   is_categorical,
   draw_hulls,
-  method
+  method,
+  label_rows = NULL
 )
 }
 \description{

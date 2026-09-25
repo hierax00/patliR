@@ -13,7 +13,9 @@ group's centroid}
   is_categorical,
   draw_hulls,
   engine,
-  method
+  method,
+  label_rows = NULL,
+  label = "none"
 )
 }
 \description{

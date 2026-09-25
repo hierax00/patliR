@@ -12,6 +12,8 @@ plot_disease_network(
   max_rank = NULL,
   compound_ids = NULL,
   top_n_labels = 25,
+  top_n_targets = 15,
+  label_compounds = TRUE,
   engine = c("static", "ggiraph"),
   save = TRUE,
   out_dir = NULL,
@@ -42,6 +44,17 @@ to, or \code{NULL} (default) for every compound present in scope.}
 \item{top_n_labels}{Integer, default \code{25}: only this many disease nodes
 -- those with the most associated targets -- get a text label (full
 names stay in the \code{ggiraph} tooltips). \code{0} draws no label.}
+
+\item{top_n_targets}{Integer, default \code{15}: the targets hit by the most
+compounds in the figure (ties broken by their highest disease
+association score) get a text label (gene symbol when \code{clusterProfiler}
+\itemize{
+\item \code{org.Hs.eg.db} are installed, UniProt ID otherwise). \code{0} labels no
+target.
+}}
+
+\item{label_compounds}{Logical, default \code{TRUE}: label every compound node
+with its (truncated) name. Set \code{FALSE} for a very large compound set.}
 
 \item{engine}{\code{"static"} (default) or \code{"ggiraph"}.}
 

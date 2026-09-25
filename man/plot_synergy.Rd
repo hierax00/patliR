@@ -32,7 +32,8 @@ present (faceted).}
 \code{P2} (Complementary Exposure) pairs to label by compound name, per
 panel. \strong{Breaking change from patliR <= 0.1.x}: the old default was
 \code{10}, chosen for the previous complementarity/joint_closeness scatter;
-\code{5} keeps the new, much more selective \code{P2}-only label set legible.}
+\code{5} keeps the new, much more selective \code{P2}-only label set legible.
+A panel without \code{P2} pairs labels its \code{top_n} pairs nearest to \code{P2}.}
 
 \item{engine}{\code{"static"} (default) or \code{"ggiraph"}, save/out_dir/width/
 height/dpi -- same as \code{\link[=plot_network_layers]{plot_network_layers()}}.}
@@ -97,7 +98,13 @@ efficacy.
 \item \strong{text labels} -- the \code{top_n} \code{P2} pairs with the highest
 \code{synergy_score} (descending, \code{NA} last -- \code{synergy_score} is \code{NA} for
 singleton-flagged \code{P2} pairs even though they are still classified
-\code{P2}) are labeled by compound name, via \code{\link[=.plot_label_nodes]{.plot_label_nodes()}}.
+\code{P2}) are labeled by compound name (bold), via \code{\link[=.plot_label_nodes]{.plot_label_nodes()}}.
+A panel with no \code{P2} pair labels (italic) its \code{top_n} pairs nearest to
+\code{P2} instead: both compounds proximal (\code{z < 0}), highest \code{s_AB}. A
+message reports \code{P2} pairs left unlabeled by \code{top_n}.
+\item \strong{disease} -- named (from \code{\link[=disease_genes_fetch]{disease_genes_fetch()}} /
+\code{\link[=targets_disease_profile]{targets_disease_profile()}}, ID in brackets) in the subtitle for a
+single disease, in the panel strips otherwise.
 }
 }
 \section{Requires \code{separation = "network"} results to show anything but grey}{

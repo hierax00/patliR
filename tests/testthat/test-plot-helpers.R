@@ -84,3 +84,55 @@ test_that(".plot_log_backfill() adds a missing key column to an old log only", {
   proj <- patliR:::.plot_log_backfill(proj, "x_log", "subset", "")
   expect_identical(patliRResults(proj, "x_log")$subset, "keep")
 })
+
+.lab_delta_e <- function(cols) {
+  lab <- grDevices::convertColor(t(grDevices::col2rgb(cols) / 255), from = "sRGB", to = "Lab")
+  sqrt(rowSums(diff(lab)^2))
+}
+
+test_that(".plot_contrast_palette() gives n distinct colours with contrasting neighbours", {
+  for (n in c(1, 5, 10, 12, 13, 30)) {
+    cols <- patliR:::.plot_contrast_palette(n)
+    expect_length(cols, n)
+    expect_false(anyDuplicated(cols) > 0)
+  }
+  cols <- patliR:::.plot_contrast_palette(12)
+  ## every neighbour pair far apart in CIELAB, unlike the rainbow ramp
+  expect_gt(min(.lab_delta_e(cols)), 60)
+  expect_gt(min(.lab_delta_e(patliR:::.plot_contrast_palette(10))),
+            min(.lab_delta_e(grDevices::rainbow(10))))
+  expect_gt(min(.lab_delta_e(patliR:::.plot_contrast_palette(30))), 20)
+  expect_identical(patliR:::.plot_contrast_palette(0), character(0))
+  expect_identical(patliR:::.plot_contrast_palette(7, "default"), grDevices::rainbow(7))
+  expect_error(patliR:::.plot_contrast_palette(3, "neon"))
+})
+
+test_that(".plot_contrast_palette('grey') is greys alternating dark / light", {
+  cols <- patliR:::.plot_contrast_palette(10, "grey")
+  rgb <- grDevices::col2rgb(cols)
+  expect_true(all(rgb[1, ] == rgb[2, ] & rgb[2, ] == rgb[3, ]))
+  expect_false(anyDuplicated(cols) > 0)
+  steps <- diff(rgb[1, ])
+  expect_true(all(sign(steps[-1]) == -sign(steps[-length(steps)])))
+  expect_gt(min(abs(steps)), 60)
+  expect_length(patliR:::.plot_contrast_palette(1, "grey"), 1)
+})
+
+test_that(".plot_disease_names() / .plot_disease_label() resolve names from the disease tables", {
+  proj <- .test_project()
+  expect_identical(patliR:::.plot_disease_label(proj, "D1"), "D1")
+  patliRResults(proj, "disease_genes") <- data.frame(
+    disease_id = c("MONDO_1", "GO_0006954"), disease_name = c("hypertensive disorder", "inflammatory response (GO:0006954)"),
+    uniprot_id = "P1", stringsAsFactors = FALSE
+  )
+  patliRResults(proj, "targets_disease_profile") <- data.frame(
+    disease_id = c("MONDO_1", "EFO_2"), disease_name = c("ignored", "asthma"), stringsAsFactors = FALSE
+  )
+  nm <- patliR:::.plot_disease_names(proj, c("MONDO_1", "EFO_2", "X"))
+  expect_identical(unname(nm), c("hypertensive disorder", "asthma", NA))
+  expect_identical(
+    patliR:::.plot_disease_label(proj, c("MONDO_1", "GO_0006954", "X")),
+    c("hypertensive disorder (MONDO_1)", "inflammatory response (GO:0006954)", "X")
+  )
+  expect_identical(patliR:::.plot_disease_label(proj, "MONDO_1", with_id = FALSE), "hypertensive disorder")
+})

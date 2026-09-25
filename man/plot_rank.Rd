@@ -14,6 +14,7 @@ plot_rank(
   top_n_compounds = 15,
   top_n_targets = 20,
   target_relevance = c("breadth", "weight", "centrality"),
+  label = c("front", "all", "none"),
   engine = c("static", "ggiraph"),
   save = TRUE,
   out_dir = NULL,
@@ -42,6 +43,12 @@ the priority default for \code{y} described above.}
 
 \item{target_relevance}{\code{"breadth"} (default), \code{"weight"}, or
 \code{"centrality"} -- \code{view = "heatmap"} only, see the section above.}
+
+\item{label}{\code{view = "pareto"} only: \code{"front"} (default) names every
+Pareto-front-1 (non-dominated) compound; \code{"all"} names every compound
+(front 1 in dark bold, the rest in grey); \code{"none"} draws no names.
+Names are truncated and repelled (\code{ggrepel}), never dropped for
+overlap.}
 
 \item{engine}{\code{"static"} (default) or \code{"ggiraph"} -- \code{view = "pareto"}
 only (\code{pheatmap} has no interactive engine, same contract difference

@@ -14,6 +14,8 @@ plot_chemical_space(
   show_hulls = TRUE,
   seed = NULL,
   engine = c("ggiraph", "static", "plotly"),
+  label = c("none", "id", "pubchem", "index", "name"),
+  label_top = NULL,
   save = TRUE,
   out_dir = NULL,
   width = 7,
@@ -62,12 +64,32 @@ with a tooltip per point. \code{"static"}: plain \code{ggplot2}. \code{"plotly"}
 rotatable 3D (only meaningful with \code{dims = 3}; needs the \code{plotly}
 package).}
 
+\item{label}{What to print next to each point: \code{"none"} (default, the
+unlabeled figure), \code{"id"} (compound ID, e.g. \code{C0001}), \code{"pubchem"}
+(PubChem CID from \code{compounds(proj)$pubchem_id}, falling back to the
+compound ID when missing), \code{"index"} (a short number, the compound's
+row in \code{compounds(proj)} -- stable across conditions and subsets) or
+\code{"name"} (compound name, truncated). Labels are small, carry a white
+halo and are repelled from each other when \code{ggrepel} is installed. A
+labeled figure is saved under its own file name (suffix
+\verb{_labeled_<label>}) and log row, so it never overwrites the unlabeled
+one. See \strong{Label key} below.}
+
+\item{label_top}{\code{NULL} (default: label every compound) or a positive
+integer: label only the \code{label_top} most isolated compounds (largest
+mean distance to their 3 nearest neighbours in the projection -- the
+chemically atypical ones, whose labels also fit without colliding) --
+useful when a large panel would otherwise be illegible. Ignored when
+\code{label = "none"}.}
+
 \item{save}{Logical, default \code{TRUE}. If \code{TRUE}, also writes a PNG.}
 
 \item{out_dir}{Directory to write the PNG to (only used if
 \code{save = TRUE}). Defaults to \code{file.path(projectDir(proj), "plots")}.}
 
-\item{width, height, dpi}{Passed to \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}.}
+\item{width, height, dpi}{Passed to \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}. For a labeled
+figure of ~100 compounds, \verb{width = 10, height = 8} leaves the labels
+more room.}
 }
 \value{
 A \code{girafe} htmlwidget (\code{engine = "ggiraph"}) or a \code{ggplot}
@@ -77,6 +99,7 @@ path and PC/UMAP scores per compound are also recorded in
 \code{results/chemical_space_log.csv}, retrievable via
 \code{attr(result, "proj")}. This project attribute is also returned when
 \code{save = FALSE}, retaining descriptor-exclusion logs without writing files.
+With \code{label != "none"}, also \code{attr(result, "label_key")} (see above).
 }
 \description{
 Projects every compound's physicochemical descriptors (from
@@ -112,6 +135,17 @@ Constant descriptors are dropped before scaling; at least \code{dims}
 non-constant descriptors must remain.
 }
 
+\section{Label key}{
+
+Whenever \code{label != "none"}, the result carries \code{attr(result, "label_key")}: one row per plotted compound with \code{index}, \code{compound_id},
+\code{pubchem_id}, \code{name}, the \code{color_by} value (e.g. the family), \code{labeled}
+(whether it got a text label under \code{label_top}) and its coordinates. For
+\code{label = "id"}, \code{"pubchem"} or \code{"index"} and \code{save = TRUE}, the same
+table is also written as a CSV next to the PNG
+(\verb{<png name>_key.csv}) -- the lookup from a printed number/ID back to
+the compound.
+}
+
 \examples{
 \dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
@@ -123,6 +157,10 @@ proj <- adme_local(proj)
 plot_chemical_space(proj, color_by = "ro5_pass", engine = "static", save = FALSE)
 # three axes, one hull per family, rotatable:
 plot_chemical_space(proj, dims = 3, color_by = "family", engine = "plotly", save = FALSE)
+# numbered points plus a key table (index -> id -> name -> family):
+p <- plot_chemical_space(proj, color_by = "ro5_pass", engine = "static",
+                         label = "index", save = FALSE)
+head(attr(p, "label_key"))
 }
 
 }

@@ -94,9 +94,14 @@ plot_venn <- function(proj, condition = NULL, disease = NULL,
   }
 
   venn_list <- list(compound_targets = compound_targets, disease_targets = disease_targets)
+  ## readable set names, and room on both sides so the labels are not clipped
+  names(venn_list) <- c("Compound targets", paste0("Disease targets (", disease, ")"))
   p <- ggVennDiagram::ggVennDiagram(venn_list, label_alpha = 0) +
+    ggplot2::coord_equal(clip = "off") +
+    ggplot2::theme(plot.margin = ggplot2::margin(10, 20, 10, 90)) +
     ggplot2::scale_fill_gradient(low = "grey95", high = "#2980b9", name = "Count") +
-    ggplot2::labs(title = paste0("Compound targets vs. ", disease, " targets -- ", scope_label))
+    ggplot2::labs(title = paste0("Compound targets vs. disease targets\n", disease, " -- ", scope_label)) +
+    ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5))
 
   if (save) {
     if (is.null(out_dir)) out_dir <- file.path(projectDir(proj), "plots")

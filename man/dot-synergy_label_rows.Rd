@@ -19,7 +19,7 @@ Subset of \code{dat} with a \code{label_kind} column.
 Per panel: the \code{top_n} \code{P2} (Complementary Exposure) pairs by
 \code{synergy_score} (descending, \code{NA} last), \code{label_kind = "P2"}. A panel
 with no \code{P2} pair at all instead labels its \code{top_n} pairs nearest to
-\code{P2} -- both compounds individually proximal (\code{z < 0}) and the highest
+\code{P2} -- both \code{z < 0} (\code{both_negative_z}) and the highest
 \code{s_ab} (closest to topological separation) -- as \code{label_kind = "nearest"}, so the figure still names the most relevant pairs.
 }
 \keyword{internal}

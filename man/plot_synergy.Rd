@@ -9,6 +9,7 @@ plot_synergy(
   condition = NULL,
   disease = NULL,
   top_n = 5,
+  class_rule = c("fdr", "sign"),
   engine = c("static", "ggiraph"),
   save = TRUE,
   out_dir = NULL,
@@ -34,6 +35,13 @@ panel. \strong{Breaking change from patliR <= 0.1.x}: the old default was
 \code{10}, chosen for the previous complementarity/joint_closeness scatter;
 \code{5} keeps the new, much more selective \code{P2}-only label set legible.
 A panel without \code{P2} pairs labels its \code{top_n} pairs nearest to \code{P2}.}
+
+\item{class_rule}{\code{"fdr"} (default) or \code{"sign"}: which classification
+drives the shapes, the \code{P2} counts and the \code{P2} labels -- \code{cheng_class}
+(FDR-gated: proximal = \code{z < 0} and BH \code{p_adjusted < alpha}) or
+\code{cheng_class_sign} (sign-only: proximal = \code{z < 0}, the rule of Cheng
+et al. 2019). A legacy table without \code{cheng_class_sign} gets it derived
+from \code{separated} and the \code{z} signs wherever \code{cheng_class} is not \code{NA}.}
 
 \item{engine}{\code{"static"} (default) or \code{"ggiraph"}, save/out_dir/width/
 height/dpi -- same as \code{\link[=plot_network_layers]{plot_network_layers()}}.}
@@ -73,35 +81,44 @@ x-axis. This makes the panel upper-triangular (every point has
 arbitrary \code{a}/\code{b} labeling. It does \strong{not} change which compound is
 \code{compound_a} vs. \code{compound_b} in \code{patliRResults(proj, "network_synergy")} -- only how this one plot's two axes are filled
 in; rows where either \code{z_score} is \code{NA} are left unswapped.
-\item \strong{reference lines and shading} -- \code{x = 0} / \code{y = 0} mark
-\code{\link[=network_proximity]{network_proximity()}}'s proximity threshold; the lower-left quadrant
-(both compounds individually proximal by raw \code{z < 0}) is shaded
-faintly, since that is the region every \code{P1}/\code{P2} pair lives in.
+\item \strong{reference lines and shading} -- \code{x = 0} / \code{y = 0} mark the sign of
+\code{\link[=network_proximity]{network_proximity()}}'s \code{z_score}; the lower-left quadrant ("Both
+z-scores negative", \code{both_negative_z}) is shaded faintly. Every
+\code{P1}/\code{P2} pair lives there, but lying there does \strong{not} make a pair
+\code{P2}: that also needs \code{s_AB >= 0} and, under \code{class_rule = "fdr"},
+\code{p_adjusted < alpha} for both compounds.
 \item \strong{colour} -- \code{separated} (\code{s_AB >= 0}, Menche et al. (2015)'s sign
 convention), a two-level \strong{manual} scale, deliberately not a
 gradient -- this is the categorical variable Cheng et al.'s whole
 result turns on: whether the two compounds' target modules sit in
 separate neighbourhoods of the interactome. \code{NA} (\code{separation = "jaccard"}, an unmapped/singleton target set, or a disconnected pair)
 is a distinct grey, drawn, never dropped.
-\item \strong{shape} -- \code{cheng_class} (\code{"P1"}..\code{"P6"}, plus \code{NA}), a named shape
-scale. A second facet is deliberately not used for this -- the panel
-grid already carries \verb{(condition, disease_id)}.
+\item \strong{shape} -- the Cheng class selected by \code{class_rule} (\code{"P1"}..\code{"P6"},
+plus \code{NA}), a named shape scale: \code{cheng_class} (FDR-gated, default) or
+\code{cheng_class_sign} (sign-only, the rule of the paper). The subtitle
+names the rule in use and gives the class counts under the other one.
+A second facet is deliberately not used for this -- the panel grid
+already carries \verb{(condition, disease_id)}.
 \item \strong{size} -- \code{abs(s_ab)} magnitude (how strongly separated or
 overlapping); \code{NA} maps to the smallest size class rather than
 dropping the point (a continuous \code{ggplot2} scale would otherwise omit
 \code{NA} rows with a bare warning).
-\item \strong{in-plot annotation} -- the \code{P2} (Complementary Exposure) region
-is labeled with its literal name and the count of \code{P2} pairs in that
-panel (\code{cheng_class == "P2"}, i.e. \code{complementary_exposure}), since
-that is Cheng et al.'s only class shown to correlate with therapeutic
-efficacy.
+\item \strong{in-plot annotation} -- the shaded region is labeled "Both z-scores
+negative", and, separately, the count of \code{P2} pairs in that panel
+under the selected rule (\verb{n = k pairs with s_AB >= 0 (P2, ... rule)}),
+\code{P2} being Cheng et al.'s only class shown to correlate with
+therapeutic efficacy. Singleton-flagged pairs (\code{singleton_a} /
+\code{singleton_b}) are never counted or labeled as \code{P2}, even when a table
+built with \code{network_synergy(singleton = "zero")} classifies them.
 \item \strong{text labels} -- the \code{top_n} \code{P2} pairs with the highest
-\code{synergy_score} (descending, \code{NA} last -- \code{synergy_score} is \code{NA} for
-singleton-flagged \code{P2} pairs even though they are still classified
-\code{P2}) are labeled by compound name (bold), via \code{\link[=.plot_label_nodes]{.plot_label_nodes()}}.
-A panel with no \code{P2} pair labels (italic) its \code{top_n} pairs nearest to
-\code{P2} instead: both compounds proximal (\code{z < 0}), highest \code{s_AB}. A
-message reports \code{P2} pairs left unlabeled by \code{top_n}.
+\code{synergy_score} (descending, \code{NA} last) are labeled by compound name
+(bold), via \code{\link[=.plot_label_nodes]{.plot_label_nodes()}}. A panel with no \code{P2} pair labels
+(italic) its \code{top_n} pairs nearest to \code{P2} instead: both \code{z < 0},
+highest \code{s_AB}. A message reports \code{P2} pairs left unlabeled by
+\code{top_n}.
+\item \strong{caption} -- states that the class rule (and, for \code{"fdr"}, the BH
+gate) decides \code{P2}, and that \code{synergy_score} / \code{joint_closeness} /
+\code{complementarity} are ad-hoc ranking quantities.
 \item \strong{disease} -- named (from \code{\link[=disease_genes_fetch]{disease_genes_fetch()}} /
 \code{\link[=targets_disease_profile]{targets_disease_profile()}}, ID in brackets) in the subtitle for a
 single disease, in the panel strips otherwise.
@@ -119,6 +136,17 @@ that predates these columns, still draws the \code{z_score_a} x
 to speak of; if \strong{no} row anywhere in scope carries a \code{cheng_class},
 this function draws a self-explanatory empty panel instead of a
 confusing all-grey one.
+}
+
+\section{Ranking quantities are not efficacy measures}{
+
+\code{synergy_score}, \code{joint_closeness} and \code{complementarity} (used here only
+to pick which \code{P2} pairs get a text label) are patliR's ad-hoc
+\strong{ranking} heuristics, not validated measures of efficacy or of
+pharmacological synergy. The classes themselves depend on the STRING
+functional-association interactome and on the proximity rule, so they
+are not directly comparable with Cheng et al.'s published assignments;
+see \code{\link[=network_synergy]{network_synergy()}}.
 }
 
 \section{Companion panel -- \code{s_AB} distribution}{

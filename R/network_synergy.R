@@ -40,6 +40,21 @@ NULL
 #' Cheng et al.'s finding is that **only `P2` correlates with therapeutic
 #' efficacy**. `complementary_exposure` is the logical `cheng_class == "P2"`.
 #'
+#' Two classifications are returned, differing only in the proximity
+#' predicate:
+#'
+#' - `cheng_class` -- **FDR-gated** (patliR's modification): `proximal_x =
+#'   z_x < 0 & p_adjusted_x < alpha`. This is the stricter rule, and the one
+#'   `complementary_exposure` and `synergy_score` are built on.
+#' - `cheng_class_sign` -- **sign-only**, the rule of the paper: a compound
+#'   is proximal when its proximity `z < 0`. `P1` = `s_AB < 0` and both `z`
+#'   negative; `P2` = `s_AB >= 0` and both; `P3` / `P4` = `s_AB < 0` /
+#'   `s_AB >= 0` and exactly one; `P5` / `P6` = `s_AB < 0` / `s_AB >= 0` and
+#'   neither.
+#'
+#' The two differ whenever a compound has `z < 0` but its BH-adjusted p does
+#' not clear `alpha`; report which rule a statement rests on.
+#'
 #' @section The separation statistic `s_AB` (Menche et al. 2015):
 #' On the STRING largest connected component `G` with unweighted
 #' shortest-path hop count `d(u,v)`:
@@ -59,52 +74,107 @@ NULL
 #' No null model is fitted for `s_AB` (see the file header for Cheng et
 #' al.'s small-target-set argument); it is used raw.
 #'
-#' @section Singleton convention (patliR's choice, not Menche's):
-#' When a compound's STRING-mapped target set has fewer than 2 members this
-#' function sets `<d_AA> = 0` and flags the row with `singleton_a` /
-#' `singleton_b`. Menche et al.'s reference `separation.py` returns `nan`
-#' for an empty min-list; `0` is *patliR's* convention, and it is **not
-#' neutral** -- it makes `s_AB` systematically more positive, biasing
-#' single-target compounds toward `separated = TRUE` and therefore toward
-#' `P2`/`P4`/`P6`. Flagged pairs still appear in the table with their
-#' `cheng_class` visible, but are excluded from the `synergy_score` ranking
-#' scalar (`synergy_score = NA` whenever `singleton_a` or `singleton_b`).
-#' With predicted plant-metabolite targets, a mapped set of size 1 will not
-#' be rare.
+#' @section Singletons (fewer than 2 mapped targets):
+#' The within-set distance `<d_AA>` needs at least two members. When a
+#' compound's STRING-mapped target set has fewer than 2, this function
+#' still computes `d_aa = 0`, `s_ab` and `separated` (so the numbers stay
+#' inspectable) and flags the row with `singleton_a` / `singleton_b`. That
+#' `0` is **not neutral**: it makes `s_AB` systematically more positive, and
+#' two identical single-target sets get `s_AB = 0`, i.e. `separated = TRUE`
+#' and possibly `P2` for what is one and the same protein. Menche et al.'s
+#' reference `separation.py` returns `nan` instead.
+#'
+#' Therefore, by default (`singleton = "na"`), the separation-based classes
+#' `cheng_class`, `cheng_class_sign` and `complementary_exposure` are `NA`
+#' whenever `singleton_a` or `singleton_b` is `TRUE`. `singleton = "zero"`
+#' restores the old convention (classes computed from the `d_AA = 0`
+#' separation); the flags are kept either way, the choice is recorded in
+#' `singleton_policy`, and [plot_synergy()] never counts a singleton pair
+#' as `P2`. `synergy_score` is `NA` for a singleton-flagged pair under both
+#' policies. With predicted plant-metabolite targets a mapped set of size 1
+#' is not rare.
 #'
 #' @section `alpha` is patliR's tightening, not Cheng's:
 #' Cheng et al. (2019) use the drug-disease proximity z-score and never
 #' state a p-value cutoff for the "overlaps the disease module" predicate.
 #' `proximal_x = (z_x < 0 AND p_adjusted_x < alpha)` is a *stricter* patliR
-#' choice. Because `network_proximity()`'s empirical p has a hard floor of
-#' `1 / (n_random + 1)` and its Benjamini-Hochberg family can be large, the
-#' `alpha` gate can be arithmetically unreachable -- if
-#' `n_tests_in_family / (n_random + 1) > alpha` every pair falls into
-#' `P5`/`P6` and a warning is emitted, because "no `P2` pairs" then means
-#' nothing. The BH family is per `network_proximity()` **call**; if the
-#' merged results table holds rows from calls with different family sizes
-#' the classification inherits that incoherence.
+#' choice; `cheng_class_sign` gives the paper's sign-only classification
+#' alongside it. `p_adjusted` is [network_proximity()]'s Benjamini-Hochberg
+#' value, computed across **all (condition, compound) tests of one
+#' [network_proximity()] call**, not per pair and not per condition.
+#'
+#' The BH-adjusted p of the `i`-th smallest of `m` p-values is
+#' `q_(i) = min_{j >= i} m * p_(j) / j`, so it depends on the rank as well
+#' as on `m`: with 30 tests, `n_random = 100` and every empirical p at its
+#' floor `1/101`, every `q` is `1/101 < 0.05`. The only situation in which
+#' the gate is arithmetically unreachable is `1 / (n_random + 1) >= alpha`
+#' (a BH-adjusted p is never below its raw p); that case warns. Separately,
+#' when a condition has compounds with `z < 0` but none with
+#' `p_adjusted < alpha` (an observed outcome, not a bound), this is logged
+#' and reported as a message, since the FDR-gated classes can then only be
+#' `P5`/`P6`. If a merged `network_proximity` table holds rows from calls
+#' with different BH family sizes, a warning notes that their `p_adjusted`
+#' values are not one coherent FDR family.
+#'
+#' @section Distance direction, interactome and comparability with Cheng et al.:
+#' [network_proximity()]'s "closest" distance averages, over the
+#' **compound's** mapped targets, the hop count to the nearest disease gene
+#' (drug target -> nearest disease gene), as in the reference proximity
+#' toolbox of Guney et al. (2016) / Cheng et al. Cheng et al.'s Eq. 1 as
+#' printed averages the other way (disease gene -> nearest drug target).
+#' The two are not symmetric, so `z` values are not interchangeable with a
+#' disease-side implementation.
+#'
+#' The interactome is STRING at `score_threshold` (default `400`, "medium
+#' confidence"), a **functional-association** network that includes
+#' text-mining, co-expression and database-transferred edges -- not Cheng
+#' et al.'s interactome of experimentally supported physical protein
+#' interactions. Absolute `s_AB` values and class assignments are therefore
+#' not directly comparable with the paper's; use them to compare pairs
+#' within one patliR run. `score_threshold` is recorded in the output.
+#'
+#' @section Ranking quantities are ad hoc, not efficacy measures:
+#' `complementarity` (`1 - target_jaccard`), `joint_closeness`
+#' (`-max(z_a, z_b)`) and `synergy_score` (`complementarity *
+#' joint_closeness`, gated on `complementary_exposure` in network mode and
+#' on `both_proximal` in Jaccard mode) are patliR's **ranking** heuristics
+#' for ordering candidate pairs. They are not validated measures of
+#' efficacy, of pharmacological synergy (Bliss, Loewe, ...), or of
+#' anything Cheng et al. tested.
 #'
 #' @section `separation = "jaccard"`:
 #' Keeps the cheap set-overlap proxy for users without `STRINGdb`.
 #' `d_aa` / `d_bb` / `d_ab` / `s_ab` / `separated` / `cheng_class` /
-#' `complementary_exposure` / `singleton_a` / `singleton_b` are all `NA`,
-#' `separation_method = "jaccard"` records it, and `synergy_score` stays
-#' gated on `both_proximal` (its historical gate) rather than
-#' `complementary_exposure`. `target_jaccard` / `complementarity` are
+#' `cheng_class_sign` / `complementary_exposure` / `singleton_a` /
+#' `singleton_b` are all `NA`, `separation_method = "jaccard"` records it,
+#' and `synergy_score` is gated on `both_proximal` rather than
+#' `complementary_exposure`. (Earlier versions defined `both_proximal` as
+#' the raw-sign quantity now called `both_negative_z`; Jaccard-mode
+#' `synergy_score` is now FDR-gated like the network mode.)
+#' `target_jaccard` / `complementarity` are
 #' computed on the **raw UniProt** target sets in *both* modes (never the
 #' STRING-mapped subset), so they are comparable across modes;
 #' `n_targets_a_mapped` / `n_targets_b_mapped` carry the mapped counts
 #' separately.
 #'
-#' @section NA policies -- `both_proximal` vs `proximal_a` / `proximal_b`:
-#' Deliberately different. `proximal_x` is three-valued: `NA` when `z_x` is
-#' missing, otherwise `z_x < 0 & p_adjusted_x < alpha` (falling back
-#' per-row to `z_x < 0` alone, logged, when that row's `p_adjusted` is
-#' `NA`). `both_proximal` keeps its historical policy of coercing a missing
-#' `z` to `FALSE` (not `NA`), so a pair with one unscored compound is
-#' `both_proximal = FALSE`, not `NA`. `cheng_class` is `NA` whenever any of
-#' `separated`, `proximal_a`, `proximal_b` is `NA`.
+#' @section `proximal_*`, `both_proximal`, `both_negative_z` and their NA policies:
+#' `proximal_x` is three-valued: `NA` when `z_x` is missing, otherwise
+#' `z_x < 0 & p_adjusted_x < alpha` (falling back per-row to `z_x < 0`
+#' alone, logged, when that row's `p_adjusted` is `NA`).
+#'
+#' `both_proximal` uses **the same predicates as `cheng_class`**:
+#' `isTRUE(proximal_a) & isTRUE(proximal_b)`. It is two-valued -- a missing
+#' `proximal_x` counts as not proximal, so a pair with an unscored compound
+#' is `FALSE`, never `NA` -- and `both_proximal = TRUE` implies
+#' `proximal_a = proximal_b = TRUE`. `both_negative_z` is the raw-sign
+#' quantity (`z_a < 0 & z_b < 0`, missing `z` -> `FALSE`), i.e. the
+#' predicate of the sign-only `cheng_class_sign`; it can be `TRUE` while
+#' both `proximal_*` are `FALSE`.
+#'
+#' `cheng_class` is `NA` whenever any of `separated`, `proximal_a`,
+#' `proximal_b` is `NA`; `cheng_class_sign` whenever `separated`, `z_a` or
+#' `z_b` is `NA`; both are also `NA` for singleton pairs under the default
+#' `singleton = "na"`.
 #'
 #' @section Requires [network_proximity()] to have already run for `disease`:
 #' Pair scoring needs a per-compound proximity `z_score`, so this errors
@@ -139,6 +209,12 @@ NULL
 #'   `"disease_genes"` (default, the independent gene set) or the legacy,
 #'   circular `"targets_disease"` (a warning is emitted -- the Cheng
 #'   classification would inherit the Phase-1 circularity).
+#' @param singleton `"na"` (default) or `"zero"`. What the separation-based
+#'   classes (`cheng_class`, `cheng_class_sign`, `complementary_exposure`)
+#'   do for a pair in which either compound has fewer than 2 STRING-mapped
+#'   targets: `"na"` leaves them `NA`; `"zero"` computes them from the
+#'   `d_AA = 0` convention (the pre-audit behaviour). See the Singletons
+#'   section. Ignored when `separation = "jaccard"`.
 #'
 #' @return The updated `proj`, with a `network_synergy` entry in
 #'   [patliRResults()] (columns `condition`, `disease_id`, `compound_a`,
@@ -146,10 +222,12 @@ NULL
 #'   `n_targets_b_mapped`, `target_jaccard`, `complementarity`,
 #'   `singleton_a`, `singleton_b`, `d_aa`, `d_bb`, `d_ab`, `s_ab`,
 #'   `separated`, `z_score_a`, `z_score_b`, `p_adjusted_a`, `p_adjusted_b`,
-#'   `proximal_a`, `proximal_b`, `both_proximal`, `cheng_class`,
-#'   `complementary_exposure`, `joint_closeness`, `synergy_score`,
-#'   `separation_method`, `alpha`, `pairs_mode`, `species`,
-#'   `string_version`, `disease_gene_source`), also written to
+#'   `proximal_a`, `proximal_b`, `both_proximal`, `both_negative_z`,
+#'   `cheng_class` (FDR-gated), `cheng_class_sign` (sign-only, the paper's
+#'   rule), `complementary_exposure`, `joint_closeness`, `synergy_score`,
+#'   `separation_method`, `alpha`, `singleton_policy`, `pairs_mode`,
+#'   `species`, `string_version`, `score_threshold`,
+#'   `disease_gene_source`), also written to
 #'   `results/network_synergy.csv`.
 #'
 #' @examples
@@ -188,12 +266,14 @@ network_synergy <- function(proj, condition = NULL, disease,
                              separation = c("network", "jaccard"),
                              alpha = 0.05, species = 9606, version = "12.0",
                              score_threshold = 400,
-                             disease_gene_source = c("disease_genes", "targets_disease")) {
+                             disease_gene_source = c("disease_genes", "targets_disease"),
+                             singleton = c("na", "zero")) {
   stopifnot(is(proj, "PatliRProject"))
   stopifnot(is.character(disease), length(disease) == 1, nzchar(disease))
   pairs <- match.arg(pairs)
   separation <- match.arg(separation)
   disease_gene_source <- match.arg(disease_gene_source)
+  singleton <- match.arg(singleton)
   stopifnot(is.numeric(top_n), length(top_n) == 1, top_n >= 2)
   stopifnot(is.numeric(alpha), length(alpha) == 1, alpha > 0, alpha < 1)
 
@@ -305,27 +385,38 @@ network_synergy <- function(proj, condition = NULL, disease,
       }
     }
 
-    ## unreachable-alpha guard: the smallest achievable BH-adjusted p is
-    ## about p_floor * m, p_floor = 1 / (n_random + 1), m the family size.
-    m_family <- if ("n_tests_in_family" %in% names(prox)) {
+    ## FDR-gate diagnostics. The BH-adjusted p of the i-th smallest of m
+    ## p-values is q_(i) = min_{j >= i} m * p_(j) / j: it depends on the
+    ## rank, so m / (n_random + 1) is NOT a floor (30 tests all at p = 1/101
+    ## give q = 1/101 each). The only hard bound is q_(i) >= p_(i) >=
+    ## 1 / (n_random + 1); beyond that, report what the stored p_adjusted
+    ## values actually do.
+    if ("n_tests_in_family" %in% names(prox)) {
       fam <- unique(stats::na.omit(prox$n_tests_in_family))
       if (length(fam) > 1) {
         cli::cli_warn(c(
           "!" = "The {.val network_proximity} rows for condition {.val {cond}} were assembled from calls with different BH family sizes ({.val {fam}}).",
-          "i" = "{.field p_adjusted} is then not a coherent FDR threshold across the pair set; the {.arg alpha} gate uses the largest family."
+          "i" = "Their {.field p_adjusted} values come from different FDR families, so the {.arg alpha} gate is not one coherent FDR threshold across the pair set."
         ))
       }
-      suppressWarnings(max(prox$n_tests_in_family, na.rm = TRUE))
-    } else {
-      NA_real_
     }
-    if (!is.finite(m_family)) m_family <- nrow(prox)
     nr <- suppressWarnings(min(prox$n_random, na.rm = TRUE))
-    if (is.finite(nr) && is.finite(m_family) && m_family / (nr + 1) > alpha) {
+    if (is.finite(nr) && 1 / (nr + 1) >= alpha) {
       cli::cli_warn(c(
-        "!" = "The BH-adjusted proximity p cannot clear {.arg alpha} = {alpha} for condition {.val {cond}}: family size {m_family}, {.arg n_random} = {nr}, floor {signif(m_family / (nr + 1), 3)}.",
-        "i" = "Every pair will fall into {.val P5}/{.val P6} regardless of topology -- rerun {.fn network_proximity} with a larger {.arg n_random}."
+        "!" = "The proximity FDR gate cannot be cleared for condition {.val {cond}}: the empirical p has a floor of 1/({.arg n_random} + 1) = {signif(1 / (nr + 1), 3)} >= {.arg alpha} = {alpha}, and a BH-adjusted p is never below its raw p.",
+        "i" = "Every compound with a {.field p_adjusted} is then not {.field proximal}, so {.field cheng_class} can only be {.val P5}/{.val P6}; {.field cheng_class_sign} (sign-only rule) is unaffected. Rerun {.fn network_proximity} with a larger {.arg n_random}."
       ))
+    } else if ("p_adjusted" %in% names(prox)) {
+      neg_z <- !is.na(prox$z_score) & prox$z_score < 0 & !is.na(prox$p_adjusted)
+      if (any(neg_z) && !any(prox$p_adjusted[neg_z] < alpha)) {
+        min_q <- min(prox$p_adjusted[neg_z])
+        msg <- paste0(
+          "condition '", cond, "': ", sum(neg_z), " compound(s) have z < 0 but none has BH p_adjusted < alpha = ",
+          alpha, " (smallest ", signif(min_q, 3), "); the FDR-gated cheng_class can only be P5/P6 here, see cheng_class_sign for the sign-only rule"
+        )
+        cli::cli_inform(c("i" = msg))
+        proj <- .log_append(proj, step = "network_synergy", id = NA_character_, message = msg)
+      }
     }
 
     z_of <- stats::setNames(prox$z_score, prox$compound_id)
@@ -400,6 +491,7 @@ network_synergy <- function(proj, condition = NULL, disease,
     pair_rows <- vector("list", length(combos))
     p_fallback_used <- FALSE
     disconnected_pairs <- character(0)
+    n_singleton_na <- 0L
 
     for (i in seq_along(combos)) {
       a <- combos[[i]][1]; b <- combos[[i]][2]
@@ -414,9 +506,16 @@ network_synergy <- function(proj, condition = NULL, disease,
       pb <- if (is.null(padj_of)) NA_real_ else unname(padj_of[b])
       if ((!is.na(za) && is.na(pa)) || (!is.na(zb) && is.na(pb))) p_fallback_used <- TRUE
 
+      ## FDR-gated predicates (cheng_class) and raw-sign predicates
+      ## (cheng_class_sign, the paper's rule). both_proximal is built from
+      ## the former, both_negative_z from the latter; both map a missing
+      ## predicate to FALSE.
       proximal_a <- .synergy_proximal(za, pa, alpha)
       proximal_b <- .synergy_proximal(zb, pb, alpha)
-      both_proximal <- !is.na(za) && !is.na(zb) && za < 0 && zb < 0
+      negative_a <- if (is.na(za)) NA else za < 0
+      negative_b <- if (is.na(zb)) NA else zb < 0
+      both_proximal <- isTRUE(proximal_a) && isTRUE(proximal_b)
+      both_negative_z <- isTRUE(negative_a) && isTRUE(negative_b)
       joint_closeness <- if (!is.na(za) && !is.na(zb)) -max(za, zb) else NA_real_
 
       if (separation == "network") {
@@ -424,6 +523,7 @@ network_synergy <- function(proj, condition = NULL, disease,
         n_a_mapped <- length(A); n_b_mapped <- length(B)
         singleton_a <- n_a_mapped < 2L
         singleton_b <- n_b_mapped < 2L
+        singleton_pair <- singleton_a || singleton_b
         d_aa <- d_aa_of[[a]]; d_bb <- d_aa_of[[b]]
         if (n_a_mapped == 0L || n_b_mapped == 0L) {
           d_ab <- NA_real_; s_ab <- NA_real_
@@ -433,9 +533,17 @@ network_synergy <- function(proj, condition = NULL, disease,
           if (is.na(s_ab)) disconnected_pairs <- c(disconnected_pairs, paste0(a, " ~ ", b))
         }
         separated <- if (is.na(s_ab)) NA else (s_ab >= 0)
-        cheng_class <- .synergy_cheng_class(separated, proximal_a, proximal_b)
+        if (singleton_pair && singleton == "na") {
+          ## d_AA = 0 is a convention, not a measurement: no class.
+          cheng_class <- NA_character_
+          cheng_class_sign <- NA_character_
+          if (!is.na(s_ab)) n_singleton_na <- n_singleton_na + 1L
+        } else {
+          cheng_class <- .synergy_cheng_class(separated, proximal_a, proximal_b)
+          cheng_class_sign <- .synergy_cheng_class(separated, negative_a, negative_b)
+        }
         complementary_exposure <- if (is.na(cheng_class)) NA else (cheng_class == "P2")
-        synergy_score <- if (isTRUE(complementary_exposure) && !singleton_a && !singleton_b) {
+        synergy_score <- if (isTRUE(complementary_exposure) && !singleton_pair) {
           complementarity * joint_closeness
         } else {
           NA_real_
@@ -447,6 +555,7 @@ network_synergy <- function(proj, condition = NULL, disease,
         d_aa <- NA_real_; d_bb <- NA_real_; d_ab <- NA_real_; s_ab <- NA_real_
         separated <- NA
         cheng_class <- NA_character_
+        cheng_class_sign <- NA_character_
         complementary_exposure <- NA
         synergy_score <- if (both_proximal) complementarity * joint_closeness else NA_real_
       }
@@ -460,10 +569,14 @@ network_synergy <- function(proj, condition = NULL, disease,
         d_aa = d_aa, d_bb = d_bb, d_ab = d_ab, s_ab = s_ab, separated = separated,
         z_score_a = za, z_score_b = zb, p_adjusted_a = pa, p_adjusted_b = pb,
         proximal_a = proximal_a, proximal_b = proximal_b, both_proximal = both_proximal,
-        cheng_class = cheng_class, complementary_exposure = complementary_exposure,
+        both_negative_z = both_negative_z,
+        cheng_class = cheng_class, cheng_class_sign = cheng_class_sign,
+        complementary_exposure = complementary_exposure,
         joint_closeness = joint_closeness, synergy_score = synergy_score,
-        separation_method = separation, alpha = alpha, pairs_mode = pairs,
+        separation_method = separation, alpha = alpha, singleton_policy = singleton,
+        pairs_mode = pairs,
         species = as.numeric(species), string_version = as.character(version),
+        score_threshold = as.numeric(score_threshold),
         disease_gene_source = effective_dgs,
         stringsAsFactors = FALSE
       )
@@ -471,15 +584,26 @@ network_synergy <- function(proj, condition = NULL, disease,
 
     rows[[cond]] <- do.call(rbind, pair_rows)
     n_p2 <- sum(rows[[cond]]$cheng_class == "P2", na.rm = TRUE)
+    n_p2_sign <- sum(rows[[cond]]$cheng_class_sign == "P2", na.rm = TRUE)
     n_scored <- sum(!is.na(rows[[cond]]$synergy_score))
     proj <- .log_append(
       proj, step = "network_synergy", id = NA_character_,
       message = paste0(
         "condition '", cond, "', disease '", disease, "' (separation = '", separation,
         "', pairs = '", pairs, "'): ", nrow(rows[[cond]]), " pair(s), ", n_p2,
-        " P2 (Complementary Exposure), ", n_scored, " with a synergy_score"
+        " P2 (Complementary Exposure, FDR-gated), ", n_p2_sign, " P2 (sign-only rule), ",
+        n_scored, " with a synergy_score"
       )
     )
+    if (n_singleton_na > 0) {
+      proj <- .log_append(
+        proj, step = "network_synergy", id = NA_character_,
+        message = paste0(
+          "condition '", cond, "': ", n_singleton_na, " pair(s) involve a compound with < 2 mapped targets;",
+          " cheng_class / cheng_class_sign / complementary_exposure set to NA (singleton = 'na')"
+        )
+      )
+    }
     if (p_fallback_used) {
       proj <- .log_append(
         proj, step = "network_synergy", id = NA_character_,
@@ -533,7 +657,9 @@ network_synergy <- function(proj, condition = NULL, disease,
 #' `NA_character_` whenever any of `separated`, `proximal_a`, `proximal_b`
 #' is `NA`; otherwise the class from Cheng et al.'s Fig. 2 truth table.
 #' `P2` (Complementary Exposure) is exactly `separated & proximal_a &
-#' proximal_b`.
+#' proximal_b`. [network_synergy()] calls it twice: with the FDR-gated
+#' predicates (`cheng_class`) and with the raw `z < 0` signs
+#' (`cheng_class_sign`).
 #' @keywords internal
 .synergy_cheng_class <- function(separated, proximal_a, proximal_b) {
   if (anyNA(c(separated, proximal_a, proximal_b))) return(NA_character_)
@@ -643,10 +769,13 @@ network_synergy <- function(proj, condition = NULL, disease,
     z_score_a = double(0), z_score_b = double(0),
     p_adjusted_a = double(0), p_adjusted_b = double(0),
     proximal_a = logical(0), proximal_b = logical(0), both_proximal = logical(0),
-    cheng_class = character(0), complementary_exposure = logical(0),
+    both_negative_z = logical(0),
+    cheng_class = character(0), cheng_class_sign = character(0),
+    complementary_exposure = logical(0),
     joint_closeness = double(0), synergy_score = double(0),
-    separation_method = character(0), alpha = double(0), pairs_mode = character(0),
-    species = double(0), string_version = character(0),
+    separation_method = character(0), alpha = double(0), singleton_policy = character(0),
+    pairs_mode = character(0),
+    species = double(0), string_version = character(0), score_threshold = double(0),
     disease_gene_source = character(0),
     stringsAsFactors = FALSE
   )

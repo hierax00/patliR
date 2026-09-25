@@ -62,8 +62,12 @@ NULL
 #'   \item{`"synergy"` (optional)}{`crit_synergy_best` -- for each compound,
 #'     the best (`max`) `synergy_score` among every partner it was scored
 #'     against in `network_synergy` (its best achievable complementary
-#'     pairing, not an average across all partners). `n_p2_partners` (count
-#'     of `cheng_class == "P2"` partnerships) is kept as an *informational*
+#'     pairing, not an average across all partners; like every
+#'     `synergy_score`, an ad-hoc ranking quantity, not an efficacy
+#'     measure). `n_p2_partners` (count of `cheng_class == "P2"`
+#'     partnerships -- the FDR-gated class, `NA` and so not counted for
+#'     singleton pairs under `network_synergy(singleton = "na")`, the
+#'     default) is kept as an *informational*
 #'     column only -- not fed to the RRA, since it is a different view of
 #'     the same underlying table as `crit_synergy_best` and including both
 #'     would double-count one signal.}

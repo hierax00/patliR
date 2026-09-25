@@ -9,6 +9,8 @@
 \description{
 \code{NA_character_} whenever any of \code{separated}, \code{proximal_a}, \code{proximal_b}
 is \code{NA}; otherwise the class from Cheng et al.'s Fig. 2 truth table.
-\code{P2} (Complementary Exposure) is exactly \code{separated & proximal_a & proximal_b}.
+\code{P2} (Complementary Exposure) is exactly \code{separated & proximal_a & proximal_b}. \code{\link[=network_synergy]{network_synergy()}} calls it twice: with the FDR-gated
+predicates (\code{cheng_class}) and with the raw \code{z < 0} signs
+(\code{cheng_class_sign}).
 }
 \keyword{internal}

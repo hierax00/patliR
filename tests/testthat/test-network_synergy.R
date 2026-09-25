@@ -335,21 +335,58 @@ test_that("disease_gene_source = 'targets_disease' warns about inherited circula
 })
 
 ## ---------------------------------------------------------------------------
-## unreachable-alpha guard (pre-review 12-U3)
+## FDR-gate diagnostics (BH is rank-aware: m / (n_random + 1) is no floor)
 ## ---------------------------------------------------------------------------
 
-test_that("the unreachable-alpha warning fires at n_random = 100 with 30 compounds", {
-  proj <- .network_stats_test_setup()
+.synergy_syn30 <- function(proj, n_random, p_adjusted, z = rep(-2, 30)) {
   cps <- sprintf("C%02d", 1:30)
   ct <- stats::setNames(lapply(seq_along(cps), function(i) paste0("U", c(i, i + 1))), cps)
   proj <- .synergy_add_condition(proj, "SYN", ct)
-  prox <- .synergy_fake_prox(cps, condition = "SYN", n_random = 100L, n_tests_in_family = 30L)
-  patliRResults(proj, "network_proximity") <- prox
+  patliRResults(proj, "network_proximity") <- .synergy_fake_prox(
+    cps, condition = "SYN", z = z, n_random = n_random, n_tests_in_family = 30L,
+    p_adjusted = p_adjusted
+  )
+  proj
+}
 
+test_that("BH counterexample: 30 tests, n_random = 100, all p = 1/101 -> no false warning, all proximal", {
+  ## q_(i) = min_{j >= i} m p_(j) / j = 30 * (1/101) / 30 = 1/101 for every i
+  q <- stats::p.adjust(rep(1 / 101, 30), method = "BH")
+  expect_equal(q, rep(1 / 101, 30))
+  expect_true(all(q < 0.05))
+
+  proj <- .synergy_syn30(.network_stats_test_setup(), n_random = 100L, p_adjusted = q)
+  expect_no_warning(
+    proj <- network_synergy(proj, condition = "SYN", disease = "SOME_DISEASE",
+                            separation = "jaccard", pairs = "all")
+  )
+  res <- patliRResults(proj, "network_synergy")
+  expect_equal(nrow(res), choose(30, 2))
+  expect_true(all(res$proximal_a & res$proximal_b))
+  expect_true(all(res$both_proximal))
+})
+
+test_that("the FDR gate warns only when 1 / (n_random + 1) >= alpha", {
+  proj <- .synergy_syn30(.network_stats_test_setup(), n_random = 10L, p_adjusted = rep(1 / 11, 30))
   expect_warning(
     network_synergy(proj, condition = "SYN", disease = "SOME_DISEASE", separation = "jaccard", pairs = "all"),
-    "cannot clear"
+    "cannot be cleared"
   )
+})
+
+test_that("z < 0 but no p_adjusted < alpha is reported (message + log), not warned", {
+  proj <- .synergy_syn30(.network_stats_test_setup(), n_random = 1000L, p_adjusted = rep(0.2, 30))
+  expect_no_warning(
+    expect_message(
+      proj <- network_synergy(proj, condition = "SYN", disease = "SOME_DISEASE",
+                              separation = "jaccard", pairs = "all"),
+      "none has BH p_adjusted"
+    )
+  )
+  expect_true(any(grepl("none has BH p_adjusted", projectLog(proj)$message)))
+  res <- patliRResults(proj, "network_synergy")
+  expect_true(all(!res$both_proximal))
+  expect_true(all(res$both_negative_z))
 })
 
 ## ---------------------------------------------------------------------------
@@ -375,12 +412,16 @@ test_that("separation = 'jaccard' reproduces the historical complementarity + sy
     expect_equal(res$complementarity[i], comp)
     za <- unname(z[a]); zb <- unname(z[b])
     bp <- za < 0 && zb < 0
+    ## fixture: p_adjusted = 0.001 exactly when z < 0, so the FDR-gated and
+    ## the raw-sign predicates coincide here
     expect_equal(res$both_proximal[i], bp)
+    expect_equal(res$both_negative_z[i], bp)
     expected_syn <- if (bp) comp * (-max(za, zb)) else NA_real_
     expect_equal(res$synergy_score[i], expected_syn)
   }
   expect_true(all(is.na(res$s_ab)))
   expect_true(all(is.na(res$cheng_class)))
+  expect_true(all(is.na(res$cheng_class_sign)))
   expect_true(all(res$separation_method == "jaccard"))
 })
 
@@ -388,7 +429,7 @@ test_that("separation = 'jaccard' reproduces the historical complementarity + sy
 ## separation = "network" -- end to end (STRINGdb mocked)
 ## ---------------------------------------------------------------------------
 
-test_that("network mode: hand-checkable s_AB, P2 class, and singleton gating", {
+test_that("network mode: hand-checkable s_AB; singleton pair -> NA classes by default, P2 with singleton = 'zero'", {
   testthat::skip_if_not_installed("STRINGdb")
   proj <- .network_stats_test_setup()
   ## A: one target ; B: three targets ; path graph s1-s2-s3-s4
@@ -397,8 +438,8 @@ test_that("network mode: hand-checkable s_AB, P2 class, and singleton gating", {
   mock <- .synergy_mock_string(c("PA1", "PB1", "PB2", "PB3"))
   .synergy_use_mock(mock)
 
-  proj <- network_synergy(proj, condition = "SYN", disease = "SOME_DISEASE", separation = "network", pairs = "all")
-  res <- patliRResults(proj, "network_synergy")
+  proj_na <- network_synergy(proj, condition = "SYN", disease = "SOME_DISEASE", separation = "network", pairs = "all")
+  res <- patliRResults(proj_na, "network_synergy")
   row <- res[res$compound_a == "A" & res$compound_b == "B", ]
   expect_equal(nrow(row), 1L)
 
@@ -411,11 +452,108 @@ test_that("network mode: hand-checkable s_AB, P2 class, and singleton gating", {
   expect_false(row$singleton_b)
   expect_equal(row$n_targets_a_mapped, 1L)
   expect_equal(row$n_targets_b_mapped, 3L)
-  expect_identical(row$cheng_class, "P2")           # separated & both proximal
-  expect_true(row$complementary_exposure)
-  expect_true(is.na(row$synergy_score))             # singleton => excluded from the scalar
+  ## default singleton = "na": no separation-based class
+  expect_true(is.na(row$cheng_class))
+  expect_true(is.na(row$cheng_class_sign))
+  expect_true(is.na(row$complementary_exposure))
+  expect_true(is.na(row$synergy_score))
+  expect_identical(row$singleton_policy, "na")
+  expect_true(row$both_proximal)                     # proximity does not depend on d_AA
+  expect_true(any(grepl("< 2 mapped targets", projectLog(proj_na)$message)))
   expect_true(all(res$species == 9606))
   expect_true(all(res$string_version == "12.0"))
+  expect_true(all(res$score_threshold == 400))
+
+  ## opt-in: the old d_AA = 0 convention
+  proj_zero <- network_synergy(proj, condition = "SYN", disease = "SOME_DISEASE", separation = "network",
+                               pairs = "all", singleton = "zero")
+  rz <- patliRResults(proj_zero, "network_synergy")
+  expect_equal(rz$s_ab, 1.25)
+  expect_identical(rz$cheng_class, "P2")             # separated & both proximal
+  expect_identical(rz$cheng_class_sign, "P2")
+  expect_true(rz$complementary_exposure)
+  expect_true(is.na(rz$synergy_score))               # singleton => excluded from the scalar either way
+  expect_identical(rz$singleton_policy, "zero")
+})
+
+test_that("network mode: identical single-target sets are not P2 by default", {
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  proj <- .synergy_add_condition(proj, "SYN", list(A = "P1X", B = "P1X"))
+  patliRResults(proj, "network_proximity") <- .synergy_fake_prox(c("A", "B"), condition = "SYN", z = c(-2, -2))
+  mock <- .synergy_mock_string(c("P1X", "Q9", "Q8"))
+  .synergy_use_mock(mock)
+
+  row <- patliRResults(network_synergy(proj, condition = "SYN", disease = "SOME_DISEASE",
+                                       separation = "network", pairs = "all"), "network_synergy")
+  expect_equal(row$s_ab, 0)                          # the d_AA = 0 artefact
+  expect_true(is.na(row$cheng_class))
+  row0 <- patliRResults(network_synergy(proj, condition = "SYN", disease = "SOME_DISEASE",
+                                        separation = "network", pairs = "all", singleton = "zero"),
+                        "network_synergy")
+  expect_identical(row0$cheng_class, "P2")           # what the old convention produced
+})
+
+test_that("network mode: FDR-gated vs sign-only classes differ; both_proximal agrees with proximal_*", {
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  ## path s1-s2-s3-s4, A = {s1, s2}, B = {s3, s4}:
+  ##   d_aa = d_bb = 1 ; A->B mins 2, 1 ; B->A mins 1, 2 => d_ab = 6/4 = 1.5
+  ##   s_ab = 1.5 - 1 = 0.5 >= 0 => separated
+  proj <- .synergy_add_condition(proj, "SYN", list(A = c("PA1", "PA2"), B = c("PB1", "PB2")))
+  ## both z < 0, but only B clears the BH gate
+  patliRResults(proj, "network_proximity") <- .synergy_fake_prox(
+    c("A", "B"), condition = "SYN", z = c(-2, -2), p_adjusted = c(0.2, 0.001)
+  )
+  mock <- .synergy_mock_string(c("PA1", "PA2", "PB1", "PB2"))
+  .synergy_use_mock(mock)
+
+  row <- patliRResults(network_synergy(proj, condition = "SYN", disease = "SOME_DISEASE",
+                                       separation = "network", pairs = "all"), "network_synergy")
+  expect_equal(row$s_ab, 0.5)
+  expect_false(row$proximal_a)
+  expect_true(row$proximal_b)
+  expect_false(row$both_proximal)                    # same predicates as cheng_class
+  expect_true(row$both_negative_z)                   # raw sign only
+  expect_identical(row$cheng_class, "P4")            # separated, one FDR-proximal
+  expect_identical(row$cheng_class_sign, "P2")       # separated, both z < 0
+  expect_false(row$complementary_exposure)           # built on the FDR-gated class
+  expect_true(is.na(row$synergy_score))
+  expect_equal(row$score_threshold, 400)
+
+  ## overlapping variant (B shares A's targets): P3 (gated) vs P1 (sign)
+  proj2 <- .network_stats_test_setup()
+  proj2 <- .synergy_add_condition(proj2, "SYN", list(A = c("PA1", "PA2"), B = c("PA1", "PA2", "PB1")))
+  patliRResults(proj2, "network_proximity") <- patliRResults(proj, "network_proximity")
+  row2 <- patliRResults(network_synergy(proj2, condition = "SYN", disease = "SOME_DISEASE",
+                                        separation = "network", pairs = "all"), "network_synergy")
+  expect_lt(row2$s_ab, 0)
+  expect_identical(row2$cheng_class, "P3")
+  expect_identical(row2$cheng_class_sign, "P1")
+})
+
+test_that("both_proximal == isTRUE(proximal_a) & isTRUE(proximal_b) on every row, incl. missing z", {
+  proj <- .network_stats_test_setup()
+  cps <- .synergy_flo_compounds(proj)
+  skip_if(length(cps) < 3, "needs >= 3 FLO-ET compounds")
+  n <- length(cps) - 1L
+  z <- seq(-3, 1, length.out = n)
+  ## alternate the BH outcome so raw sign and FDR gate disagree on some rows
+  padj <- ifelse(seq_len(n) %% 2 == 0, 0.3, 0.001)
+  patliRResults(proj, "network_proximity") <- .synergy_fake_prox(cps[seq_len(n)], z = z, p_adjusted = padj)
+  proj <- network_synergy(proj, condition = "FLO-ET", disease = "SOME_DISEASE", separation = "jaccard", pairs = "all")
+  res <- patliRResults(proj, "network_synergy")
+  expect_identical(res$both_proximal, (res$proximal_a %in% TRUE) & (res$proximal_b %in% TRUE))
+  expect_identical(
+    res$both_negative_z,
+    !is.na(res$z_score_a) & !is.na(res$z_score_b) & res$z_score_a < 0 & res$z_score_b < 0
+  )
+  expect_false(anyNA(res$both_proximal))
+  expect_false(anyNA(res$both_negative_z))
+  expect_true(any(res$both_negative_z & !res$both_proximal))
+  expect_false(any(res$both_proximal & !(res$proximal_a & res$proximal_b), na.rm = TRUE))
+  ## Jaccard-mode synergy_score follows the FDR-gated both_proximal
+  expect_identical(!is.na(res$synergy_score), res$both_proximal)
 })
 
 test_that("network mode: zero mapped targets => s_ab NA, cheng_class NA, never dropped", {

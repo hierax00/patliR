@@ -15,7 +15,8 @@ network_synergy(
   species = 9606,
   version = "12.0",
   score_threshold = 400,
-  disease_gene_source = c("disease_genes", "targets_disease")
+  disease_gene_source = c("disease_genes", "targets_disease"),
+  singleton = c("na", "zero")
 )
 }
 \arguments{
@@ -57,6 +58,13 @@ confidence").}
 \code{"disease_genes"} (default, the independent gene set) or the legacy,
 circular \code{"targets_disease"} (a warning is emitted -- the Cheng
 classification would inherit the Phase-1 circularity).}
+
+\item{singleton}{\code{"na"} (default) or \code{"zero"}. What the separation-based
+classes (\code{cheng_class}, \code{cheng_class_sign}, \code{complementary_exposure})
+do for a pair in which either compound has fewer than 2 STRING-mapped
+targets: \code{"na"} leaves them \code{NA}; \code{"zero"} computes them from the
+\code{d_AA = 0} convention (the pre-audit behaviour). See the Singletons
+section. Ignored when \code{separation = "jaccard"}.}
 }
 \value{
 The updated \code{proj}, with a \code{network_synergy} entry in
@@ -65,10 +73,12 @@ The updated \code{proj}, with a \code{network_synergy} entry in
 \code{n_targets_b_mapped}, \code{target_jaccard}, \code{complementarity},
 \code{singleton_a}, \code{singleton_b}, \code{d_aa}, \code{d_bb}, \code{d_ab}, \code{s_ab},
 \code{separated}, \code{z_score_a}, \code{z_score_b}, \code{p_adjusted_a}, \code{p_adjusted_b},
-\code{proximal_a}, \code{proximal_b}, \code{both_proximal}, \code{cheng_class},
-\code{complementary_exposure}, \code{joint_closeness}, \code{synergy_score},
-\code{separation_method}, \code{alpha}, \code{pairs_mode}, \code{species},
-\code{string_version}, \code{disease_gene_source}), also written to
+\code{proximal_a}, \code{proximal_b}, \code{both_proximal}, \code{both_negative_z},
+\code{cheng_class} (FDR-gated), \code{cheng_class_sign} (sign-only, the paper's
+rule), \code{complementary_exposure}, \code{joint_closeness}, \code{synergy_score},
+\code{separation_method}, \code{alpha}, \code{singleton_policy}, \code{pairs_mode},
+\code{species}, \code{string_version}, \code{score_threshold},
+\code{disease_gene_source}), also written to
 \code{results/network_synergy.csv}.
 }
 \description{
@@ -89,6 +99,21 @@ the pair in one of Cheng, Kovacs & Barabasi (2019)'s six classes:\tabular{lllll}
 
 Cheng et al.'s finding is that \strong{only \code{P2} correlates with therapeutic
 efficacy}. \code{complementary_exposure} is the logical \code{cheng_class == "P2"}.
+
+Two classifications are returned, differing only in the proximity
+predicate:
+\itemize{
+\item \code{cheng_class} -- \strong{FDR-gated} (patliR's modification): \code{proximal_x = z_x < 0 & p_adjusted_x < alpha}. This is the stricter rule, and the one
+\code{complementary_exposure} and \code{synergy_score} are built on.
+\item \code{cheng_class_sign} -- \strong{sign-only}, the rule of the paper: a compound
+is proximal when its proximity \code{z < 0}. \code{P1} = \code{s_AB < 0} and both \code{z}
+negative; \code{P2} = \code{s_AB >= 0} and both; \code{P3} / \code{P4} = \code{s_AB < 0} /
+\code{s_AB >= 0} and exactly one; \code{P5} / \code{P6} = \code{s_AB < 0} / \code{s_AB >= 0} and
+neither.
+}
+
+The two differ whenever a compound has \code{z < 0} but its BH-adjusted p does
+not clear \code{alpha}; report which rule a statement rests on.
 }
 \section{The separation statistic \code{s_AB} (Menche et al. 2015)}{
 
@@ -111,19 +136,26 @@ No null model is fitted for \code{s_AB} (see the file header for Cheng et
 al.'s small-target-set argument); it is used raw.
 }
 
-\section{Singleton convention (patliR's choice, not Menche's)}{
+\section{Singletons (fewer than 2 mapped targets)}{
 
-When a compound's STRING-mapped target set has fewer than 2 members this
-function sets \verb{<d_AA> = 0} and flags the row with \code{singleton_a} /
-\code{singleton_b}. Menche et al.'s reference \code{separation.py} returns \code{nan}
-for an empty min-list; \code{0} is \emph{patliR's} convention, and it is \strong{not
-neutral} -- it makes \code{s_AB} systematically more positive, biasing
-single-target compounds toward \code{separated = TRUE} and therefore toward
-\code{P2}/\code{P4}/\code{P6}. Flagged pairs still appear in the table with their
-\code{cheng_class} visible, but are excluded from the \code{synergy_score} ranking
-scalar (\code{synergy_score = NA} whenever \code{singleton_a} or \code{singleton_b}).
-With predicted plant-metabolite targets, a mapped set of size 1 will not
-be rare.
+The within-set distance \verb{<d_AA>} needs at least two members. When a
+compound's STRING-mapped target set has fewer than 2, this function
+still computes \code{d_aa = 0}, \code{s_ab} and \code{separated} (so the numbers stay
+inspectable) and flags the row with \code{singleton_a} / \code{singleton_b}. That
+\code{0} is \strong{not neutral}: it makes \code{s_AB} systematically more positive, and
+two identical single-target sets get \code{s_AB = 0}, i.e. \code{separated = TRUE}
+and possibly \code{P2} for what is one and the same protein. Menche et al.'s
+reference \code{separation.py} returns \code{nan} instead.
+
+Therefore, by default (\code{singleton = "na"}), the separation-based classes
+\code{cheng_class}, \code{cheng_class_sign} and \code{complementary_exposure} are \code{NA}
+whenever \code{singleton_a} or \code{singleton_b} is \code{TRUE}. \code{singleton = "zero"}
+restores the old convention (classes computed from the \code{d_AA = 0}
+separation); the flags are kept either way, the choice is recorded in
+\code{singleton_policy}, and \code{\link[=plot_synergy]{plot_synergy()}} never counts a singleton pair
+as \code{P2}. \code{synergy_score} is \code{NA} for a singleton-flagged pair under both
+policies. With predicted plant-metabolite targets a mapped set of size 1
+is not rare.
 }
 
 \section{\code{alpha} is patliR's tightening, not Cheng's}{
@@ -131,39 +163,90 @@ be rare.
 Cheng et al. (2019) use the drug-disease proximity z-score and never
 state a p-value cutoff for the "overlaps the disease module" predicate.
 \verb{proximal_x = (z_x < 0 AND p_adjusted_x < alpha)} is a \emph{stricter} patliR
-choice. Because \code{network_proximity()}'s empirical p has a hard floor of
-\code{1 / (n_random + 1)} and its Benjamini-Hochberg family can be large, the
-\code{alpha} gate can be arithmetically unreachable -- if
-\code{n_tests_in_family / (n_random + 1) > alpha} every pair falls into
-\code{P5}/\code{P6} and a warning is emitted, because "no \code{P2} pairs" then means
-nothing. The BH family is per \code{network_proximity()} \strong{call}; if the
-merged results table holds rows from calls with different family sizes
-the classification inherits that incoherence.
+choice; \code{cheng_class_sign} gives the paper's sign-only classification
+alongside it. \code{p_adjusted} is \code{\link[=network_proximity]{network_proximity()}}'s Benjamini-Hochberg
+value, computed across \strong{all (condition, compound) tests of one
+\code{\link[=network_proximity]{network_proximity()}} call}, not per pair and not per condition.
+
+The BH-adjusted p of the \code{i}-th smallest of \code{m} p-values is
+\verb{q_(i) = min_\{j >= i\} m * p_(j) / j}, so it depends on the rank as well
+as on \code{m}: with 30 tests, \code{n_random = 100} and every empirical p at its
+floor \code{1/101}, every \code{q} is \code{1/101 < 0.05}. The only situation in which
+the gate is arithmetically unreachable is \code{1 / (n_random + 1) >= alpha}
+(a BH-adjusted p is never below its raw p); that case warns. Separately,
+when a condition has compounds with \code{z < 0} but none with
+\code{p_adjusted < alpha} (an observed outcome, not a bound), this is logged
+and reported as a message, since the FDR-gated classes can then only be
+\code{P5}/\code{P6}. If a merged \code{network_proximity} table holds rows from calls
+with different BH family sizes, a warning notes that their \code{p_adjusted}
+values are not one coherent FDR family.
+}
+
+\section{Distance direction, interactome and comparability with Cheng et al.}{
+
+\code{\link[=network_proximity]{network_proximity()}}'s "closest" distance averages, over the
+\strong{compound's} mapped targets, the hop count to the nearest disease gene
+(drug target -> nearest disease gene), as in the reference proximity
+toolbox of Guney et al. (2016) / Cheng et al. Cheng et al.'s Eq. 1 as
+printed averages the other way (disease gene -> nearest drug target).
+The two are not symmetric, so \code{z} values are not interchangeable with a
+disease-side implementation.
+
+The interactome is STRING at \code{score_threshold} (default \code{400}, "medium
+confidence"), a \strong{functional-association} network that includes
+text-mining, co-expression and database-transferred edges -- not Cheng
+et al.'s interactome of experimentally supported physical protein
+interactions. Absolute \code{s_AB} values and class assignments are therefore
+not directly comparable with the paper's; use them to compare pairs
+within one patliR run. \code{score_threshold} is recorded in the output.
+}
+
+\section{Ranking quantities are ad hoc, not efficacy measures}{
+
+\code{complementarity} (\code{1 - target_jaccard}), \code{joint_closeness}
+(\code{-max(z_a, z_b)}) and \code{synergy_score} (\code{complementarity * joint_closeness}, gated on \code{complementary_exposure} in network mode and
+on \code{both_proximal} in Jaccard mode) are patliR's \strong{ranking} heuristics
+for ordering candidate pairs. They are not validated measures of
+efficacy, of pharmacological synergy (Bliss, Loewe, ...), or of
+anything Cheng et al. tested.
 }
 
 \section{\code{separation = "jaccard"}}{
 
 Keeps the cheap set-overlap proxy for users without \code{STRINGdb}.
 \code{d_aa} / \code{d_bb} / \code{d_ab} / \code{s_ab} / \code{separated} / \code{cheng_class} /
-\code{complementary_exposure} / \code{singleton_a} / \code{singleton_b} are all \code{NA},
-\code{separation_method = "jaccard"} records it, and \code{synergy_score} stays
-gated on \code{both_proximal} (its historical gate) rather than
-\code{complementary_exposure}. \code{target_jaccard} / \code{complementarity} are
+\code{cheng_class_sign} / \code{complementary_exposure} / \code{singleton_a} /
+\code{singleton_b} are all \code{NA}, \code{separation_method = "jaccard"} records it,
+and \code{synergy_score} is gated on \code{both_proximal} rather than
+\code{complementary_exposure}. (Earlier versions defined \code{both_proximal} as
+the raw-sign quantity now called \code{both_negative_z}; Jaccard-mode
+\code{synergy_score} is now FDR-gated like the network mode.)
+\code{target_jaccard} / \code{complementarity} are
 computed on the \strong{raw UniProt} target sets in \emph{both} modes (never the
 STRING-mapped subset), so they are comparable across modes;
 \code{n_targets_a_mapped} / \code{n_targets_b_mapped} carry the mapped counts
 separately.
 }
 
-\section{NA policies -- \code{both_proximal} vs \code{proximal_a} / \code{proximal_b}}{
+\section{\verb{proximal_*}, \code{both_proximal}, \code{both_negative_z} and their NA policies}{
 
-Deliberately different. \code{proximal_x} is three-valued: \code{NA} when \code{z_x} is
-missing, otherwise \code{z_x < 0 & p_adjusted_x < alpha} (falling back
-per-row to \code{z_x < 0} alone, logged, when that row's \code{p_adjusted} is
-\code{NA}). \code{both_proximal} keeps its historical policy of coercing a missing
-\code{z} to \code{FALSE} (not \code{NA}), so a pair with one unscored compound is
-\code{both_proximal = FALSE}, not \code{NA}. \code{cheng_class} is \code{NA} whenever any of
-\code{separated}, \code{proximal_a}, \code{proximal_b} is \code{NA}.
+\code{proximal_x} is three-valued: \code{NA} when \code{z_x} is missing, otherwise
+\code{z_x < 0 & p_adjusted_x < alpha} (falling back per-row to \code{z_x < 0}
+alone, logged, when that row's \code{p_adjusted} is \code{NA}).
+
+\code{both_proximal} uses \strong{the same predicates as \code{cheng_class}}:
+\code{isTRUE(proximal_a) & isTRUE(proximal_b)}. It is two-valued -- a missing
+\code{proximal_x} counts as not proximal, so a pair with an unscored compound
+is \code{FALSE}, never \code{NA} -- and \code{both_proximal = TRUE} implies
+\code{proximal_a = proximal_b = TRUE}. \code{both_negative_z} is the raw-sign
+quantity (\code{z_a < 0 & z_b < 0}, missing \code{z} -> \code{FALSE}), i.e. the
+predicate of the sign-only \code{cheng_class_sign}; it can be \code{TRUE} while
+both \verb{proximal_*} are \code{FALSE}.
+
+\code{cheng_class} is \code{NA} whenever any of \code{separated}, \code{proximal_a},
+\code{proximal_b} is \code{NA}; \code{cheng_class_sign} whenever \code{separated}, \code{z_a} or
+\code{z_b} is \code{NA}; both are also \code{NA} for singleton pairs under the default
+\code{singleton = "na"}.
 }
 
 \section{Requires \code{\link[=network_proximity]{network_proximity()}} to have already run for \code{disease}}{

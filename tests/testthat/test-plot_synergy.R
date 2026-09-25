@@ -20,11 +20,13 @@
     separated = sep, z_score_a = za, z_score_b = zb, p_adjusted_a = 0.01, p_adjusted_b = 0.01,
     proximal_a = proximal_a, proximal_b = proximal_b,
     both_proximal = isTRUE(proximal_a) && isTRUE(proximal_b),
-    cheng_class = cheng_class,
+    both_negative_z = za < 0 && zb < 0,
+    cheng_class = cheng_class, cheng_class_sign = cheng_class,
     complementary_exposure = if (is.na(cheng_class)) NA else cheng_class == "P2",
     joint_closeness = 1.5, synergy_score = synergy_score,
-    separation_method = "network", alpha = 0.05, pairs_mode = "all",
-    species = 9606, string_version = "12.0", disease_gene_source = "disease_genes",
+    separation_method = "network", alpha = 0.05, singleton_policy = "na", pairs_mode = "all",
+    species = 9606, string_version = "12.0", score_threshold = 400,
+    disease_gene_source = "disease_genes",
     stringsAsFactors = FALSE
   )
 }
@@ -62,9 +64,10 @@ test_that("plot_synergy() draws the Cheng quadrant over all P1..P6 + NA classes,
 
   built <- ggplot2::ggplot_build(p)
   ann_labels <- unlist(lapply(built$data, function(d) {
-    if ("label" %in% names(d)) d$label[grepl("Complementary Exposure|P2 pair", d$label)] else NULL
+    if ("label" %in% names(d)) d$label[grepl("Both z-scores negative|\\(P2, ", d$label)] else NULL
   }))
-  expect_true(any(grepl("Complementary Exposure", ann_labels)))
+  expect_true(any(grepl("Both z-scores negative", ann_labels)))
+  expect_false(any(grepl("Complementary Exposure", ann_labels)))
 
   hand_count_d1 <- sum(fake$cheng_class == "P2" & fake$disease_id == "D1", na.rm = TRUE)
   hand_count_d2 <- sum(fake$cheng_class == "P2" & fake$disease_id == "D2", na.rm = TRUE)
@@ -144,7 +147,7 @@ test_that("unclassified synergy pairs still contribute to the separation histogr
   expect_true(inherits(plots$main$layers[[1]]$geom, "GeomText"))
 })
 
-test_that("plot_synergy() draws the P2 quadrant name and its count as separate single-line labels", {
+test_that("plot_synergy() draws the region name and the P2 count as separate single-line labels", {
   testthat::skip_if_not_installed("ggplot2")
   proj <- .test_project()
   patliRResults(proj, "network_edges") <- data.frame(condition = "A", compound_id = "c1", uniprot_id = "t1")
@@ -160,9 +163,82 @@ test_that("plot_synergy() draws the P2 quadrant name and its count as separate s
   plots <- plot_synergy(proj, condition = "A", save = FALSE)
   txt <- Filter(function(l) inherits(l$geom, "GeomText"), plots$main$layers)
   labels <- unlist(lapply(txt, function(l) c(l$data$quadrant_label, l$data$count_label)))
-  expect_true(any(grepl("Complementary Exposure (P2)", labels, fixed = TRUE)))
-  expect_true(any(grepl("n = 1 P2 pair", labels, fixed = TRUE)))
+  expect_true(any(grepl("Both z-scores negative", labels, fixed = TRUE)))
+  expect_true(any(grepl("n = 1 pair with s_AB >= 0 (P2, FDR-gated rule)", labels, fixed = TRUE)))
   expect_false(any(grepl("\n", labels, fixed = TRUE)))
+  ## caption: class rule / FDR gate decide P2; ranking quantities are ad hoc
+  caption <- gsub("\\s+", " ", plots$main$labels$caption)
+  expect_match(caption, "BH gate", fixed = TRUE)
+  expect_match(caption, "ad-hoc ranking quantities", fixed = TRUE)
+})
+
+## Two pairs whose FDR-gated and sign-only classes differ, plus a singleton
+## pair classified P2 (as network_synergy(singleton = "zero") would).
+.plot_synergy_rule_data <- function() {
+  data.frame(
+    condition = "A", disease_id = "d1",
+    compound_a = c("c1", "c2", "c1"), compound_b = c("c2", "c3", "c3"),
+    z_score_a = c(-3, -1, -2), z_score_b = c(-2, -4, -2.5),
+    p_adjusted_a = c(0.2, 0.01, 0.01), p_adjusted_b = c(0.01, 0.3, 0.01),
+    s_ab = c(0.5, -0.2, 0.4), separated = c(TRUE, FALSE, TRUE),
+    singleton_a = c(FALSE, FALSE, TRUE), singleton_b = FALSE,
+    cheng_class = c("P4", "P3", "P2"), cheng_class_sign = c("P2", "P1", "P2"),
+    synergy_score = NA_real_, stringsAsFactors = FALSE
+  )
+}
+
+test_that("plot_synergy(class_rule =) selects the class column that drives shapes and P2 counts", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(condition = "A", compound_id = "c1", uniprot_id = "t1")
+  patliRResults(proj, "network_synergy") <- .plot_synergy_rule_data()
+  testthat::local_mocked_bindings(
+    .synergy_finish_both = function(proj, p_main, p_sab, ...) list(main = p_main, sab = p_sab),
+    .package = "patliR"
+  )
+  count_label <- function(p) {
+    txt <- Filter(function(l) inherits(l$geom, "GeomText"), p$layers)
+    labs <- unlist(lapply(txt, function(l) l$data$count_label))
+    labs[!is.na(labs)]
+  }
+
+  fdr <- plot_synergy(proj, condition = "A", save = FALSE)$main
+  expect_true(all(fdr$data$class_rule == "fdr"))
+  expect_identical(as.character(fdr$data$cheng_f), c("P4", "P3", "P2"))
+  ## the singleton P2 is drawn but never counted as P2
+  expect_identical(fdr$data$is_p2, c(FALSE, FALSE, FALSE))
+  expect_true(any(grepl("n = 0 pairs with s_AB >= 0 (P2, FDR-gated rule)", count_label(fdr), fixed = TRUE)))
+  flat <- function(x) gsub("\\s+", " ", x)
+  expect_match(flat(fdr$labels$subtitle), "FDR-gated rule", fixed = TRUE)
+  ## counts under the other (sign-only) rule, singleton excluded
+  expect_match(flat(fdr$labels$subtitle), "P1 1, P2 1, P3 0", fixed = TRUE)
+  expect_match(flat(fdr$labels$caption), "singleton pair", fixed = TRUE)
+
+  sgn <- plot_synergy(proj, condition = "A", class_rule = "sign", save = FALSE)$main
+  expect_true(all(sgn$data$class_rule == "sign"))
+  expect_identical(as.character(sgn$data$cheng_f), c("P2", "P1", "P2"))
+  expect_identical(sgn$data$is_p2, c(TRUE, FALSE, FALSE))
+  expect_true(any(grepl("n = 1 pair with s_AB >= 0 (P2, sign-only rule)", count_label(sgn), fixed = TRUE)))
+  expect_match(flat(sgn$labels$subtitle), "P3 1, P4 1", fixed = TRUE)
+
+  expect_error(plot_synergy(proj, condition = "A", class_rule = "bogus", save = FALSE))
+})
+
+test_that("plot_synergy() derives cheng_class_sign for a table that predates it", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(condition = "A", compound_id = "c1", uniprot_id = "t1")
+  legacy <- .plot_synergy_rule_data()
+  legacy$cheng_class_sign <- NULL
+  legacy$cheng_class[3] <- NA_character_
+  patliRResults(proj, "network_synergy") <- legacy
+  testthat::local_mocked_bindings(
+    .synergy_finish_both = function(proj, p_main, p_sab, ...) list(main = p_main, sab = p_sab),
+    .package = "patliR"
+  )
+  sgn <- suppressMessages(plot_synergy(proj, condition = "A", class_rule = "sign", save = FALSE))$main
+  ## both z < 0 on rows 1-2 -> P2 (separated) / P1 (overlapping); row 3 keeps its NA
+  expect_identical(sgn$data$cheng_class_sign, c("P2", "P1", NA))
 })
 
 test_that(".synergy_label_rows() labels P2 pairs, or the pairs nearest to P2 when a panel has none", {

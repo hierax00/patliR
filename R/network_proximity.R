@@ -426,8 +426,9 @@ network_proximity <- function(proj, condition = NULL, disease,
   ## rbind never faces a column-count mismatch on a later zero-row rerun.
   ## BH across every (condition, compound) proximity test in this call; the
   ## family size is recorded so network_synergy() can detect a merged table
-  ## whose rows came from calls of different family sizes and warn when the
-  ## alpha gate is arithmetically unreachable (p_floor * m / k).
+  ## whose rows came from calls of different family sizes. (BH also depends on
+  ## the rank of each p-value, so no family-size-only "unreachable" bound
+  ## exists; see the diagnostics in network_synergy().)
   if (nrow(result) > 0) {
     result$n_tests_in_family <- nrow(result)
     result$p_adjusted <- stats::p.adjust(result$p_empirical, method = "BH")

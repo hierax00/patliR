@@ -20,10 +20,12 @@ NULL
 #'   `compound_a` vs. `compound_b` in `patliRResults(proj,
 #'   "network_synergy")` -- only how this one plot's two axes are filled
 #'   in; rows where either `z_score` is `NA` are left unswapped.
-#' - **reference lines and shading** -- `x = 0` / `y = 0` mark
-#'   [network_proximity()]'s proximity threshold; the lower-left quadrant
-#'   (both compounds individually proximal by raw `z < 0`) is shaded
-#'   faintly, since that is the region every `P1`/`P2` pair lives in.
+#' - **reference lines and shading** -- `x = 0` / `y = 0` mark the sign of
+#'   [network_proximity()]'s `z_score`; the lower-left quadrant ("Both
+#'   z-scores negative", `both_negative_z`) is shaded faintly. Every
+#'   `P1`/`P2` pair lives there, but lying there does **not** make a pair
+#'   `P2`: that also needs `s_AB >= 0` and, under `class_rule = "fdr"`,
+#'   `p_adjusted < alpha` for both compounds.
 #' - **colour** -- `separated` (`s_AB >= 0`, Menche et al. (2015)'s sign
 #'   convention), a two-level **manual** scale, deliberately not a
 #'   gradient -- this is the categorical variable Cheng et al.'s whole
@@ -31,25 +33,32 @@ NULL
 #'   separate neighbourhoods of the interactome. `NA` (`separation =
 #'   "jaccard"`, an unmapped/singleton target set, or a disconnected pair)
 #'   is a distinct grey, drawn, never dropped.
-#' - **shape** -- `cheng_class` (`"P1"`..`"P6"`, plus `NA`), a named shape
-#'   scale. A second facet is deliberately not used for this -- the panel
-#'   grid already carries `(condition, disease_id)`.
+#' - **shape** -- the Cheng class selected by `class_rule` (`"P1"`..`"P6"`,
+#'   plus `NA`), a named shape scale: `cheng_class` (FDR-gated, default) or
+#'   `cheng_class_sign` (sign-only, the rule of the paper). The subtitle
+#'   names the rule in use and gives the class counts under the other one.
+#'   A second facet is deliberately not used for this -- the panel grid
+#'   already carries `(condition, disease_id)`.
 #' - **size** -- `abs(s_ab)` magnitude (how strongly separated or
 #'   overlapping); `NA` maps to the smallest size class rather than
 #'   dropping the point (a continuous `ggplot2` scale would otherwise omit
 #'   `NA` rows with a bare warning).
-#' - **in-plot annotation** -- the `P2` (Complementary Exposure) region
-#'   is labeled with its literal name and the count of `P2` pairs in that
-#'   panel (`cheng_class == "P2"`, i.e. `complementary_exposure`), since
-#'   that is Cheng et al.'s only class shown to correlate with therapeutic
-#'   efficacy.
+#' - **in-plot annotation** -- the shaded region is labeled "Both z-scores
+#'   negative", and, separately, the count of `P2` pairs in that panel
+#'   under the selected rule (`n = k pairs with s_AB >= 0 (P2, ... rule)`),
+#'   `P2` being Cheng et al.'s only class shown to correlate with
+#'   therapeutic efficacy. Singleton-flagged pairs (`singleton_a` /
+#'   `singleton_b`) are never counted or labeled as `P2`, even when a table
+#'   built with `network_synergy(singleton = "zero")` classifies them.
 #' - **text labels** -- the `top_n` `P2` pairs with the highest
-#'   `synergy_score` (descending, `NA` last -- `synergy_score` is `NA` for
-#'   singleton-flagged `P2` pairs even though they are still classified
-#'   `P2`) are labeled by compound name (bold), via [.plot_label_nodes()].
-#'   A panel with no `P2` pair labels (italic) its `top_n` pairs nearest to
-#'   `P2` instead: both compounds proximal (`z < 0`), highest `s_AB`. A
-#'   message reports `P2` pairs left unlabeled by `top_n`.
+#'   `synergy_score` (descending, `NA` last) are labeled by compound name
+#'   (bold), via [.plot_label_nodes()]. A panel with no `P2` pair labels
+#'   (italic) its `top_n` pairs nearest to `P2` instead: both `z < 0`,
+#'   highest `s_AB`. A message reports `P2` pairs left unlabeled by
+#'   `top_n`.
+#' - **caption** -- states that the class rule (and, for `"fdr"`, the BH
+#'   gate) decides `P2`, and that `synergy_score` / `joint_closeness` /
+#'   `complementarity` are ad-hoc ranking quantities.
 #' - **disease** -- named (from [disease_genes_fetch()] /
 #'   [targets_disease_profile()], ID in brackets) in the subtitle for a
 #'   single disease, in the panel strips otherwise.
@@ -65,6 +74,15 @@ NULL
 #' to speak of; if **no** row anywhere in scope carries a `cheng_class`,
 #' this function draws a self-explanatory empty panel instead of a
 #' confusing all-grey one.
+#'
+#' @section Ranking quantities are not efficacy measures:
+#' `synergy_score`, `joint_closeness` and `complementarity` (used here only
+#' to pick which `P2` pairs get a text label) are patliR's ad-hoc
+#' **ranking** heuristics, not validated measures of efficacy or of
+#' pharmacological synergy. The classes themselves depend on the STRING
+#' functional-association interactome and on the proximity rule, so they
+#' are not directly comparable with Cheng et al.'s published assignments;
+#' see [network_synergy()].
 #'
 #' @section Companion panel -- `s_AB` distribution:
 #' Also produces (and, when `save = TRUE`, separately saves and logs) a
@@ -88,6 +106,12 @@ NULL
 #'   `10`, chosen for the previous complementarity/joint_closeness scatter;
 #'   `5` keeps the new, much more selective `P2`-only label set legible.
 #'   A panel without `P2` pairs labels its `top_n` pairs nearest to `P2`.
+#' @param class_rule `"fdr"` (default) or `"sign"`: which classification
+#'   drives the shapes, the `P2` counts and the `P2` labels -- `cheng_class`
+#'   (FDR-gated: proximal = `z < 0` and BH `p_adjusted < alpha`) or
+#'   `cheng_class_sign` (sign-only: proximal = `z < 0`, the rule of Cheng
+#'   et al. 2019). A legacy table without `cheng_class_sign` gets it derived
+#'   from `separated` and the `z` signs wherever `cheng_class` is not `NA`.
 #' @param engine `"static"` (default) or `"ggiraph"`, save/out_dir/width/
 #'   height/dpi -- same as [plot_network_layers()].
 #'
@@ -129,10 +153,12 @@ NULL
 #'
 #' @export
 plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
+                          class_rule = c("fdr", "sign"),
                           engine = c("static", "ggiraph"), save = TRUE, out_dir = NULL,
                           width = 8, height = 6, dpi = 150) {
   stopifnot(is(proj, "PatliRProject"))
   stopifnot(is.numeric(top_n), length(top_n) == 1, top_n >= 0)
+  class_rule <- match.arg(class_rule)
   engine <- match.arg(engine)
   engine <- .plot_require(engine)
   scope <- .plot_scope(proj, condition)
@@ -155,11 +181,42 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
   ## table assigned directly to patliRResults() bypasses that. Treat an
   ## absent column exactly like an all-NA one.
   for (col in c("s_ab", "separated", "cheng_class", "complementary_exposure",
-                "synergy_score", "p_adjusted_a", "p_adjusted_b")) {
+                "synergy_score", "p_adjusted_a", "p_adjusted_b", "z_score_a", "z_score_b",
+                "singleton_a", "singleton_b")) {
     if (is.null(dat[[col]])) {
-      dat[[col]] <- if (col == "cheng_class") NA_character_ else if (col == "separated" || col == "complementary_exposure") NA else NA_real_
+      dat[[col]] <- if (col == "cheng_class") {
+        NA_character_
+      } else if (col %in% c("separated", "complementary_exposure", "singleton_a", "singleton_b")) {
+        NA
+      } else {
+        NA_real_
+      }
     }
   }
+  ## A table from before cheng_class_sign existed: derive the sign-only
+  ## class wherever the stored (FDR-gated) class exists, so an NA from the
+  ## singleton / unmapped / disconnected policies carries over.
+  if (is.null(dat[["cheng_class_sign"]])) {
+    dat$cheng_class_sign <- vapply(seq_len(nrow(dat)), function(i) {
+      if (is.na(dat$cheng_class[i])) return(NA_character_)
+      za <- dat$z_score_a[i]; zb <- dat$z_score_b[i]
+      .synergy_cheng_class(dat$separated[i], if (is.na(za)) NA else za < 0, if (is.na(zb)) NA else zb < 0)
+    }, character(1))
+  }
+  ## The class that drives shapes / P2 counts / P2 labels.
+  class_col <- if (class_rule == "fdr") "cheng_class" else "cheng_class_sign"
+  other_col <- if (class_rule == "fdr") "cheng_class_sign" else "cheng_class"
+  rule_name <- c(fdr = "FDR-gated", sign = "sign-only")
+  rule_def <- c(
+    fdr = "proximal = z < 0 & BH p_adjusted < alpha",
+    sign = "proximal = z < 0, as in Cheng et al. 2019"
+  )
+  other_rule <- if (class_rule == "fdr") "sign" else "fdr"
+  dat$class_rule <- class_rule
+  dat$cheng_plot <- as.character(dat[[class_col]])
+  ## singleton-flagged pairs are never counted/labeled as P2 (d_AA = 0 is a
+  ## convention; network_synergy(singleton = "zero") still classifies them)
+  dat$singleton_pair <- (dat$singleton_a %in% TRUE) | (dat$singleton_b %in% TRUE)
 
   ## disease name, not only its ID, in the panel strips / subtitle
   dat$disease_label <- .plot_disease_label(proj, dat$disease_id)
@@ -202,11 +259,11 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
   ## scope has a non-NA cheng_class", not "no row is scored" -- the latter
   ## is the common, uninteresting case (most pairs are not P2) and would
   ## make this guard fire on almost every real run.
-  n_class <- sum(!is.na(dat$cheng_class))
+  n_class <- sum(!is.na(dat$cheng_plot))
   if (n_class == 0) {
     n_sab <- sum(!is.na(dat$s_ab))
     msg <- paste0(
-      "No compound pair in ", scope_label, " has a computed Cheng classification (cheng_class).\n\n",
+      "No compound pair in ", scope_label, " has a computed Cheng classification (", class_col, ").\n\n",
       "This plot needs network_synergy(separation = \"network\") results (s_ab / separated /\n",
       "cheng_class); separation = \"jaccard\" leaves those columns NA, as does a pair whose\n",
       "target sets did not map onto the STRING LCC.\n\n",
@@ -217,7 +274,7 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
   }
   if (n_class < nrow(dat)) {
     cli::cli_inform(c(
-      "i" = "{nrow(dat) - n_class} of {nrow(dat)} pair{?s} {?has/have} no Cheng classification (cheng_class {.val NA}) -- drawn in grey with no shape assigned."
+      "i" = "{nrow(dat) - n_class} of {nrow(dat)} pair{?s} {?has/have} no Cheng classification ({class_col} {.val NA}) -- drawn with the NA shape."
     ))
   }
 
@@ -241,31 +298,56 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
   ## (two lines: half as wide, so neighbouring pair labels can be repelled apart)
   dat$short_label <- paste0(.plot_truncate(label_a, 20), "\n+ ", .plot_truncate(label_b, 20))
   dat$tooltip <- sprintf(
-    "%s\nz_a=%.2f  z_b=%.2f\ns_ab=%s (%s)\nclass=%s",
+    "%s\nz_a=%.2f  z_b=%.2f\ns_ab=%s (%s)\nclass: FDR-gated %s, sign-only %s",
     dat$pair_label, dat$za_plot, dat$zb_plot,
     ifelse(is.na(dat$s_ab), "NA", sprintf("%.2f", dat$s_ab)),
     ifelse(is.na(dat$separated), "NA", ifelse(dat$separated, "separated", "overlapping")),
-    ifelse(is.na(dat$cheng_class), "NA", dat$cheng_class)
+    ifelse(is.na(dat$cheng_class), "NA", dat$cheng_class),
+    ifelse(is.na(dat$cheng_class_sign), "NA", dat$cheng_class_sign)
   )
 
   ## colour: separated, a two-level MANUAL scale (not a gradient) -- see
   ## roxygen. NA (jaccard mode / unmapped / disconnected) is a distinct grey.
   dat$separated_f <- factor(dat$separated, levels = c(TRUE, FALSE))
-  ## shape: cheng_class, P1..P6 named + NA.
-  dat$cheng_f <- factor(dat$cheng_class, levels = paste0("P", 1:6))
+  ## shape: the class selected by class_rule, P1..P6 named + NA.
+  dat$cheng_f <- factor(dat$cheng_plot, levels = paste0("P", 1:6))
   ## size: |s_ab|, NA -> the smallest class (never dropped).
   dat$s_ab_mag <- abs(dat$s_ab)
   dat$size_val <- ifelse(is.na(dat$s_ab_mag), 0, dat$s_ab_mag)
 
-  ## P2 = Complementary Exposure: separated & proximal_a & proximal_b,
-  ## already computed by network_synergy() as cheng_class == "P2" /
-  ## complementary_exposure. Per-panel count for the in-plot annotation.
-  dat$is_p2 <- dat$cheng_class == "P2" & !is.na(dat$cheng_class)
+  ## P2 = Complementary Exposure: separated & both proximal under the
+  ## selected rule, singleton pairs excluded. Per-panel count for the
+  ## in-plot annotation; the shaded region itself is only "both z < 0".
+  dat$is_p2 <- !is.na(dat$cheng_plot) & dat$cheng_plot == "P2" & !dat$singleton_pair
   is_p2 <- dat$is_p2
   ann_p2 <- stats::aggregate(is_p2 ~ panel, data = dat, FUN = sum)
   names(ann_p2)[2] <- "n_p2"
-  ann_p2$quadrant_label <- "  Complementary Exposure (P2) quadrant"
-  ann_p2$count_label <- sprintf("  n = %d P2 pair%s", ann_p2$n_p2, ifelse(ann_p2$n_p2 == 1, "", "s"))
+  ann_p2$quadrant_label <- "  Both z-scores negative"
+  ann_p2$count_label <- sprintf(
+    "  n = %d pair%s with s_AB >= 0 (P2, %s rule)",
+    ann_p2$n_p2, ifelse(ann_p2$n_p2 == 1, "", "s"), rule_name[[class_rule]]
+  )
+
+  ## Class counts under the other rule, for the subtitle (singleton pairs
+  ## excluded, as for the P2 count above).
+  cls_levels <- paste0("P", 1:6)
+  other_counts <- table(factor(dat[[other_col]][!dat$singleton_pair], levels = cls_levels))
+  other_line <- paste0(
+    rule_name[[other_rule]], " rule (", rule_def[[other_rule]], ") would give: ",
+    paste(cls_levels, as.integer(other_counts), collapse = ", ")
+  )
+  n_singleton_classified <- sum(dat$singleton_pair & !is.na(dat$cheng_plot))
+  caption <- paste0(
+    "P2 needs s_AB >= 0 and both compounds proximal under the ", rule_name[[class_rule]], " rule (",
+    rule_def[[class_rule]], ")",
+    if (class_rule == "fdr") "; the BH gate, not the shaded region, decides proximity" else "",
+    ". synergy_score / joint_closeness / complementarity are ad-hoc ranking quantities, not validated efficacy or synergy measures.",
+    if (n_singleton_classified > 0) {
+      paste0(" ", n_singleton_classified, " classified singleton pair(s) (< 2 mapped targets) are not counted as P2.")
+    } else {
+      ""
+    }
+  )
 
   ## top_n P2 pairs by synergy_score (descending, NA last), per panel; a
   ## panel without any P2 pair labels its top_n pairs nearest to P2 instead
@@ -311,8 +393,8 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
       text_args = list(vjust = -1)
     )
   }
-  ## Quadrant name and P2 count as two single-line labels stacked in the
-  ## top-left corner of the shaded (both-proximal) quadrant, just under the
+  ## Region name and P2 count as two single-line labels stacked in the
+  ## top-left corner of the shaded (both z < 0) quadrant, just under the
   ## y = 0 line. One two-line label anchored at (-Inf, -Inf) justified each
   ## line on its own width (the count slid left of the name) and sat on top
   ## of the most proximal pairs, which is where the points concentrate.
@@ -332,24 +414,31 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
       labels = c("separated (s_AB >= 0)", "overlapping (s_AB < 0)"),
       name = "Topological separation"
     ) +
-    ggplot2::scale_shape_manual(values = shape_values, na.value = 8, drop = FALSE, name = "Cheng class") +
+    ggplot2::scale_shape_manual(
+      values = shape_values, na.value = 8, drop = FALSE,
+      name = paste0("Cheng class\n(", rule_name[[class_rule]], ")")
+    ) +
     ggplot2::scale_size(range = c(1.5, 6), name = "|s_AB|\n(NA -> smallest)") +
     ggplot2::labs(
       title = paste0("Compound pair Cheng classification -- ", scope_label),
       subtitle = .plot_wrap(paste0(
         disease_line,
-        "x = z_score (more proximal compound), y = z_score (less proximal); shaded region = both individually proximal (z < 0);\n",
-        "colour = separated (s_AB >= 0, Menche et al. 2015); shape = Cheng class P1-P6 (Cheng, Kovacs & Barabasi 2019); size = |s_AB|",
+        "x = z_score (more proximal compound), y = z_score (less proximal); shaded region = both z-scores negative;\n",
+        "colour = separated (s_AB >= 0, Menche et al. 2015); size = |s_AB|; shape = Cheng class P1-P6 (Cheng, Kovacs & Barabasi 2019), ",
+        rule_name[[class_rule]], " rule (", rule_def[[class_rule]], ")\n",
+        other_line,
         if (any(top$label_kind == "P2")) "\nbold labels = P2 (Complementary Exposure) pairs, highest synergy_score" else "",
-        if (any(top$label_kind == "nearest")) "\nitalic labels = no P2 pair in the panel: the both-proximal pairs nearest to separation (highest s_AB)" else ""
+        if (any(top$label_kind == "nearest")) "\nitalic labels = no P2 pair in the panel: pairs with both z < 0 nearest to separation (highest s_AB)" else ""
       ), .plot_wrap_width(width, 7.5)),
+      caption = .plot_wrap(caption, .plot_wrap_width(width, 7)),
       x = "z_score (more proximal compound of the pair)",
       y = "z_score (less proximal compound of the pair)"
     ) +
     ggplot2::theme_minimal() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(size = 12, face = "bold"), plot.subtitle = ggplot2::element_text(size = 7.5, colour = "grey40"),
-      plot.title.position = "plot"
+      plot.caption = ggplot2::element_text(size = 7, colour = "grey40", hjust = 0),
+      plot.title.position = "plot", plot.caption.position = "plot"
     )
   if (length(unique(dat$panel)) > 1) p <- p + ggplot2::facet_wrap(~panel, labeller = ggplot2::label_wrap_gen(40))
 
@@ -362,7 +451,7 @@ plot_synergy <- function(proj, condition = NULL, disease = NULL, top_n = 5,
 #' Per panel: the `top_n` `P2` (Complementary Exposure) pairs by
 #' `synergy_score` (descending, `NA` last), `label_kind = "P2"`. A panel
 #' with no `P2` pair at all instead labels its `top_n` pairs nearest to
-#' `P2` -- both compounds individually proximal (`z < 0`) and the highest
+#' `P2` -- both `z < 0` (`both_negative_z`) and the highest
 #' `s_ab` (closest to topological separation) -- as `label_kind =
 #' "nearest"`, so the figure still names the most relevant pairs.
 #' @param dat Plot data with `panel`, `is_p2`, `synergy_score`, `s_ab`,

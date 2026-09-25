@@ -541,7 +541,8 @@ plot_proximity(proj, condition = NULL, disease = NULL,
                view = c("z", "null"), top_n = 12,
                engine = c("static", "ggiraph"), ...)
 plot_synergy(proj, condition = NULL, disease = NULL, top_n = 5,
-             engine = c("static", "ggiraph"), ...)
+             class_rule = c("fdr", "sign"), engine = c("static", "ggiraph"), ...)
+                                          # cheng_class = FDR-gated (patliR); cheng_class_sign = the paper's sign-only rule
 plot_bowtie(proj, condition = NULL, top_n_compounds = NULL, ...)
 plot_target_chord(proj, condition = NULL, actions_score_threshold = 400,
                    top_n_labels = 15, engine = c("static", "ggiraph"), ...)

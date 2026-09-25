@@ -98,8 +98,12 @@ is flipped internally before ranking).}
 \item{\code{"synergy"} (optional)}{\code{crit_synergy_best} -- for each compound,
 the best (\code{max}) \code{synergy_score} among every partner it was scored
 against in \code{network_synergy} (its best achievable complementary
-pairing, not an average across all partners). \code{n_p2_partners} (count
-of \code{cheng_class == "P2"} partnerships) is kept as an \emph{informational}
+pairing, not an average across all partners; like every
+\code{synergy_score}, an ad-hoc ranking quantity, not an efficacy
+measure). \code{n_p2_partners} (count of \code{cheng_class == "P2"}
+partnerships -- the FDR-gated class, \code{NA} and so not counted for
+singleton pairs under \code{network_synergy(singleton = "na")}, the
+default) is kept as an \emph{informational}
 column only -- not fed to the RRA, since it is a different view of
 the same underlying table as \code{crit_synergy_best} and including both
 would double-count one signal.}

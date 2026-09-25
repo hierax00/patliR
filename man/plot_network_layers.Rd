@@ -19,6 +19,10 @@ plot_network_layers(
   min_target_degree = 1,
   compound_ids = NULL,
   module_id = NULL,
+  view = c("auto", "network", "compound", "bipartite", "module", "pathway"),
+  min_shared = NULL,
+  max_targets = 40,
+  auto_max_nodes = 300,
   save = TRUE,
   out_dir = NULL,
   width = 9,
@@ -53,7 +57,7 @@ the extra layer(s) otherwise.}
 compound/target/pathway/disease, \code{.network_layers_layer_colors()}),
 \code{"module"} (joins \code{\link[=network_module_robustness]{network_module_robustness()}}'s per-node
 \code{network_module_membership} table by \verb{(condition, node_id)}, coloured
-with a qualitative palette (\code{grDevices::hcl.colors(n, "Dark 3")}) and a
+with the colour-blind-safe Okabe-Ito palette (\code{grDevices::hcl.colors(n, "Dark 3")} beyond eight modules) and a
 grey \code{"not clustered"} level for any node absent from that table --
 e.g. \code{network_module_robustness()} was never run; \code{cli_abort}s if the
 table does not exist at all, naming the function to run), or
@@ -77,12 +81,13 @@ nodes (lowest \code{network_enrichment$p.adjust}, pooled across whichever
 conditions are in scope) and drops the rest, along with any
 \code{target_pathway}/\code{compound_pathway_derived} edge that only reached a
 dropped pathway. Set to \code{Inf} to keep every significant pathway (not
-recommended -- see the section above for why).}
+recommended -- see the section above for why). With \code{view = "pathway"}: the number of terms (rows) drawn.}
 
 \item{pathway_db}{See \code{.network_target_pathway_edges()}, internal --
 restrict the pathway layer to specific \code{network_enrich()} \code{db}
 value(s) (e.g. \code{"kegg"} alone) before \code{max_pathways} even applies, or
-\code{NULL} (default) for every \code{db} combined.}
+\code{NULL} (default) for every \code{db} combined. Also restricts the terms of
+\code{view = "pathway"}.}
 
 \item{min_target_degree}{Integer >= 1, default \code{1} (every target, the
 historical behaviour). Drops targets hit by fewer than this many
@@ -99,6 +104,22 @@ and their targets.}
 \code{\link[=network_module_robustness]{network_module_robustness()}}'s \code{network_module_membership}: draw only
 the compound/target nodes of those module(s).}
 
+\item{view}{One of \code{"auto"} (default), \code{"network"}, \code{"compound"},
+\code{"bipartite"}, \code{"module"} or \code{"pathway"} -- see the section on views.}
+
+\item{min_shared}{\code{NULL} (default) or a single integer >= 1: the
+minimum number of compounds a target must be hit by to be drawn in the
+\code{"compound"}, \code{"bipartite"} and \code{"module"} views. \code{NULL} means
+automatic for \code{"compound"} (see \code{max_targets}) and every target for
+the other two.}
+
+\item{max_targets}{Integer, default \code{40}: target budget of the
+\code{"compound"} view when \code{min_shared = NULL} -- the smallest sharing
+threshold \code{k >= 2} that leaves at most this many targets is used.}
+
+\item{auto_max_nodes}{Number, default \code{300}: \code{view = "auto"} switches to
+the \code{"compound"} view above this many nodes (\code{Inf} never switches).}
+
 \item{save}{Logical, default \code{TRUE}. If \code{TRUE}, also writes a PNG to
 \code{out_dir}.}
 
@@ -111,13 +132,15 @@ the compound/target nodes of those module(s).}
 A \code{ggplot} object (\code{engine = "static"}) or a \code{girafe} htmlwidget
 (\code{engine = "ggiraph"}). If \code{save = TRUE} (the default), the PNG path
 is also recorded in \code{patliRResults(proj, "network_layers_plot_log")}
-(one row per distinct \verb{(condition, layout, colour_by, subset)} combination --
-\code{"ALL"} for the pooled default \code{condition} -- upserted, see
-\code{.network_upsert()}; the filename encodes them too, e.g.
-\code{network_layers_ALL_fr_layer.png}, so different \code{layout}/\code{colour_by}
-views never overwrite each other's log row or PNG; \code{subset} is \code{""} unless
-\code{min_target_degree}/\code{compound_ids}/\code{module_id} filter the graph), retrievable via
-\code{attr(result, "proj")}.
+(one row per distinct \verb{(condition, layout, colour_by, subset, view)}
+combination -- \code{"ALL"} for the pooled default \code{condition} -- upserted,
+see \code{.network_upsert()}; the filename encodes them too, e.g.
+\code{network_layers_ALL_fr_layer.png} for the \code{"network"} view and
+\code{network_layers_EFLO-S_compound_k12.png} for the others, so different
+views never overwrite each other's log row or PNG; \code{subset} is \code{""}
+unless \code{min_target_degree}/\code{compound_ids}/\code{module_id} filter the graph
+or the view adds its own threshold such as \code{"k12"}; \code{layout} is \code{NA}
+outside the \code{"network"} view), retrievable via \code{attr(result, "proj")}.
 }
 \description{
 Force-directed layout of \code{.network_layered_graph()}'s underlying data
@@ -196,6 +219,63 @@ and log row (the filter is encoded in the file name and in the log's
 series of small figures -- see the examples.
 }
 
+\section{Views -- readable figures for large networks (\code{view})}{
+
+Real conditions (~15-25 compounds, 400+ predicted targets, ~2000
+edges, most targets shared by several compounds) cannot be drawn as a
+readable force-directed graph. \code{view} picks one of five figures, each
+answering one question:
+\itemize{
+\item \code{"network"} -- the historical force-directed (or \code{layout = "bipartite"}) drawing of every node; \code{layout}, \code{colour_by}, \code{layers}
+and \code{max_pathways} apply. Best for small graphs or one module /
+compound (\code{module_id}, \code{compound_ids}).
+\item \code{"compound"} -- compound-centric summary. Compounds sit on a ring,
+ordered by the similarity (Jaccard) of their target sets. Only targets
+hit by at least \code{k} compounds are drawn, on concentric shells (the more
+compounds share a target, the closer to the centre, the larger and the
+darker it is); the other targets are collapsed into a per-compound
+badge (\code{"190 targets, +9 unique"}: total targets and targets no other
+compound hits). \code{k = min_shared}, or, when \code{NULL}, the smallest
+\code{k >= 2} that leaves at most \code{max_targets} targets. Edge width =
+prediction probability; the \code{top_hub_n} most shared targets are
+labelled. \code{colour_by = "module"} colours targets by module.
+\item \code{"bipartite"} -- compounds in a left column, targets in a right column,
+targets grouped by \code{\link[=network_module_robustness]{network_module_robustness()}} module when available
+(coloured band; compounds grouped and coloured by their own module)
+and sorted by how many compounds hit them; compounds ordered by the
+mean position of their targets (barycentric crossing reduction).
+Edges are nearly transparent so bundles carry the message. All
+targets are drawn unless \code{min_shared} is set.
+\item \code{"module"} -- one shaded region (padded convex hull) per module of
+\code{\link[=network_module_robustness]{network_module_robustness()}} (required), each laid out on its own
+with the module's compounds pinned on an inner ring; edges within a
+module in its colour, edges between modules faint grey; every
+compound labelled plus the targets with the highest
+\code{network_centrality} hub score in each module. Best per condition:
+with pooled conditions a node takes the module of the first condition
+listing it.
+\item \code{"pathway"} -- compound x enriched-term dot plot: the \code{max_pathways}
+most significant \code{\link[=network_enrich]{network_enrich()}} terms (restrict with
+\code{pathway_db}, e.g. \code{"kegg"}), dot size = number of the compound's
+targets annotated to the term, colour = share of the term's in-scope
+targets the compound hits; rows and columns clustered. Needs
+\code{clusterProfiler} + \code{org.Hs.eg.db}; always static.
+}
+
+\code{view = "auto"} (default) keeps the \code{"network"} figure for graphs of at
+most \code{auto_max_nodes} nodes (and whenever \code{layout} is given explicitly
+or \code{layers} include pathways/diseases) and switches to \code{"compound"}
+above that, saying so in the subtitle. The filters (\code{condition},
+\code{compound_ids}, \code{module_id}, \code{min_target_degree}) apply before every
+view. In the simplified views \code{top_hub_n} is the number of target
+labels (the most shared targets, spread across modules in the
+\code{"bipartite"}/\code{"module"} views) and \code{colour_by} only matters for
+\code{"compound"} (\code{"module"} colours the targets by module, anything else
+by how many compounds share them). Colours are colour-blind safe (Okabe
+& Ito, a module keeps its colour in every view; viridis for the
+sequential scales); labels repel when \code{ggrepel} is installed.
+}
+
 \examples{
 \dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
@@ -219,6 +299,15 @@ plot_network_layers(proj, condition = "FLO-ET", save = FALSE) # one condition
 
 ## Two-column bipartite layout (compound-target only):
 plot_network_layers(proj, condition = "FLO-ET", layout = "bipartite", save = FALSE)
+
+## Readable views of a large condition (see the section on views):
+plot_network_layers(proj, condition = "FLO-ET", view = "compound", save = FALSE)
+plot_network_layers(proj, condition = "FLO-ET", view = "compound", min_shared = 3, save = FALSE)
+plot_network_layers(proj, condition = "FLO-ET", view = "bipartite", save = FALSE)
+# proj <- network_module_robustness(proj, condition = "FLO-ET")
+# plot_network_layers(proj, condition = "FLO-ET", view = "module", save = FALSE)
+# proj <- network_enrich(proj, condition = "FLO-ET", db = "kegg")
+# plot_network_layers(proj, condition = "FLO-ET", view = "pathway", pathway_db = "kegg", save = FALSE)
 
 ## Colour by module (needs network_module_robustness() first):
 # proj <- network_module_robustness(proj, condition = "FLO-ET")

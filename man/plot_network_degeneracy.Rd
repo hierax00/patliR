@@ -43,7 +43,7 @@ compounds only, on a circle; see the section above.}
 compound/target/pathway/disease, \code{.network_layers_layer_colors()}),
 \code{"module"} (joins \code{\link[=network_module_robustness]{network_module_robustness()}}'s per-node
 \code{network_module_membership} table by \verb{(condition, node_id)}, coloured
-with a qualitative palette (\code{grDevices::hcl.colors(n, "Dark 3")}) and a
+with the colour-blind-safe Okabe-Ito palette (\code{grDevices::hcl.colors(n, "Dark 3")} beyond eight modules) and a
 grey \code{"not clustered"} level for any node absent from that table --
 e.g. \code{network_module_robustness()} was never run; \code{cli_abort}s if the
 table does not exist at all, naming the function to run), or

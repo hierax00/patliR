@@ -96,3 +96,39 @@ test_that("prep_as_condition() aligns presence by ID and includes missing compou
     expect_true(all(result$X[result$compound_id != cmp$id[1]] == 1))
   }
 })
+
+test_that("prep_binarize(min_replicates = 2) calls presence by replicate consistency, not by the quartile threshold", {
+  proj <- .test_project()
+  dat <- data.frame(
+    Name = c("all3", "two", "one", "none", "tiny2", "hi1", "hi2"),
+    `R1-A` = c(5, 4, 3, 0, 0.001, 10, 12), `R2-A` = c(6, 0, 0, 0, 0.002, 10, 12), `R3-A` = c(7, 2, 0, 0, 0, 10, 12),
+    check.names = FALSE
+  )
+  ## default Q1 rule: the very low-abundance compound fails the quartile threshold
+  q1 <- binarizedMatrix(prep_binarize(proj, dat))
+  expect_equal(q1$A[q1$compound_id == "tiny2"], 0L)
+
+  b <- binarizedMatrix(prep_binarize(proj, dat, min_replicates = 2))
+  got <- setNames(b$A, b$compound_id)
+  expect_equal(got[["all3"]], 1L)   # 3 of 3 detected
+  expect_equal(got[["two"]], 1L)    # 2 of 3 detected
+  expect_equal(got[["one"]], 0L)    # 2 of 3 are zero
+  expect_equal(got[["none"]], 0L)   # 3 of 3 are zero
+  expect_equal(got[["tiny2"]], 1L)  # low abundance but detected in 2 replicates: no abundance threshold
+
+  ## min_replicates = 3 requires every replicate
+  b3 <- binarizedMatrix(prep_binarize(proj, dat, min_replicates = 3))
+  expect_equal(setNames(b3$A, b3$compound_id)[["two"]], 0L)
+
+  ## the rule is logged
+  log <- projectLog(prep_binarize(proj, dat, min_replicates = 2))
+  expect_true(any(grepl("detected_in_at_least_2_replicates", log$message)))
+})
+
+test_that("prep_binarize() validates min_replicates", {
+  proj <- .test_project()
+  dat <- data.frame(Name = c("a", "b"), `R1-A` = c(1, 0), `R2-A` = c(1, 0), check.names = FALSE)
+  expect_error(prep_binarize(proj, dat, min_replicates = 3), "only 2 replicate")
+  expect_error(prep_binarize(proj, dat, min_replicates = 0))
+  expect_error(prep_binarize(proj, dat, min_replicates = 1.5))
+})

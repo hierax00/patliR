@@ -4,7 +4,14 @@
 \alias{prep_binarize}
 \title{Average replicates and binarize a raw abundance matrix (presence/absence)}
 \usage{
-prep_binarize(proj, data, id_col = "Name", average_replicates = TRUE, q = 0.25)
+prep_binarize(
+  proj,
+  data,
+  id_col = "Name",
+  average_replicates = TRUE,
+  q = 0.25,
+  min_replicates = NULL
+)
 }
 \arguments{
 \item{proj}{A \code{\link[=PatliRProject-class]{PatliRProject}} object.}

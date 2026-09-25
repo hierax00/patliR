@@ -378,8 +378,10 @@ prep_compounds(proj, data, identifier = c("pubchem", "smiles"), id_col = NULL,
                 on_missing_smiles = c("abort", "fetch", "drop"),
                 fetch_mode = c("warn_and_cache", "abort"))
 prep_compound(proj, data_row, ...)       # one compound; same arguments as prep_compounds()
-prep_binarize(proj, data, id_col = "Name", average_replicates = TRUE, q = 0.25)
-                                          # q-quantile threshold computed over all compounds
+prep_binarize(proj, data, id_col = "Name", average_replicates = TRUE, q = 0.25,
+              min_replicates = NULL)
+                                          # q-quantile threshold computed over all compounds;
+                                          # min_replicates = 2 replaces it by "detected in >= 2 replicates"
 prep_as_condition(proj, condition = "all", compound_ids = NULL)
 prep_structure2d(proj, engine = "rcdk", out_dir = NULL)   # "chemminer" is rejected
 

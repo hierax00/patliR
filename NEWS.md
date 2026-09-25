@@ -1,5 +1,9 @@
 # patliR (development version)
 
+## New
+
+- **`prep_binarize(min_replicates = )`**: an alternative presence rule based on replicate consistency. A compound is present in a condition when it is detected (abundance > 0) in at least `min_replicates` replicates (e.g. `2` of 3: absent if two or three replicates are zero, present if two or three have a value); the quartile threshold is not applied. The default (`NULL`) keeps the Q1 rule.
+
 ## Bug fixes: `prep_*`, `plot_*`, `report_generate()`, `tox_report()`
 
 - **`prep_binarize()`** now computes the Q1 (`q`) presence threshold over

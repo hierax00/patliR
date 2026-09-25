@@ -35,6 +35,13 @@ NULL
 #'   errors.
 #' @param q Numeric scalar in `(0, 1)`. Quantile used as the per-condition
 #'   presence threshold (default `0.25`, i.e. Q1).
+#' @param min_replicates `NULL` (default: the Q1 rule above) or a single
+#'   integer: a compound is called present in a condition when it is detected
+#'   (abundance > 0) in **at least** `min_replicates` of that condition's
+#'   replicate columns, and absent otherwise -- e.g. `2` with three
+#'   replicates means "absent if 2 or 3 replicates are zero, present if 2 or
+#'   3 have a value". When set, `q` is ignored (no abundance threshold is
+#'   applied) and the rule is recorded in the log.
 #'
 #' @return The updated `proj`, with [matrixRaw()] and [binarizedMatrix()]
 #'   set (never overwriting one with the other) and `02_matrix_raw.csv` /
@@ -54,9 +61,13 @@ NULL
 #'   tables).
 #' @export
 prep_binarize <- function(proj, data, id_col = "Name",
-                           average_replicates = TRUE, q = 0.25) {
+                           average_replicates = TRUE, q = 0.25, min_replicates = NULL) {
   stopifnot(is(proj, "PatliRProject"), is.data.frame(data), nrow(data) > 0)
   stopifnot(is.numeric(q), length(q) == 1, q > 0, q < 1)
+  if (!is.null(min_replicates)) {
+    stopifnot(is.numeric(min_replicates), length(min_replicates) == 1, is.finite(min_replicates),
+              min_replicates >= 1, min_replicates == round(min_replicates))
+  }
   if (!id_col %in% names(data)) {
     cli::cli_abort("Column {.val {id_col}} (the {.arg id_col}) was not found in {.arg data}.")
   }
@@ -93,6 +104,9 @@ prep_binarize <- function(proj, data, id_col = "Name",
     storage.mode(vals) <- "double"
 
     already_binary <- all(vals %in% c(0, 1, NA))
+    if (!is.null(min_replicates) && min_replicates > length(cols)) {
+      cli::cli_abort("{.arg min_replicates} = {min_replicates} but condition {.val {cond}} has only {length(cols)} replicate column{?s}.")
+    }
 
     if (already_binary) {
       if (length(cols) > 1) {
@@ -111,6 +125,7 @@ prep_binarize <- function(proj, data, id_col = "Name",
       ## -- a single replicate column used to silently swallow the others
       ## here before this fix.
       bin <- ifelse(avg >= 0.5, 1L, 0L)
+      if (!is.null(min_replicates)) bin <- ifelse(rowSums(vals > 0, na.rm = TRUE) >= min_replicates, 1L, 0L)
       used_q1 <- NA_real_
     } else {
       if (length(cols) > 1) {
@@ -126,6 +141,12 @@ prep_binarize <- function(proj, data, id_col = "Name",
       }
       used_q1 <- if (any(!is.na(avg))) stats::quantile(avg, probs = q, na.rm = TRUE, names = FALSE) else 0
       bin <- ifelse(avg > 0 & avg >= used_q1, 1L, 0L)
+      if (!is.null(min_replicates)) {
+        ## replicate-consistency rule: present iff at least `min_replicates`
+        ## replicates are detected (> 0); the quartile threshold is not used
+        bin <- ifelse(rowSums(vals > 0, na.rm = TRUE) >= min_replicates, 1L, 0L)
+        used_q1 <- NA_real_
+      }
     }
 
     matrix_raw[[cond]] <- avg
@@ -135,7 +156,8 @@ prep_binarize <- function(proj, data, id_col = "Name",
       message = paste0(
         "condition '", cond, "': already_binary=", already_binary,
         ", n_replicates=", length(cols),
-        if (!already_binary) paste0(", q", q * 100, "_used=", signif(used_q1, 4)) else ""
+        if (!is.null(min_replicates)) paste0(", rule=detected_in_at_least_", min_replicates, "_replicates")
+        else if (!already_binary) paste0(", q", q * 100, "_used=", signif(used_q1, 4)) else ""
       ),
       timestamp = Sys.time(), stringsAsFactors = FALSE
     )

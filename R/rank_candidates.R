@@ -108,7 +108,9 @@ NULL
 #' to RRA as a numeric matrix. `rra_score` --
 #' `RobustRankAggreg::aggregateRanks()`'s output (lower = more robustly
 #' top-ranked across every criterion used). `rra_rank` --
-#' `rank(rra_score, ties.method = "min")`, the table's primary sort key.
+#' the rank of `rra_score` (ties -- common, because RRA scores saturate at 1
+#' -- broken by the mean per-criterion rank; still `"min"` for a tie on
+#' both), the table's primary sort key.
 #' `pareto_front` -- integer tier (`1` = non-dominated) from a from-scratch
 #' non-dominated sort (NSGA-II-style; O(n^2) per tier, fine at the
 #' candidate-list scale this function targets -- tens to a few hundred
@@ -325,7 +327,10 @@ rank_candidates <- function(proj, condition = NULL, disease = NULL,
       rmat = rmat, method = "RRA"
     )
     rra_score <- unname(stats::setNames(rra$Score, rra$Name)[compound_ids])
-    rra_rank <- rank(rra_score, ties.method = "min")
+    ## RRA scores saturate at 1 for every compound that is not significantly
+    ## better than random, so many candidates can tie exactly. Ties are broken
+    ## by the mean of their per-criterion ranks (still "min" for a tie on both).
+    rra_rank <- .rank_rra_rank(rra_score, rowMeans(rmat))
 
     mat_pareto <- mat_dir
     mat_pareto[is.na(mat_pareto)] <- -Inf
@@ -376,6 +381,18 @@ rank_candidates <- function(proj, condition = NULL, disease = NULL,
 }
 
 #' @keywords internal
+#' Rank by RRA score, breaking ties with the mean per-criterion rank
+#'
+#' @param rra_score Numeric vector, lower = better.
+#' @param mean_rank Numeric vector of the same length, lower = better.
+#' @return Integer ranks; identical on both keys share the smallest rank.
+#' @keywords internal
+.rank_rra_rank <- function(rra_score, mean_rank) {
+  key <- paste(signif(rra_score, 12), signif(mean_rank, 12))
+  ord <- order(rra_score, mean_rank)
+  match(key, key[ord])
+}
+
 .rank_direction <- c(
   crit_adme_pass_frac = 1, crit_centrality = 1, crit_hub_penalty = 1,
   crit_proximity_z = -1, crit_synergy_best = 1, crit_module_r_index = 1

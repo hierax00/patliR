@@ -150,7 +150,9 @@ of compound IDs and input order. These ranks divided by \code{N} are supplied
 to RRA as a numeric matrix. \code{rra_score} --
 \code{RobustRankAggreg::aggregateRanks()}'s output (lower = more robustly
 top-ranked across every criterion used). \code{rra_rank} --
-\code{rank(rra_score, ties.method = "min")}, the table's primary sort key.
+the rank of \code{rra_score} (ties -- common, because RRA scores saturate at 1
+-- broken by the mean per-criterion rank; still \code{"min"} for a tie on
+both), the table's primary sort key.
 \code{pareto_front} -- integer tier (\code{1} = non-dominated) from a from-scratch
 non-dominated sort (NSGA-II-style; O(n^2) per tier, fine at the
 candidate-list scale this function targets -- tens to a few hundred

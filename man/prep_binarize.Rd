@@ -33,6 +33,14 @@ errors.}
 
 \item{q}{Numeric scalar in \verb{(0, 1)}. Quantile used as the per-condition
 presence threshold (default \code{0.25}, i.e. Q1).}
+
+\item{min_replicates}{\code{NULL} (default: the Q1 rule above) or a single
+integer: a compound is called present in a condition when it is detected
+(abundance > 0) in \strong{at least} \code{min_replicates} of that condition's
+replicate columns, and absent otherwise -- e.g. \code{2} with three
+replicates means "absent if 2 or 3 replicates are zero, present if 2 or
+3 have a value". When set, \code{q} is ignored (no abundance threshold is
+applied) and the rule is recorded in the log.}
 }
 \value{
 The updated \code{proj}, with \code{\link[=matrixRaw]{matrixRaw()}} and \code{\link[=binarizedMatrix]{binarizedMatrix()}}

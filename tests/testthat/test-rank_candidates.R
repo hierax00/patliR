@@ -273,3 +273,11 @@ test_that("rank_candidates() ties are invariant to compound renaming and input o
   expect_equal(all_missing$n_criteria_used, rep(2, 4))
   expect_true(all(is.finite(all_missing$rra_score)))
 })
+
+test_that(".rank_rra_rank() breaks saturated RRA ties by mean per-criterion rank, keeping min ties", {
+  score <- c(0.1, 1, 1, 1, 1)
+  mean_rank <- c(0.5, 0.9, 0.3, 0.6, 0.6)
+  expect_equal(patliR:::.rank_rra_rank(score, mean_rank), c(1L, 5L, 2L, 3L, 3L))
+  ## without ties on the score it is the plain rank
+  expect_equal(patliR:::.rank_rra_rank(c(0.3, 0.1, 0.2), c(1, 1, 1)), c(3L, 1L, 2L))
+})

@@ -32,7 +32,7 @@ finest and typically needs a low \code{top_n_groups}.}
 
 \item{top_n_groups}{Integer, default \code{8}. Groups beyond the \code{top_n_groups}
 most frequent (by total compound-condition presences across
-\code{conditions}) are pooled into \code{"Other"} -- with many small chemical
+\code{conditions}) are pooled into \code{"Other (pooled)"} -- with many small chemical
 classes the river gets illegible otherwise.}
 
 \item{save}{Logical, default \code{TRUE}. Whether to also write the plot to

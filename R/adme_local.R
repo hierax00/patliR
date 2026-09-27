@@ -16,7 +16,9 @@ NULL
 #' criterion:
 #' \itemize{
 #'   \item **Lipinski Ro5** (`ro5_pass`) -- Lipinski et al. (2001), *Adv.
-#'     Drug Deliv. Rev.* 46, 3-26: MW <= 500, logP <= 5, HBD <= 5, HBA <= 10.
+#'     Drug Deliv. Rev.* 46, 3-26: MW <= 500, logP <= 5, HBD <= 5, HBA <= 10,
+#'     using the paper's own HBD/HBA definition (`hbd_lipinski`/`hba_lipinski`
+#'     below), not CDK's.
 #'   \item **Veber** (`veber_pass`) -- Veber et al. (2002), *J. Med. Chem.*
 #'     45, 2615-2623: TPSA <= 140, rotatable bonds <= 10, where (as in the
 #'     paper) a rotatable bond is a single non-ring bond to a non-terminal
@@ -31,18 +33,27 @@ NULL
 #'     43, 3867-3877 (the "egg" model that later BOILED-Egg extends):
 #'     logP <= 5.88, TPSA <= 131.6.
 #'   \item **Oprea property ranges** (`oprea_pass`) -- Oprea (2000), *J.
-#'     Comput. Aided Mol. Des.* 14, 251-264: 0 <= HBD <= 2, 2 <= HBA <= 9,
-#'     2 <= rotatable bonds <= 8, 1 <= ring count <= 4 (inclusive ranges;
-#'     the paper reports them as the ranges holding ~70% of the *drug-like*
-#'     compounds it surveyed, not as a stricter lead-likeness rule -- an
-#'     earlier version used narrower, exclusive limits). See
-#'     `adme_filter(rules = "oprea")`.
+#'     Comput. Aided Mol. Des.* 14, 251-264: 0 <= HBD <= 2, 2 <= HBA <= 9
+#'     (`hbd_lipinski`/`hba_lipinski`, as for Ro5 above -- Oprea's own HBA
+#'     range is exactly where CDK's undercount used to flip real compounds,
+#'     e.g. ether/furan-rich lignans reading HBA=2 under CDK's rules and
+#'     6-7 by Lipinski's own N+O count), 2 <= rotatable bonds <= 8, 1 <= ring
+#'     count <= 4 (inclusive ranges; the paper reports them as the ranges
+#'     holding ~70% of the *drug-like* compounds it surveyed, not as a
+#'     stricter lead-likeness rule -- an earlier version used narrower,
+#'     exclusive limits). See `adme_filter(rules = "oprea")`.
 #' }
 #' **Descriptor conventions.** `mw` is the average molecular weight (natural
 #' isotopic abundance, `rcdk::get.natural.mass()`), not the monoisotopic mass.
-#' `logp` is CDK's XLogP and `hba`/`hbd` are CDK's donor/acceptor counts, so
-#' the rules above are adapted screens on CDK descriptors, not bit-for-bit
-#' reproductions of the papers' own logP/HBA definitions. `ro5_pass` here is
+#' `logp` is CDK's XLogP. Two independent HBA/HBD counts are computed:
+#' `hba`/`hbd` are CDK's own donor/acceptor descriptors (its own rules, e.g.
+#' most ether and furan oxygens are not counted as acceptors), kept for
+#' reference; `hba_lipinski`/`hbd_lipinski` are the papers' own definitions
+#' (every N/O atom; every N-H/O-H bond -- see `.lipinski_hba()`/
+#' `.lipinski_hbd()`), and are what `ro5_pass`/`ro5_violations`/`oprea_pass`
+#' actually use, so the rules above are not bit-for-bit CDK-only
+#' reproductions of the papers' own logP definition (still CDK XLogP) but
+#' do use the papers' own HBA/HBD counts. `ro5_pass` here is
 #' the strict, zero-violation reading (`ro5_violations <= 0`); the original
 #' paper's own convention tolerates one violation. `ro5_violations` (0-4) is
 #' stored alongside it precisely so a looser tolerance can be applied later
@@ -146,7 +157,9 @@ NULL
 #'
 #' @return The updated `proj`, with an `adme_local` entry in
 #'   [patliRResults()] (columns `compound_id`, `mw`, `logp`, `hbd`, `hba`,
-#'   `tpsa`, `rotatable_bonds`, `n_atoms`, `amr`, `wlogp_proxy`, `wlogp_source`
+#'   `hba_lipinski`, `hbd_lipinski` (the papers' own N+O / N-H+O-H count,
+#'   used by `ro5_pass`/`oprea_pass` -- see the "Descriptor conventions"
+#'   section above), `tpsa`, `rotatable_bonds`, `n_atoms`, `amr`, `wlogp_proxy`, `wlogp_source`
 #'   (`"cdk_alogp_proxy"` or `"rdkit_wlogp"`, per compound),
 #'   `fraction_csp3_approx`, `aromatic_proportion_approx` (plus, when
 #'   `rdkit_qc = TRUE`, `hba_lipinski_rdkit`, `hbd_lipinski_rdkit`,
@@ -193,7 +206,8 @@ adme_local <- function(proj, compound_ids = NULL,
     )
   }
   ## a single descriptor can fail while the mass succeeds: log those too, per descriptor
-  for (nm in c("logp", "hbd", "hba", "tpsa", "wlogp_proxy", "amr", "rotatable_bonds", "fraction_csp3", "n_arom_atoms")) {
+  for (nm in c("logp", "hbd", "hba", "hba_lipinski", "hbd_lipinski", "tpsa", "wlogp_proxy", "amr",
+              "rotatable_bonds", "fraction_csp3", "n_arom_atoms")) {
     partial <- !failed & is.na(desc[[nm]])
     if (any(partial)) {
       proj <- .log_append(proj, step = "adme_local", id = cmp$id[partial],
@@ -204,6 +218,7 @@ adme_local <- function(proj, compound_ids = NULL,
   out <- data.frame(
     compound_id = cmp$id,
     mw = desc$mw, logp = desc$logp, hbd = desc$hbd, hba = desc$hba,
+    hba_lipinski = desc$hba_lipinski, hbd_lipinski = desc$hbd_lipinski,
     tpsa = desc$tpsa, rotatable_bonds = desc$rotatable_bonds,
     stringsAsFactors = FALSE
   )
@@ -225,7 +240,9 @@ adme_local <- function(proj, compound_ids = NULL,
   ## different tolerance later (e.g. the commonly used "at most one violation")
   ## without rerunning adme_local(); ro5_pass itself keeps the strict, zero-violation
   ## reading (max_violations = 0) so existing code/results are unchanged.
-  out$ro5_violations <- with(out, (mw > 500) + (logp > 5) + (hbd > 5) + (hba > 10))
+  ## Uses hba_lipinski/hbd_lipinski (Lipinski's own N+O / NH+OH count), not CDK's hba/hbd
+  ## -- see .lipinski_hba()'s docs for why: CDK's own acceptor rules undercount ethers.
+  out$ro5_violations <- with(out, (mw > 500) + (logp > 5) + (hbd_lipinski > 5) + (hba_lipinski > 10))
   out$ro5_pass   <- out$ro5_violations <= 0
   out$veber_pass <- with(out, tpsa <= 140 & rotatable_bonds <= 10)
   ## Ghose et al. 1999 -- now all four criteria, including molar
@@ -238,7 +255,10 @@ adme_local <- function(proj, compound_ids = NULL,
   ## Oprea 2000 property ranges (inclusive; the paper's drug-like ranges).
   ## n_rings_approx is the SMILES ring-closure-digit count (see
   ## .smiles_ring_count_approx()), not true CDK SSSR ring perception.
-  out$oprea_pass <- with(out, hbd >= 0 & hbd <= 2 & hba >= 2 & hba <= 9 &
+  ## hba_lipinski/hbd_lipinski here too: this is exactly the range CDK's undercount
+  ## flips real compounds on (e.g. an ether/furan-rich lignan reading HBA=2 instead
+  ## of 6-7 under CDK's own rules).
+  out$oprea_pass <- with(out, hbd_lipinski >= 0 & hbd_lipinski <= 2 & hba_lipinski >= 2 & hba_lipinski <= 9 &
     rotatable_bonds >= 2 & rotatable_bonds <= 8 &
     n_rings_approx >= 1 & n_rings_approx <= 4)
 
@@ -300,7 +320,8 @@ adme_local <- function(proj, compound_ids = NULL,
 .compute_adme_descriptors <- function(smiles) {
   mols <- .parse_smiles_safe(smiles)
   empty_row <- data.frame(mw = NA_real_, logp = NA_real_, hbd = NA_integer_,
-                           hba = NA_integer_, tpsa = NA_real_,
+                           hba = NA_integer_, hba_lipinski = NA_integer_, hbd_lipinski = NA_integer_,
+                           tpsa = NA_real_,
                            rotatable_bonds = NA_integer_, n_atoms = NA_integer_, n_heavy = NA_integer_,
                            wlogp_proxy = NA_real_, amr = NA_real_,
                            fraction_csp3 = NA_real_, n_arom_atoms = NA_integer_)
@@ -316,6 +337,8 @@ adme_local <- function(proj, compound_ids = NULL,
         logp = .safe_desc(m, "org.openscience.cdk.qsar.descriptors.molecular.XLogPDescriptor", "XLogP"),
         hbd = as.integer(.safe_desc(m, "org.openscience.cdk.qsar.descriptors.molecular.HBondDonorCountDescriptor", "nHBDon")),
         hba = as.integer(.safe_desc(m, "org.openscience.cdk.qsar.descriptors.molecular.HBondAcceptorCountDescriptor", "nHBAcc")),
+        hba_lipinski = .lipinski_hba(m),
+        hbd_lipinski = .lipinski_hbd(m),
         tpsa = .safe_desc(m, "org.openscience.cdk.qsar.descriptors.molecular.TPSADescriptor", "TopoPSA"),
         rotatable_bonds = .rotatable_bonds_veber(m),
         fraction_csp3 = .safe_desc(m, "org.openscience.cdk.qsar.descriptors.molecular.FractionalCSP3Descriptor", "Fsp3"),
@@ -361,6 +384,49 @@ adme_local <- function(proj, compound_ids = NULL,
     if (!rJava::is.jnull(rJava::.jcall(dv, "Ljava/lang/Exception;", "getException"))) return(NA_integer_)
     res <- rJava::.jcall(dv, "Lorg/openscience/cdk/qsar/result/IDescriptorResult;", "getValue")
     as.integer(rJava::.jcall(rJava::.jcast(res, "org/openscience/cdk/qsar/result/IntegerResult"), "I", "intValue"))
+  }, error = function(e) NA_integer_)
+}
+
+#' Lipinski's own HBA count: every N and O atom (Lipinski et al. 2001)
+#'
+#' @description
+#' CDK's `HBondAcceptorCountDescriptor` (the `hba` column) uses CDK's own,
+#' narrower acceptor rules -- it does not count most ether/furan oxygens,
+#' among others. Lipinski et al. (2001) define the acceptor count simply as
+#' the number of nitrogen and oxygen atoms, no rules attached; that
+#' undercounting is large enough, on real methylenedioxy/methoxy lignans
+#' (sesamin, eudesmin, fargesin, aschantin), to move them outside
+#' [adme_local()]'s Oprea HBA range (2-9) under `hba` but not under this
+#' count -- see `hba_lipinski`/`hbd_lipinski` in [adme_local()]'s return value,
+#' which use this and [.lipinski_hbd()] instead of CDK's own counts for
+#' `ro5_pass`/`ro5_violations`/`oprea_pass`.
+#' @param mol An rcdk molecule (after `rcdk::convert.implicit.to.explicit()`).
+#' @return Integer, `NA_integer_` on failure.
+#' @keywords internal
+.lipinski_hba <- function(mol) {
+  tryCatch({
+    syms <- vapply(rcdk::get.atoms(mol), rcdk::get.symbol, "")
+    sum(syms %in% c("N", "O"))
+  }, error = function(e) NA_integer_)
+}
+
+#' Lipinski's own HBD count: every N-H/O-H bond (Lipinski et al. 2001)
+#'
+#' @description
+#' The paper's donor count is "the sum of OHs and NHs" -- every hydrogen
+#' bonded to a nitrogen or oxygen, so e.g. an NH2 group contributes 2. See
+#' [.lipinski_hba()] for why this exists alongside CDK's own `hbd` column.
+#' @param mol An rcdk molecule (after `rcdk::convert.implicit.to.explicit()`,
+#'   so N-H/O-H hydrogens are their own atoms with their own bonds).
+#' @return Integer, `NA_integer_` on failure.
+#' @keywords internal
+.lipinski_hbd <- function(mol) {
+  tryCatch({
+    bonds <- rcdk::get.bonds(mol)
+    sum(vapply(bonds, function(b) {
+      s <- vapply(rcdk::get.atoms(b), rcdk::get.symbol, "")
+      "H" %in% s && any(s %in% c("N", "O"))
+    }, logical(1)))
   }, error = function(e) NA_integer_)
 }
 

@@ -55,7 +55,9 @@ evidence either one is wrong). Same graceful degradation as
 \value{
 The updated \code{proj}, with an \code{adme_local} entry in
 \code{\link[=patliRResults]{patliRResults()}} (columns \code{compound_id}, \code{mw}, \code{logp}, \code{hbd}, \code{hba},
-\code{tpsa}, \code{rotatable_bonds}, \code{n_atoms}, \code{amr}, \code{wlogp_proxy}, \code{wlogp_source}
+\code{hba_lipinski}, \code{hbd_lipinski} (the papers' own N+O / N-H+O-H count,
+used by \code{ro5_pass}/\code{oprea_pass} -- see the "Descriptor conventions"
+section above), \code{tpsa}, \code{rotatable_bonds}, \code{n_atoms}, \code{amr}, \code{wlogp_proxy}, \code{wlogp_source}
 (\code{"cdk_alogp_proxy"} or \code{"rdkit_wlogp"}, per compound),
 \code{fraction_csp3_approx}, \code{aromatic_proportion_approx} (plus, when
 \code{rdkit_qc = TRUE}, \code{hba_lipinski_rdkit}, \code{hbd_lipinski_rdkit},
@@ -80,7 +82,9 @@ Five binary pass/fail rules are computed, each a real published
 criterion:
 \itemize{
 \item \strong{Lipinski Ro5} (\code{ro5_pass}) -- Lipinski et al. (2001), \emph{Adv.
-Drug Deliv. Rev.} 46, 3-26: MW <= 500, logP <= 5, HBD <= 5, HBA <= 10.
+Drug Deliv. Rev.} 46, 3-26: MW <= 500, logP <= 5, HBD <= 5, HBA <= 10,
+using the paper's own HBD/HBA definition (\code{hbd_lipinski}/\code{hba_lipinski}
+below), not CDK's.
 \item \strong{Veber} (\code{veber_pass}) -- Veber et al. (2002), \emph{J. Med. Chem.}
 45, 2615-2623: TPSA <= 140, rotatable bonds <= 10, where (as in the
 paper) a rotatable bond is a single non-ring bond to a non-terminal
@@ -95,18 +99,27 @@ original atom-count criterion does), 40 <= molar refractivity (AMR)
 43, 3867-3877 (the "egg" model that later BOILED-Egg extends):
 logP <= 5.88, TPSA <= 131.6.
 \item \strong{Oprea property ranges} (\code{oprea_pass}) -- Oprea (2000), \emph{J.
-Comput. Aided Mol. Des.} 14, 251-264: 0 <= HBD <= 2, 2 <= HBA <= 9,
-2 <= rotatable bonds <= 8, 1 <= ring count <= 4 (inclusive ranges;
-the paper reports them as the ranges holding ~70\% of the \emph{drug-like}
-compounds it surveyed, not as a stricter lead-likeness rule -- an
-earlier version used narrower, exclusive limits). See
-\code{adme_filter(rules = "oprea")}.
+Comput. Aided Mol. Des.} 14, 251-264: 0 <= HBD <= 2, 2 <= HBA <= 9
+(\code{hbd_lipinski}/\code{hba_lipinski}, as for Ro5 above -- Oprea's own HBA
+range is exactly where CDK's undercount used to flip real compounds,
+e.g. ether/furan-rich lignans reading HBA=2 under CDK's rules and
+6-7 by Lipinski's own N+O count), 2 <= rotatable bonds <= 8, 1 <= ring
+count <= 4 (inclusive ranges; the paper reports them as the ranges
+holding ~70\% of the \emph{drug-like} compounds it surveyed, not as a
+stricter lead-likeness rule -- an earlier version used narrower,
+exclusive limits). See \code{adme_filter(rules = "oprea")}.
 }
 \strong{Descriptor conventions.} \code{mw} is the average molecular weight (natural
 isotopic abundance, \code{rcdk::get.natural.mass()}), not the monoisotopic mass.
-\code{logp} is CDK's XLogP and \code{hba}/\code{hbd} are CDK's donor/acceptor counts, so
-the rules above are adapted screens on CDK descriptors, not bit-for-bit
-reproductions of the papers' own logP/HBA definitions. \code{ro5_pass} here is
+\code{logp} is CDK's XLogP. Two independent HBA/HBD counts are computed:
+\code{hba}/\code{hbd} are CDK's own donor/acceptor descriptors (its own rules, e.g.
+most ether and furan oxygens are not counted as acceptors), kept for
+reference; \code{hba_lipinski}/\code{hbd_lipinski} are the papers' own definitions
+(every N/O atom; every N-H/O-H bond -- see \code{.lipinski_hba()}/
+\code{.lipinski_hbd()}), and are what \code{ro5_pass}/\code{ro5_violations}/\code{oprea_pass}
+actually use, so the rules above are not bit-for-bit CDK-only
+reproductions of the papers' own logP definition (still CDK XLogP) but
+do use the papers' own HBA/HBD counts. \code{ro5_pass} here is
 the strict, zero-violation reading (\code{ro5_violations <= 0}); the original
 paper's own convention tolerates one violation. \code{ro5_violations} (0-4) is
 stored alongside it precisely so a looser tolerance can be applied later

@@ -2,8 +2,8 @@
 % Please edit documentation in R/plot_condition_trend.R
 \name{plot_condition_trend}
 \alias{plot_condition_trend}
-\title{Trend line: how the extract's total effect changes across an ordered
-sequence of conditions}
+\title{Trend line: how the extract's mean proximity effect changes across an
+ordered sequence of conditions}
 \usage{
 plot_condition_trend(
   proj,

@@ -83,10 +83,11 @@ plot_condition_compare <- function(proj, disease = NULL, aggregate = c("mean", "
   }
   p <- p +
     ggplot2::labs(
-      title = .plot_wrap(paste0("Which extract has the strongest effect? -- ", disease_label), .plot_wrap_width(width, 12)),
+      title = .plot_wrap(paste0("Extracts ranked by mean proximity z -- ", disease_label), .plot_wrap_width(width, 12)),
       subtitle = .plot_wrap(paste0(
-        "More negative ", aggregate, " z = that condition's compounds sit, on average, significantly closer ",
-        "to the disease module than the degree-matched null; error bars = 1 SD across its compounds.",
+        "More negative ", aggregate, " z = that condition's compounds sit, on average, closer ",
+        "to the disease module than the degree-matched null (no significance test at the condition level; ",
+        "error bars = 1 SD across its compounds, not an uncertainty of the mean).",
         if (multi) " Conditions are ranked by their mean z across the disease(s) shown." else ""
       ), .plot_wrap_width(width, 8)),
       x = paste0(aggregate, " proximity z-score (per compound, this condition)"), y = NULL

@@ -2,6 +2,12 @@
 
 ## New
 
+- **`adme_local()`'s `ro5_pass`/`oprea_pass` now use Lipinski's own HBA/HBD definition**
+  (`hba_lipinski`/`hbd_lipinski`: every N/O atom, every N-H/O-H bond), not CDK's own
+  donor/acceptor descriptor. CDK's rules do not count most ether/furan oxygens as
+  acceptors, which undercounts real compounds enough to matter for Oprea's HBA range
+  (2-9) -- e.g. an ether/furan-rich lignan can read HBA=2 under CDK vs. 6-7 by the
+  papers' own definition. CDK's `hba`/`hbd` are kept as separate reference columns.
 - **`adme_filter(ro5_max_violations = )`**: the Lipinski Ro5 tolerance is now configurable at filter
   time, without rerunning `adme_local()` (which now stores `ro5_violations`, 0-4, alongside the
   existing strict `ro5_pass`). `adme_filter()` itself is unchanged otherwise: it still never removes

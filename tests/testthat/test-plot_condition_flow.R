@@ -34,7 +34,7 @@ test_that("plot_condition_flow() pools rare groups into 'Other' beyond top_n_gro
   proj <- .cflow_fixture()
   p <- plot_condition_flow(proj, conditions = c("A", "B", "C"), group_by = "class", top_n_groups = 1, save = FALSE)
   tab <- attr(p, "table")
-  expect_true("Other" %in% tab$group)
+  expect_true("Other (pooled)" %in% tab$group)
   expect_equal(length(unique(tab$group)), 2L) # the most frequent class + Other
 })
 
@@ -59,7 +59,10 @@ test_that("plot_condition_trend() aligns groups on a shared x via condition_labe
     n_disease_genes_hit = 5, n_disease_genes_total = 10, disease_gene_coverage = 0.5,
     stringsAsFactors = FALSE
   )
-  grp <- c(A1 = "G1", B1 = "G1", A2 = "G2", B2 = "G2")
+  ## A1/A2 are one group (G1) across two stages; B1/B2 are the other group (G2) across
+  ## the same two stages -- A1 and B1 share a label (Stage1) but NOT a group, which is
+  ## the valid collapsing case (two origins compared stage-by-stage), not a collision
+  grp <- c(A1 = "G1", A2 = "G1", B1 = "G2", B2 = "G2")
   lbl <- c(A1 = "Stage1", B1 = "Stage1", A2 = "Stage2", B2 = "Stage2")
 
   p <- plot_condition_trend(proj, conditions = c("A1", "B1", "A2", "B2"), group = grp, condition_label = lbl, save = FALSE)
@@ -71,6 +74,76 @@ test_that("plot_condition_trend() aligns groups on a shared x via condition_labe
   expect_error(plot_condition_trend(proj, conditions = c("A1", "B1"), group = c(A1 = "G1"), save = FALSE), "group")
   expect_warning(plot_condition_trend(proj, conditions = c("A1", "nope"), save = FALSE), "Only 1 of 2")
   expect_error(plot_condition_trend(proj, conditions = c("nope1", "nope2"), save = FALSE), "No rows")
+})
+
+test_that("plot_condition_trend() rejects a duplicated condition and a label/group collision", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .test_project()
+  patliRResults(proj, "network_condition_compare") <- data.frame(
+    condition = c("A1", "A2"), disease_id = "D1",
+    n_compounds_present = 10, n_compounds_scored = 10, n_compounds_finite = 10,
+    mean_z = c(-1, -2), median_z = c(-1, -2), sd_z = 1, best_z = c(-1, -2),
+    n_disease_genes_hit = 5, n_disease_genes_total = 10, disease_gene_coverage = 0.5,
+    stringsAsFactors = FALSE
+  )
+  expect_error(plot_condition_trend(proj, conditions = c("A1", "A1", "A2"), save = FALSE), "repeated value")
+
+  ## A1 and A2 share both the same label AND the same group -> collision, not a valid collapse
+  expect_error(
+    plot_condition_trend(proj, conditions = c("A1", "A2"),
+                         group = c(A1 = "G1", A2 = "G1"),
+                         condition_label = c(A1 = "Stage1", A2 = "Stage1"), save = FALSE),
+    "share both"
+  )
+})
+
+test_that("plot_condition_trend() degrades gracefully (no secondary axis) when z is tied or all-NA", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .test_project()
+  patliRResults(proj, "network_condition_compare") <- data.frame(
+    condition = c("A1", "A2", "A3"), disease_id = "D1",
+    n_compounds_present = c(10, 10, 10), n_compounds_scored = 10, n_compounds_finite = 10,
+    mean_z = c(-1, -1, -1), median_z = c(-1, -1, -1), sd_z = 1, best_z = c(-1, -1, -1), # tied z
+    n_disease_genes_hit = 5, n_disease_genes_total = 10, disease_gene_coverage = 0.5,
+    stringsAsFactors = FALSE
+  )
+  p <- plot_condition_trend(proj, conditions = c("A1", "A2", "A3"), save = FALSE)
+  expect_no_error(ggplot2::ggplot_build(p))
+
+  cmp <- patliRResults(proj, "network_condition_compare")
+  cmp$mean_z <- NA_real_; cmp$median_z <- NA_real_
+  patliRResults(proj, "network_condition_compare") <- cmp
+  p2 <- plot_condition_trend(proj, conditions = c("A1", "A2", "A3"), save = FALSE)
+  expect_no_error(ggplot2::ggplot_build(p2))
+})
+
+test_that("plot_condition_trend() facets/colours by disease_id, not by a possibly-shared disease_label", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .test_project()
+  patliRResults(proj, "network_condition_compare") <- data.frame(
+    condition = rep(c("A1", "A2"), 2), disease_id = rep(c("D1", "D2"), each = 2),
+    n_compounds_present = 10, n_compounds_scored = 10, n_compounds_finite = 10,
+    mean_z = c(-3, -2, -1, 0), median_z = c(-3, -2, -1, 0), sd_z = 1, best_z = c(-3, -2, -1, 0),
+    n_disease_genes_hit = 5, n_disease_genes_total = 10, disease_gene_coverage = 0.5,
+    stringsAsFactors = FALSE
+  )
+  ## D1 and D2 have no disease_genes/targets_disease entry, so .plot_disease_label()
+  ## falls back to the bare id for both -- they do NOT collide into one facet/line
+  p <- plot_condition_trend(proj, conditions = c("A1", "A2"), save = FALSE)
+  b <- ggplot2::ggplot_build(p)
+  expect_equal(length(unique(b$data[[1]]$PANEL)), 2L) # still two facets
+  expect_no_error(b)
+})
+
+test_that("plot_condition_flow() de-duplicates a repeated compound_id in binarizedMatrix", {
+  testthat::skip_if_not_installed("ggplot2")
+  testthat::skip_if_not_installed("ggalluvial")
+  proj <- .cflow_fixture()
+  bin <- binarizedMatrix(proj)
+  binarizedMatrix(proj) <- rbind(bin, bin[1, ]) # c1 duplicated as a row
+  p <- plot_condition_flow(proj, conditions = c("A", "B", "C"), group_by = "pathway", save = FALSE)
+  tab <- attr(p, "table")
+  expect_equal(sum(tab$condition == "A" & tab$compound_id == "c1"), 1L) # not 2
 })
 
 test_that("plot_condition_trend() warns (not errors) when some requested (condition, disease) rows are missing", {

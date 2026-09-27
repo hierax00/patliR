@@ -1,8 +1,8 @@
 #' @include AllGenerics.R internal.R plot-helpers.R network_condition_compare.R
 NULL
 
-#' Trend line: how the extract's total effect changes across an ordered
-#' sequence of conditions
+#' Trend line: how the extract's mean proximity effect changes across an
+#' ordered sequence of conditions
 #'
 #' @description
 #' [plot_condition_compare()] ranks conditions best-to-worst; this instead
@@ -59,6 +59,9 @@ plot_condition_trend <- function(proj, conditions, disease = NULL, group = NULL,
   if (!is.character(conditions) || length(conditions) < 2 || anyNA(conditions)) {
     cli::cli_abort("{.arg conditions} must be a character vector of at least 2 condition names, in the order to draw them.")
   }
+  if (anyDuplicated(conditions)) {
+    cli::cli_abort("{.arg conditions} has a repeated value ({.val {conditions[duplicated(conditions)]}}); each condition must appear once.")
+  }
   if (!is.null(group)) {
     if (is.null(names(group)) || !all(conditions %in% names(group))) {
       cli::cli_abort("{.arg group} must be a character vector named by every value in {.arg conditions}.")
@@ -67,6 +70,17 @@ plot_condition_trend <- function(proj, conditions, disease = NULL, group = NULL,
   if (!is.null(condition_label)) {
     if (is.null(names(condition_label)) || !all(conditions %in% names(condition_label))) {
       cli::cli_abort("{.arg condition_label} must be a character vector named by every value in {.arg conditions}.")
+    }
+    ## two conditions collapsed onto the same x label must not ALSO share the same group --
+    ## that would draw two points for one (group, x) on one line, a spurious connection
+    lbl_by_grp <- if (is.null(group)) rep("", length(conditions)) else unname(group[conditions])
+    dup_key <- paste(condition_label[conditions], lbl_by_grp)
+    if (anyDuplicated(dup_key)) {
+      offending <- conditions[duplicated(dup_key) | duplicated(dup_key, fromLast = TRUE)]
+      cli::cli_abort(c(
+        "Condition(s) {.val {offending}} share both the same {.arg condition_label} and the same {.arg group}.",
+        "i" = "Two conditions can only collapse onto one x position when they belong to different groups."
+      ))
     }
   }
 
@@ -94,24 +108,41 @@ plot_condition_trend <- function(proj, conditions, disease = NULL, group = NULL,
   multi_group <- !is.null(group) && length(unique(dat$group)) > 1
 
   ## n_compounds_present rescaled onto the z-score's own range, so it can share the panel
-  ## as a second, visually distinct line without a second y-axis's usual misreading risk
+  ## as a second, visually distinct line without a second y-axis's usual misreading risk.
+  ## Both ranges can legitimately be degenerate (a single condition's z tied across all
+  ## rows, or the same compound count everywhere) or entirely NA (every z_col value
+  ## missing) -- guard all of those rather than dividing by a zero or NA span.
   rng_z <- range(dat[[z_col]], na.rm = TRUE)
   rng_n <- range(dat$n_compounds_present, na.rm = TRUE)
+  degenerate_z <- !all(is.finite(rng_z)) || diff(rng_z) == 0
+  degenerate_n <- !all(is.finite(rng_n)) || diff(rng_n) == 0
   scale_n <- function(n) {
-    if (diff(rng_n) == 0) return(rep(mean(rng_z), length(n)))
+    if (degenerate_n || degenerate_z) return(rep(if (all(is.finite(rng_z))) mean(rng_z) else 0, length(n)))
     rng_z[1] + (n - rng_n[1]) / diff(rng_n) * diff(rng_z)
   }
   dat$n_scaled <- scale_n(dat$n_compounds_present)
+  ## a flat/NA z-score also breaks the secondary axis's inverse transform below;
+  ## draw the primary axis only in that case rather than let ggplot divide by zero
+  draw_secondary_axis <- !degenerate_z && !degenerate_n
 
-  colour_var <- if (multi_group) "group" else if (multi_disease) "disease_label" else NULL
+  ## grouping/colour identity is always disease_id (never the display-only disease_label,
+  ## which two distinct diseases could share) -- disease_label only supplies legend text
+  ## and facet strips, via `labels=`/a labeller, further down
+  colour_var <- if (multi_group) "group" else if (multi_disease) "disease_id" else NULL
   p <- ggplot2::ggplot(dat, ggplot2::aes(x = .data$x, y = .data[[z_col]]))
   if (!is.null(colour_var)) {
+    key_levels <- sort(unique(dat[[colour_var]]))
+    legend_labels <- if (colour_var == "disease_id") {
+      stats::setNames(vapply(key_levels, function(d) .plot_disease_label(proj, d, with_id = FALSE), character(1)), key_levels)
+    } else {
+      stats::setNames(key_levels, key_levels)
+    }
     p <- p + ggplot2::geom_line(ggplot2::aes(colour = .data[[colour_var]], group = .data[[colour_var]]), linewidth = 0.9) +
       ggplot2::geom_point(ggplot2::aes(colour = .data[[colour_var]]), size = 2.2) +
       ggplot2::geom_line(ggplot2::aes(y = .data$n_scaled, colour = .data[[colour_var]], group = .data[[colour_var]]),
                          linetype = "dotted", linewidth = 0.6, alpha = 0.7) +
-      ggplot2::scale_colour_manual(values = .plot_contrast_palette(length(unique(dat[[colour_var]]))) |>
-                                     stats::setNames(sort(unique(dat[[colour_var]]))),
+      ggplot2::scale_colour_manual(values = stats::setNames(.plot_contrast_palette(length(key_levels)), key_levels),
+                                   labels = legend_labels,
                                    name = if (multi_group) "Group" else "Disease")
   } else {
     p <- p + ggplot2::geom_line(ggplot2::aes(group = 1), colour = "#2980b9", linewidth = 0.9) +
@@ -119,18 +150,27 @@ plot_condition_trend <- function(proj, conditions, disease = NULL, group = NULL,
       ggplot2::geom_line(ggplot2::aes(y = .data$n_scaled, group = 1), colour = "#2980b9",
                          linetype = "dotted", linewidth = 0.6, alpha = 0.7)
   }
-  p <- p + ggplot2::geom_hline(yintercept = 0, linetype = "dashed", colour = "grey60") +
+  y_scale <- if (draw_secondary_axis) {
     ggplot2::scale_y_continuous(
       name = paste0(aggregate, " proximity z-score (solid)"),
       sec.axis = ggplot2::sec_axis(
         function(z) rng_n[1] + (z - rng_z[1]) / diff(rng_z) * diff(rng_n),
         name = "Compounds present (dotted)"
       )
-    ) +
+    )
+  } else {
+    ## z tied across every row, or entirely NA, or n_compounds_present tied everywhere:
+    ## the dotted line's rescaling has no well-defined inverse, so it is still drawn
+    ## (flat, at the mean) but without a secondary axis claiming to read its actual scale
+    ggplot2::scale_y_continuous(name = paste0(aggregate, " proximity z-score (solid); compounds-present line not to scale"))
+  }
+  p <- p + ggplot2::geom_hline(yintercept = 0, linetype = "dashed", colour = "grey60") +
+    y_scale +
     ggplot2::labs(
-      title = "How the extract's total effect changes across conditions",
+      title = "How the extract's mean proximity effect changes across conditions",
       subtitle = .plot_wrap(paste0(
-        "Solid line = ", aggregate, " proximity z-score (more negative = stronger effect); ",
+        "Solid line = ", aggregate, " proximity z-score, averaged over that condition's compounds ",
+        "(more negative = closer to the disease module; no significance test at the condition level); ",
         "dotted line = number of compounds present in that condition, on its own secondary axis."
       ), .plot_wrap_width(width, 8)),
       x = NULL
@@ -139,7 +179,11 @@ plot_condition_trend <- function(proj, conditions, disease = NULL, group = NULL,
     ggplot2::theme(plot.title = ggplot2::element_text(size = 12, face = "bold"),
                   plot.subtitle = ggplot2::element_text(size = 8, colour = "grey40"),
                   plot.title.position = "plot")
-  if (multi_disease) p <- p + ggplot2::facet_wrap(ggplot2::vars(.data$disease_label))
+  if (multi_disease) {
+    dz_ids <- sort(unique(dat$disease_id))
+    dz_labeller <- stats::setNames(vapply(dz_ids, function(d) .plot_disease_label(proj, d, with_id = FALSE), character(1)), dz_ids)
+    p <- p + ggplot2::facet_wrap(ggplot2::vars(.data$disease_id), labeller = ggplot2::as_labeller(dz_labeller))
+  }
 
   result <- .plot_finish(
     proj, p,

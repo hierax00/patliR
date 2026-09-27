@@ -144,6 +144,32 @@ test_that("Oprea ranges are inclusive at their endpoints", {
   expect_true(d$oprea_pass)
 })
 
+test_that("hba_lipinski/hbd_lipinski count every N/O atom and every N-H/O-H bond, unlike CDK's own hba/hbd", {
+  ## hydroxylamine: 1 N (NH2) + 1 O (OH) -> Lipinski HBA = 2, HBD = 3 (2 N-H + 1 O-H);
+  ## CDK's own rules read this differently (regression target for the audited undercount)
+  d <- .adme_one("NO")
+  expect_equal(d$hba_lipinski, 2L)
+  expect_equal(d$hbd_lipinski, 3L)
+
+  ## a furan ether oxygen: Lipinski counts it (HBA = 1), CDK's own HBondAcceptorCountDescriptor
+  ## does not count most ether/furan oxygens -- this is the exact discrepancy the audit found
+  ## on real network compounds (methylenedioxy/methoxy lignans)
+  furan <- .adme_one("c1ccoc1")
+  expect_equal(furan$hba_lipinski, 1L)
+  expect_lt(furan$hba, furan$hba_lipinski)
+})
+
+test_that("ro5_pass/ro5_violations/oprea_pass use hba_lipinski/hbd_lipinski, not CDK's hba/hbd", {
+  ## furan: CDK's own HBondAcceptorCountDescriptor does not count the aromatic ether
+  ## oxygen as an acceptor (hba = 0), Lipinski's N+O count does (hba_lipinski = 1) --
+  ## the exact discrepancy the audit found on real network compounds' furan/ether oxygens
+  d <- .adme_one("c1ccoc1")
+  expect_lt(d$hba, d$hba_lipinski)
+  expect_equal(d$ro5_violations, (d$mw > 500) + (d$logp > 5) + (d$hbd_lipinski > 5) + (d$hba_lipinski > 10))
+  expect_equal(d$oprea_pass, d$hbd_lipinski >= 0 & d$hbd_lipinski <= 2 & d$hba_lipinski >= 2 & d$hba_lipinski <= 9 &
+    d$rotatable_bonds >= 2 & d$rotatable_bonds <= 8 & d$n_rings_approx >= 1 & d$n_rings_approx <= 4)
+})
+
 test_that("adme_local() re-running on a subset of compounds does not wipe out the rest of the table", {
   ## Regression: patliRResults(proj, "adme_local") <- out used to be a
   ## bare overwrite -- calling adme_local() again for just one compound

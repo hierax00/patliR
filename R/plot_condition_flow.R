@@ -34,7 +34,7 @@ NULL
 #'   finest and typically needs a low `top_n_groups`.
 #' @param top_n_groups Integer, default `8`. Groups beyond the `top_n_groups`
 #'   most frequent (by total compound-condition presences across
-#'   `conditions`) are pooled into `"Other"` -- with many small chemical
+#'   `conditions`) are pooled into `"Other (pooled)"` -- with many small chemical
 #'   classes the river gets illegible otherwise.
 #' @inheritParams plot_save_params
 #'
@@ -70,7 +70,11 @@ plot_condition_flow <- function(proj, conditions, group_by = c("pathway", "super
   grp <- stats::setNames(cls[[group_by]], cls$compound_id)
 
   long <- do.call(rbind, lapply(conditions, function(cd) {
-    present <- bin$compound_id[!is.na(bin[[cd]]) & bin[[cd]] == 1]
+    ## unique(): a repeated compound_id in binarizedMatrix (not itself invalidated by
+    ## PatliRProject's own validity check) would otherwise draw >1 ribbon for one
+    ## compound at this condition -- network_build() guards the same way (see its
+    ## own use of unique() on a condition's present-compound ids)
+    present <- unique(bin$compound_id[!is.na(bin[[cd]]) & bin[[cd]] == 1])
     if (length(present) == 0) return(NULL)
     g <- grp[present]
     data.frame(condition = cd, compound_id = present,
@@ -82,14 +86,21 @@ plot_condition_flow <- function(proj, conditions, group_by = c("pathway", "super
 
   totals <- sort(table(long$group), decreasing = TRUE)
   keep <- names(utils::head(totals, top_n_groups))
-  long$group[!long$group %in% keep] <- "Other"
+  ## "Other (pooled)", not "Other": a real class already named "Other" (unlikely but
+  ## possible depending on group_by/upstream classifier) would otherwise silently
+  ## merge into the pooled bucket
+  long$group[!long$group %in% keep] <- "Other (pooled)"
   long$condition <- factor(long$condition, levels = conditions)
   long$y <- 1
 
-  groups_present <- if ("Other" %in% long$group) c(setdiff(sort(unique(long$group)), "Other"), "Other") else sort(unique(long$group))
+  groups_present <- if ("Other (pooled)" %in% long$group) {
+    c(setdiff(sort(unique(long$group)), "Other (pooled)"), "Other (pooled)")
+  } else {
+    sort(unique(long$group))
+  }
   colors <- .plot_contrast_palette(length(groups_present))
   names(colors) <- groups_present
-  if ("Other" %in% names(colors)) colors["Other"] <- "grey70"
+  if ("Other (pooled)" %in% names(colors)) colors["Other (pooled)"] <- "grey70"
 
   if (is.null(width)) width <- max(6, 1.3 * length(conditions) + 3)
 

@@ -232,6 +232,56 @@ test_that("adme_filter() with hard_cutoff and ask=FALSE removes failing compound
   expect_true(any(grepl("hard_cutoff removal", projectLog(proj)$message)))
 })
 
+test_that("adme_local() stores ro5_violations as a count, and ro5_pass is the strict (0-violation) reading", {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+  proj <- adme_local(proj)
+  adme <- patliRResults(proj, "adme_local")
+  expect_true(all(adme$ro5_violations %in% 0:4 | is.na(adme$ro5_violations)))
+  expect_equal(adme$ro5_pass, adme$ro5_violations <= 0)
+})
+
+test_that("adme_filter(ro5_max_violations = ) recomputes ro5_pass without rerunning adme_local()", {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+  proj <- adme_local(proj)
+
+  adme <- patliRResults(proj, "adme_local")
+  adme$ro5_violations <- c(0, 1, 2, 0, 1, 3, 0, 1) # exactly one violation for 3 compounds
+  adme$ro5_pass <- adme$ro5_violations <= 0        # the strict column stays as adme_local() would compute it
+  patliRResults(proj, "adme_local") <- adme
+
+  strict <- adme_filter(proj, rules = "ro5")
+  loose  <- adme_filter(proj, rules = "ro5", ro5_max_violations = 1)
+
+  s <- patliRResults(strict, "adme_filtered")
+  l <- patliRResults(loose, "adme_filtered")
+  expect_equal(sum(s$pass), sum(adme$ro5_violations <= 0))
+  expect_equal(sum(l$pass), sum(adme$ro5_violations <= 1))
+  expect_gt(sum(l$pass), sum(s$pass)) # the looser tolerance passes strictly more compounds
+
+  expect_error(adme_filter(proj, rules = "ro5", ro5_max_violations = 9), "ro5_max_violations")
+
+  ## an older adme_local() run without ro5_violations: a clear error, not a silent no-op
+  adme2 <- adme; adme2$ro5_violations <- NULL
+  patliRResults(proj, "adme_local") <- adme2
+  expect_error(adme_filter(proj, rules = "ro5", ro5_max_violations = 1), "ro5_violations")
+})
+
+test_that("adme_filter(ro5_max_violations = ) also changes the hard_cutoff removal set and its reported counts", {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
+  proj <- adme_local(proj)
+  adme <- patliRResults(proj, "adme_local")
+  adme$ro5_violations <- c(0, 1, 2, 0, 1, 3, 0, 1)
+  adme$ro5_pass <- adme$ro5_violations <= 0
+  patliRResults(proj, "adme_local") <- adme
+
+  proj_loose <- adme_filter(proj, rules = "ro5", ro5_max_violations = 1, hard_cutoff = TRUE, ask = FALSE)
+  ## only the 2 compounds with 2+ violations are removed, not the 3 with exactly one
+  expect_equal(nrow(compounds(proj_loose)), nrow(compounds(proj)) - sum(adme$ro5_violations > 1))
+})
+
 test_that("adme_export_smiles() returns a newline-joined SMILES list and a matching mapping", {
   proj <- .test_project()
   proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")

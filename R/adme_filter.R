@@ -29,6 +29,14 @@ NULL
 #'   (`y`/`n`/`v` to view the list first). If `FALSE` (e.g. in a script),
 #'   the cut is applied without prompting, but full detail is always
 #'   written to [projectLog()] regardless.
+#' @param ro5_max_violations `NULL` (default) uses [adme_local()]'s own
+#'   `ro5_pass` as stored (zero violations -- all four Lipinski criteria).
+#'   An integer 0-4 recomputes pass/fail here instead, from
+#'   `adme_local()`'s `ro5_violations` column, without rerunning
+#'   [adme_local()] -- e.g. `ro5_max_violations = 1` for the tolerance the
+#'   original paper itself uses. Only applies when `"ro5"` is in `rules`;
+#'   ignored otherwise. Needs `ro5_violations` in the `adme_local` results
+#'   (added in this version -- an older run needs `adme_local()` rerun).
 #'
 #' @return The updated `proj`, with an `adme_filtered` entry in
 #'   [patliRResults()] in long format (columns `compound_id`, `rule`,
@@ -49,10 +57,15 @@ NULL
 #' @export
 adme_filter <- function(proj, rules = c("ro5", "veber", "ghose", "egan", "oprea", "route"),
                          source = c("local", "imported"),
-                         hard_cutoff = FALSE, ask = interactive()) {
+                         hard_cutoff = FALSE, ask = interactive(),
+                         ro5_max_violations = NULL) {
   stopifnot(is(proj, "PatliRProject"))
   rules <- match.arg(rules, c("ro5", "veber", "ghose", "egan", "oprea", "route"), several.ok = TRUE)
   source <- match.arg(source)
+  if (!is.null(ro5_max_violations)) {
+    stopifnot(is.numeric(ro5_max_violations), length(ro5_max_violations) == 1,
+             !is.na(ro5_max_violations), ro5_max_violations >= 0, ro5_max_violations <= 4)
+  }
 
   if (source == "imported") {
     cli::cli_abort(c(
@@ -78,8 +91,22 @@ adme_filter <- function(proj, rules = c("ro5", "veber", "ghose", "egan", "oprea"
     cli::cli_abort("None of the requested {.arg rules} have a matching column in {.val adme_local}; did you request a route that {.fn adme_local} was not run with?")
   }
 
+  ## ro5_max_violations recomputes ro5_pass here (from the violation count adme_local()
+  ## stored) rather than reusing the strict, zero-violation column as-is
+  ro5_override <- NULL
+  if (!is.null(ro5_max_violations) && "ro5_pass" %in% rule_cols) {
+    if (!"ro5_violations" %in% names(adme)) {
+      cli::cli_abort(c(
+        "{.arg ro5_max_violations} needs an {.val ro5_violations} column in {.val adme_local}, not found.",
+        "i" = "Rerun {.fn adme_local} (this version adds it) before using {.arg ro5_max_violations}."
+      ))
+    }
+    ro5_override <- adme$ro5_violations <= ro5_max_violations
+  }
+
   long <- do.call(rbind, lapply(rule_cols, function(col) {
-    data.frame(compound_id = adme$compound_id, rule = col, pass = adme[[col]], stringsAsFactors = FALSE)
+    pass <- if (col == "ro5_pass" && !is.null(ro5_override)) ro5_override else adme[[col]]
+    data.frame(compound_id = adme$compound_id, rule = col, pass = pass, stringsAsFactors = FALSE)
   }))
 
   patliRResults(proj, "adme_filtered") <- long
@@ -106,7 +133,10 @@ adme_filter <- function(proj, rules = c("ro5", "veber", "ghose", "egan", "oprea"
 
   cmp <- compounds(proj)
   n_total <- nrow(cmp)
-  by_rule <- vapply(rule_cols, function(col) sum(!adme[[col]], na.rm = TRUE), integer(1))
+  by_rule <- vapply(rule_cols, function(col) {
+    pass <- if (col == "ro5_pass" && !is.null(ro5_override)) ro5_override else adme[[col]]
+    sum(!pass, na.rm = TRUE)
+  }, integer(1))
   summary_msg <- paste0(rule_cols, ": ", by_rule, collapse = ", ")
 
   proceed <- TRUE

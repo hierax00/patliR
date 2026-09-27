@@ -2,6 +2,11 @@
 
 ## New
 
+- **`adme_filter(ro5_max_violations = )`**: the Lipinski Ro5 tolerance is now configurable at filter
+  time, without rerunning `adme_local()` (which now stores `ro5_violations`, 0-4, alongside the
+  existing strict `ro5_pass`). `adme_filter()` itself is unchanged otherwise: it still never removes
+  a compound unless `hard_cutoff = TRUE`, and still asks before removing anything unless `ask = FALSE`
+  -- automatic end-to-end runs and expert-reviewed-by-hand runs are both supported, same as before.
 - **`prep_binarize(min_replicates = )`**: an alternative presence rule based on replicate consistency. A compound is present in a condition when it is detected (abundance > 0) in at least `min_replicates` replicates (e.g. `2` of 3: absent if two or three replicates are zero, present if two or three have a value); the quartile threshold is not applied. The default (`NULL`) keeps the Q1 rule.
 
 ## Bug fixes: `adme_local()` descriptors

@@ -9,7 +9,8 @@ adme_filter(
   rules = c("ro5", "veber", "ghose", "egan", "oprea", "route"),
   source = c("local", "imported"),
   hard_cutoff = FALSE,
-  ask = interactive()
+  ask = interactive(),
+  ro5_max_violations = NULL
 )
 }
 \arguments{
@@ -37,6 +38,15 @@ if \code{FALSE}, nothing is removed -- the return value only adds the
 (\code{y}/\code{n}/\code{v} to view the list first). If \code{FALSE} (e.g. in a script),
 the cut is applied without prompting, but full detail is always
 written to \code{\link[=projectLog]{projectLog()}} regardless.}
+
+\item{ro5_max_violations}{\code{NULL} (default) uses \code{\link[=adme_local]{adme_local()}}'s own
+\code{ro5_pass} as stored (zero violations -- all four Lipinski criteria).
+An integer 0-4 recomputes pass/fail here instead, from
+\code{adme_local()}'s \code{ro5_violations} column, without rerunning
+\code{\link[=adme_local]{adme_local()}} -- e.g. \code{ro5_max_violations = 1} for the tolerance the
+original paper itself uses. Only applies when \code{"ro5"} is in \code{rules};
+ignored otherwise. Needs \code{ro5_violations} in the \code{adme_local} results
+(added in this version -- an older run needs \code{adme_local()} rerun).}
 }
 \value{
 The updated \code{proj}, with an \code{adme_filtered} entry in

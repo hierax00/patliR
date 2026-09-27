@@ -60,7 +60,8 @@ The updated \code{proj}, with an \code{adme_local} entry in
 \code{fraction_csp3_approx}, \code{aromatic_proportion_approx} (plus, when
 \code{rdkit_qc = TRUE}, \code{hba_lipinski_rdkit}, \code{hbd_lipinski_rdkit},
 \code{tpsa_rdkit}, \code{fraction_csp3_rdkit}, \code{aromatic_proportion_rdkit}),
-\code{n_rings_approx}, \code{logs_esol}, \code{ro5_pass}, \code{veber_pass}, \code{ghose_pass},
+\code{n_rings_approx}, \code{logs_esol}, \code{ro5_pass}, \code{ro5_violations} (0-4, see
+\code{adme_filter(ro5_max_violations = )}), \code{veber_pass}, \code{ghose_pass},
 \code{egan_pass}, \code{oprea_pass}, \code{gi_absorption}, \code{bbb_permeant},
 \code{route_oral}, \code{route_topical}, \code{route_ophthalmic},
 \code{route_injectable}), also written to \code{results/adme_local.csv}.
@@ -105,9 +106,12 @@ earlier version used narrower, exclusive limits). See
 isotopic abundance, \code{rcdk::get.natural.mass()}), not the monoisotopic mass.
 \code{logp} is CDK's XLogP and \code{hba}/\code{hbd} are CDK's donor/acceptor counts, so
 the rules above are adapted screens on CDK descriptors, not bit-for-bit
-reproductions of the papers' own logP/HBA definitions. \code{ro5_pass} requires
-all four Lipinski criteria (zero violations); the original paper also
-tolerates one violation. Structures are used as supplied (no salt
+reproductions of the papers' own logP/HBA definitions. \code{ro5_pass} here is
+the strict, zero-violation reading (\code{ro5_violations <= 0}); the original
+paper's own convention tolerates one violation. \code{ro5_violations} (0-4) is
+stored alongside it precisely so a looser tolerance can be applied later
+-- see \code{adme_filter(rules = "ro5", ro5_max_violations = )} -- without
+rerunning this function. Structures are used as supplied (no salt
 stripping or neutralisation).
 \strong{Deliberately not implemented}: Hughes et al. (2008, \emph{Bioorg. Med.
 Chem. Lett.} 18, 4872-4875), Ritchie & Macdonald (2009, \emph{Drug Discov.

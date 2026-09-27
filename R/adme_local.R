@@ -42,9 +42,12 @@ NULL
 #' isotopic abundance, `rcdk::get.natural.mass()`), not the monoisotopic mass.
 #' `logp` is CDK's XLogP and `hba`/`hbd` are CDK's donor/acceptor counts, so
 #' the rules above are adapted screens on CDK descriptors, not bit-for-bit
-#' reproductions of the papers' own logP/HBA definitions. `ro5_pass` requires
-#' all four Lipinski criteria (zero violations); the original paper also
-#' tolerates one violation. Structures are used as supplied (no salt
+#' reproductions of the papers' own logP/HBA definitions. `ro5_pass` here is
+#' the strict, zero-violation reading (`ro5_violations <= 0`); the original
+#' paper's own convention tolerates one violation. `ro5_violations` (0-4) is
+#' stored alongside it precisely so a looser tolerance can be applied later
+#' -- see `adme_filter(rules = "ro5", ro5_max_violations = )` -- without
+#' rerunning this function. Structures are used as supplied (no salt
 #' stripping or neutralisation).
 #' **Deliberately not implemented**: Hughes et al. (2008, *Bioorg. Med.
 #' Chem. Lett.* 18, 4872-4875), Ritchie & Macdonald (2009, *Drug Discov.
@@ -148,7 +151,8 @@ NULL
 #'   `fraction_csp3_approx`, `aromatic_proportion_approx` (plus, when
 #'   `rdkit_qc = TRUE`, `hba_lipinski_rdkit`, `hbd_lipinski_rdkit`,
 #'   `tpsa_rdkit`, `fraction_csp3_rdkit`, `aromatic_proportion_rdkit`),
-#'   `n_rings_approx`, `logs_esol`, `ro5_pass`, `veber_pass`, `ghose_pass`,
+#'   `n_rings_approx`, `logs_esol`, `ro5_pass`, `ro5_violations` (0-4, see
+#'   `adme_filter(ro5_max_violations = )`), `veber_pass`, `ghose_pass`,
 #'   `egan_pass`, `oprea_pass`, `gi_absorption`, `bbb_permeant`,
 #'   `route_oral`, `route_topical`, `route_ophthalmic`,
 #'   `route_injectable`), also written to `results/adme_local.csv`.
@@ -217,7 +221,12 @@ adme_local <- function(proj, compound_ids = NULL,
 
   out$amr <- desc$amr
 
-  out$ro5_pass   <- with(out, mw <= 500 & logp <= 5 & hbd <= 5 & hba <= 10)
+  ## Stored as a violation COUNT, not just pass/fail, so adme_filter() can apply a
+  ## different tolerance later (e.g. the commonly used "at most one violation")
+  ## without rerunning adme_local(); ro5_pass itself keeps the strict, zero-violation
+  ## reading (max_violations = 0) so existing code/results are unchanged.
+  out$ro5_violations <- with(out, (mw > 500) + (logp > 5) + (hbd > 5) + (hba > 10))
+  out$ro5_pass   <- out$ro5_violations <= 0
   out$veber_pass <- with(out, tpsa <= 140 & rotatable_bonds <= 10)
   ## Ghose et al. 1999 -- now all four criteria, including molar
   ## refractivity (AMR); an earlier version of this function omitted AMR

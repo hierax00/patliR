@@ -67,11 +67,17 @@ test_that("plot_admet_radar()'s subtitle cites the SwissADME radar source, not j
   expect_true(grepl("2017", subtitle))
 })
 
-test_that(".smiles_approx_descriptors() gives sane fractions for a simple aromatic SMILES", {
-  ## Apigenin: mix of aromatic rings and one aliphatic carbonyl carbon.
-  d <- patliR:::.smiles_approx_descriptors(
-    "O=c1cc(-c2ccc(O)cc2)oc2cc(O)cc(O)c12", 20L
-  )
-  expect_true(d$fraction_csp3_approx >= 0 && d$fraction_csp3_approx <= 1)
-  expect_true(d$aromatic_proportion_approx >= 0 && d$aromatic_proportion_approx <= 1)
+test_that("adme_local() gives fractions in [0, 1] for a flavone (apigenin)", {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_single_compound(), identifier = "pubchem")
+  cmp <- compounds(proj)
+  cmp$smiles <- "O=c1cc(-c2ccc(O)cc2)oc2cc(O)cc(O)c12"
+  compounds(proj) <- cmp
+  d <- patliRResults(adme_local(proj), "adme_local")
+  expect_true(is.finite(d$fraction_csp3_approx) && d$fraction_csp3_approx >= 0 && d$fraction_csp3_approx <= 1)
+  expect_true(is.finite(d$aromatic_proportion_approx) && d$aromatic_proportion_approx >= 0 &&
+                d$aromatic_proportion_approx <= 1)
+  ## apigenin has no sp3 carbon at all and most of its 20 heavy atoms sit in aromatic rings
+  expect_equal(d$fraction_csp3_approx, 0)
+  expect_gt(d$aromatic_proportion_approx, 0.5)
 })

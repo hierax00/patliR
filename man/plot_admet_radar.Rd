@@ -81,10 +81,10 @@ The pink zone boundaries are the published ones (see \code{.radar_axes} in
 the package source for the exact reference); the outer axis scale is
 our own display choice, not a literature value. INSOLU (\code{logs_esol}) and
 INSATU (\code{fraction_csp3_approx}) both inherit the approximations
-documented in \code{\link[=adme_local]{adme_local()}} -- in particular, INSATU is a rough
-aliphatic-vs-aromatic-carbon proxy from the SMILES string, not a true
-Fsp3 from hybridization perception. Treat this plot as a good first
-read, not a certified reproduction of SwissADME's own figure.
+documented in \code{\link[=adme_local]{adme_local()}} -- INSOLU uses CDK's XLogP inside the ESOL
+equation, and LIPO is CDK's XLogP rather than the XLOGP3 SwissADME's
+own radar uses. Treat this plot as a first read, not a reproduction of
+SwissADME's own figure.
 }
 
 \examples{

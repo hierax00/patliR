@@ -118,7 +118,8 @@ plot_boiled_egg <- function(proj, compound_ids = NULL, engine = c("ggiraph", "st
   )
   adme$call <- ifelse(
     !is.na(adme$bbb_permeant) & adme$bbb_permeant, "BBB permeant",
-    ifelse(!is.na(adme$gi_absorption) & adme$gi_absorption == "High", "GI absorption (high)", "Neither")
+    ifelse(!is.na(adme$gi_absorption) & adme$gi_absorption == "High", "GI absorption (high)",
+           ifelse(is.na(adme$gi_absorption) & is.na(adme$bbb_permeant), "Not computed", "Neither"))
   )
 
   poly <- .load_boiled_egg_polygons()
@@ -217,7 +218,8 @@ plot_boiled_egg <- function(proj, compound_ids = NULL, engine = c("ggiraph", "st
 
   p +
     ggplot2::scale_colour_manual(values = c(
-      "BBB permeant" = "#8e44ad", "GI absorption (high)" = "#2980b9", "Neither" = "grey30"
+      "BBB permeant" = "#8e44ad", "GI absorption (high)" = "#2980b9", "Neither" = "grey30",
+      "Not computed" = "grey70"
     )) +
     ggplot2::coord_cartesian(xlim = lim$x, ylim = lim$y) +
     ggplot2::labs(

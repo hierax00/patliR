@@ -33,6 +33,7 @@ Imports:
     grDevices,
     cli,
     rcdk,
+    rJava,
     rlang,
     igraph (>= 2.0.0)
 Suggests:

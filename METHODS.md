@@ -84,12 +84,14 @@ Regenerates a fast binary copy of the reference CSVs. Pure caching; always safe 
 | flag | rule (all must hold) | source |
 |---|---|---|
 | `ro5_pass` | MW ≤ 500, logP ≤ 5, HBD ≤ 5, HBA ≤ 10 | Lipinski et al. 2001 |
-| `veber_pass` | TPSA ≤ 140, rotatable bonds ≤ 10 | Veber et al. 2002 |
-| `ghose_pass` | 160 ≤ MW ≤ 480, −0.4 ≤ logP ≤ 5.6, 20 ≤ atoms ≤ 70, 40 ≤ AMR ≤ 130 | Ghose et al. 1999 |
+| `veber_pass` | TPSA ≤ 140, rotatable bonds ≤ 10 (amide C–N bonds not counted, as in the paper) | Veber et al. 2002 |
+| `ghose_pass` | 160 ≤ MW ≤ 480, −0.4 ≤ logP ≤ 5.6, 20 ≤ atoms (incl. H) ≤ 70, 40 ≤ AMR ≤ 130 | Ghose et al. 1999 |
 | `egan_pass` | logP ≤ 5.88, TPSA ≤ 131.6 | Egan et al. 2000 |
-| `oprea_pass` | HBD < 2, 2 < HBA < 10, 2 < rot. bonds < 8, 1 < rings < 4 | Oprea 2000 (lead-likeness) |
+| `oprea_pass` | 0 ≤ HBD ≤ 2, 2 ≤ HBA ≤ 9, 2 ≤ rot. bonds ≤ 8, 1 ≤ rings ≤ 4 (inclusive; the paper's drug-like ranges) | Oprea 2000 |
 
-`gi_absorption` / `bbb_permeant` come from a **point-in-ellipse test**: the compound's (TPSA, WLogP) point is checked against the two published BOILED-Egg ellipses (Daina & Zoete 2016) by ray-casting. Optional route flags (`route_oral` etc.) are further fixed inequalities.
+Descriptors come from CDK (`rcdk`): `mw` is the average molecular weight (natural isotopic abundance), `logp` is CDK XLogP, HBD/HBA use CDK's definitions, Fsp3 and the aromatic proportion are read from the perceived molecular graph. These are therefore CDK-adapted screens, not bit-for-bit reproductions of the papers' own logP/HBA definitions; `ro5_pass` requires zero violations (the paper tolerates one); structures are used as supplied (no salt stripping or neutralisation).
+
+`gi_absorption` / `bbb_permeant` come from a **point-in-ellipse test**: the compound's (TPSA, WLogP proxy = CDK ALogP) point is checked against the two published BOILED-Egg ellipses (Daina & Zoete 2016) by ray-casting. Optional route flags (`route_oral` etc.) are further fixed inequalities.
 **Theory:** all five rules are published "rule-of-thumb" boundaries of the physicochemical region where oral drugs tend to fall. They are heuristics, not classifiers — no training, no probability.
 
 ### `adme_filter(proj, rules)`

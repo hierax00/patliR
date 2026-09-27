@@ -7,7 +7,7 @@ NULL
 #' Computes molecular descriptors with `rcdk` for every compound in
 #' [compounds()] (or a subset) and derives: the Lipinski Rule of Five
 #' (Ro5), the Veber rule, the Ghose filter, the Egan filter, the Oprea
-#' lead-likeness rule, a BOILED-Egg-style estimate of passive GI
+#' property ranges, a BOILED-Egg-style estimate of passive GI
 #' absorption / BBB permeation, and one physicochemical compatibility flag
 #' per administration route.
 #'
@@ -18,22 +18,34 @@ NULL
 #'   \item **Lipinski Ro5** (`ro5_pass`) -- Lipinski et al. (2001), *Adv.
 #'     Drug Deliv. Rev.* 46, 3-26: MW <= 500, logP <= 5, HBD <= 5, HBA <= 10.
 #'   \item **Veber** (`veber_pass`) -- Veber et al. (2002), *J. Med. Chem.*
-#'     45, 2615-2623: TPSA <= 140, rotatable bonds <= 10.
+#'     45, 2615-2623: TPSA <= 140, rotatable bonds <= 10, where (as in the
+#'     paper) a rotatable bond is a single non-ring bond to a non-terminal
+#'     heavy atom **excluding amide C-N bonds**; `rotatable_bonds` is counted
+#'     that way (CDK `RotatableBondsCountDescriptor`, `excludeAmides = TRUE`).
 #'   \item **Ghose** (`ghose_pass`) -- Ghose et al. (1999), *J. Comb.
-#'     Chem.* 1, 55-68: 160 <= MW <= 480, -0.4 <= logP <= 5.6, 20 <= heavy
-#'     atoms <= 70, 40 <= molar refractivity (AMR) <= 130. All four
-#'     criteria now checked (an earlier version of this function omitted
-#'     the AMR term).
+#'     Chem.* 1, 55-68: 160 <= MW <= 480, -0.4 <= logP <= 5.6, 20 <= atoms
+#'     <= 70 (`n_atoms` counts **all atoms including hydrogens**, as the
+#'     original atom-count criterion does), 40 <= molar refractivity (AMR)
+#'     <= 130. All four criteria checked.
 #'   \item **Egan** (`egan_pass`) -- Egan et al. (2000), *J. Med. Chem.*
 #'     43, 3867-3877 (the "egg" model that later BOILED-Egg extends):
 #'     logP <= 5.88, TPSA <= 131.6.
-#'   \item **Oprea lead-likeness** (`oprea_pass`) -- Oprea (2000), *J.
-#'     Comput. Aided Mol. Des.* 14, 251-264: HBD < 2, 2 < HBA < 10,
-#'     2 < rotatable bonds < 8, 1 < ring count < 4. This is the standard
-#'     literature "lead-like properties" rule (narrower than drug-likeness,
-#'     meant for hit-to-lead triage rather than a final candidate) -- see
+#'   \item **Oprea property ranges** (`oprea_pass`) -- Oprea (2000), *J.
+#'     Comput. Aided Mol. Des.* 14, 251-264: 0 <= HBD <= 2, 2 <= HBA <= 9,
+#'     2 <= rotatable bonds <= 8, 1 <= ring count <= 4 (inclusive ranges;
+#'     the paper reports them as the ranges holding ~70% of the *drug-like*
+#'     compounds it surveyed, not as a stricter lead-likeness rule -- an
+#'     earlier version used narrower, exclusive limits). See
 #'     `adme_filter(rules = "oprea")`.
 #' }
+#' **Descriptor conventions.** `mw` is the average molecular weight (natural
+#' isotopic abundance, `rcdk::get.natural.mass()`), not the monoisotopic mass.
+#' `logp` is CDK's XLogP and `hba`/`hbd` are CDK's donor/acceptor counts, so
+#' the rules above are adapted screens on CDK descriptors, not bit-for-bit
+#' reproductions of the papers' own logP/HBA definitions. `ro5_pass` requires
+#' all four Lipinski criteria (zero violations); the original paper also
+#' tolerates one violation. Structures are used as supplied (no salt
+#' stripping or neutralisation).
 #' **Deliberately not implemented**: Hughes et al. (2008, *Bioorg. Med.
 #' Chem. Lett.* 18, 4872-4875), Ritchie & Macdonald (2009, *Drug Discov.
 #' Today* 14, 1011-1020) and Lovering et al. (2009, *J. Med. Chem.* 52,
@@ -53,10 +65,12 @@ NULL
 #' **WLogP** (Wildman & Crippen's atom-contribution logP, as implemented in
 #' RDKit); `rcdk`/CDK has no identical implementation, so `wlogp_proxy` uses
 #' CDK's own ALogP (`rcdk::get.alogp()`, Ghose-Crippen-style, a different
-#' but methodologically related atom-contribution method) instead. This can
-#' shift a compound slightly relative to where SwissADME itself would place
-#' it -- treat `gi_absorption`/`bbb_permeant` as "very likely right", not
-#' "certified identical to SwissADME's own call".
+#' but methodologically related atom-contribution method) instead. The two
+#' logP values can differ enough to move a compound across an ellipse
+#' boundary, and this substitution has not been validated here against
+#' SwissADME's own calls -- treat `gi_absorption`/`bbb_permeant` as an
+#' approximate screen, most reliable for compounds well inside or well
+#' outside the ellipses.
 #'
 #' @section Route criteria and their references:
 #' \itemize{
@@ -81,16 +95,16 @@ NULL
 #'   `"ophthalmic"`, `"injectable"`.
 #'
 #' @section Radar-chart descriptors (please also read):
-#' `fraction_csp3_approx` and `aromatic_proportion_approx` are computed with
-#' a lightweight regex heuristic over the SMILES string itself (lowercase
-#' aromatic atoms vs. uppercase `C`), **not** true CDK hybridization/
-#' aromaticity perception -- `fraction_csp3_approx` therefore over-counts
-#' non-aromatic sp2 carbons (e.g. in C=C or C=O) as if they were sp3. It is
-#' good enough to place a compound roughly on [plot_admet_radar()]'s
-#' INSATU axis, not for anything that needs a rigorous Fsp3. `logs_esol` is
-#' the published Delaney (2004) ESOL equation applied to `logp`, `mw`,
-#' `rotatable_bonds`, and `aromatic_proportion_approx` -- so it inherits
-#' the same approximation for its aromatic-proportion term. `n_rings_approx`
+#' `fraction_csp3_approx` is CDK's `FractionalCSP3Descriptor` (sp3 carbons /
+#' all carbons, from perceived hybridization) and `aromatic_proportion_approx`
+#' is CDK's aromatic-atom count (after aromaticity perception) divided by the
+#' heavy-atom count, so neither depends on how the SMILES was written (the
+#' `_approx` suffix is kept for column-name stability; an earlier version
+#' used a SMILES-string regex heuristic that mistook C=C and C=O carbons for
+#' sp3). `logs_esol` is
+#' the published Delaney (2004) ESOL equation applied to `logp` (CDK XLogP,
+#' not the predictor the original coefficients were fitted with), `mw`,
+#' `rotatable_bonds`, and `aromatic_proportion_approx`. `n_rings_approx`
 #' counts SMILES ring-closure digit pairs (single digits and `%nn`
 #' two-digit forms, outside `[...]` brackets so isotope/charge numbers
 #' are not miscounted) -- deterministic per the SMILES specification for
@@ -139,6 +153,14 @@ adme_local <- function(proj, compound_ids = NULL,
       message = "descriptor calculation failed (structure could not be re-parsed by rcdk)"
     )
   }
+  ## a single descriptor can fail while the mass succeeds: log those too, per descriptor
+  for (nm in c("logp", "hbd", "hba", "tpsa", "wlogp_proxy", "amr", "rotatable_bonds", "fraction_csp3", "n_arom_atoms")) {
+    partial <- !failed & is.na(desc[[nm]])
+    if (any(partial)) {
+      proj <- .log_append(proj, step = "adme_local", id = cmp$id[partial],
+                          message = paste0("descriptor '", nm, "' could not be computed (left NA)"))
+    }
+  }
 
   out <- data.frame(
     compound_id = cmp$id,
@@ -149,10 +171,10 @@ adme_local <- function(proj, compound_ids = NULL,
 
   out$n_atoms <- desc$n_atoms
 
-  approx <- .smiles_approx_descriptors(cmp$smiles, desc$n_heavy)
-  out$fraction_csp3_approx <- approx$fraction_csp3_approx
-  out$aromatic_proportion_approx <- approx$aromatic_proportion_approx
-  out$n_rings_approx <- approx$n_rings_approx
+  out$fraction_csp3_approx <- desc$fraction_csp3
+  out$aromatic_proportion_approx <- ifelse(is.na(desc$n_heavy) | desc$n_heavy == 0, NA_real_,
+                                           desc$n_arom_atoms / desc$n_heavy)
+  out$n_rings_approx <- vapply(cmp$smiles, .smiles_ring_count_approx, numeric(1), USE.NAMES = FALSE)
   ## Delaney (2004) ESOL equation, J Chem Inf Comput Sci 44(3):1000-1005.
   out$logs_esol <- with(out,
     0.16 - 0.63 * logp - 0.0062 * mw + 0.066 * rotatable_bonds - 0.74 * aromatic_proportion_approx
@@ -169,15 +191,12 @@ adme_local <- function(proj, compound_ids = NULL,
     n_atoms >= 20 & n_atoms <= 70 & amr >= 40 & amr <= 130)
   ## Egan et al. 2000 ("egg" model).
   out$egan_pass <- with(out, logp <= 5.88 & tpsa <= 131.6)
-  ## Oprea 2000 lead-likeness -- narrower than drug-likeness, meant for
-  ## hit-to-lead triage. n_rings_approx is the SMILES ring-closure-digit
-  ## heuristic (see .smiles_approx_descriptors()), not true CDK SSSR ring
-  ## perception -- rcdk has no high-level ring-count wrapper, and this
-  ## avoids guessing an unverified CDK descriptor column name (see the
-  ## code comment there for exactly what it does and does not handle).
-  out$oprea_pass <- with(out, hbd < 2 & hba > 2 & hba < 10 &
-    rotatable_bonds > 2 & rotatable_bonds < 8 &
-    n_rings_approx > 1 & n_rings_approx < 4)
+  ## Oprea 2000 property ranges (inclusive; the paper's drug-like ranges).
+  ## n_rings_approx is the SMILES ring-closure-digit count (see
+  ## .smiles_ring_count_approx()), not true CDK SSSR ring perception.
+  out$oprea_pass <- with(out, hbd >= 0 & hbd <= 2 & hba >= 2 & hba <= 9 &
+    rotatable_bonds >= 2 & rotatable_bonds <= 8 &
+    n_rings_approx >= 1 & n_rings_approx <= 4)
 
   out$wlogp_proxy <- desc$wlogp_proxy
   egg <- .boiled_egg(out$tpsa, out$wlogp_proxy)
@@ -210,10 +229,14 @@ adme_local <- function(proj, compound_ids = NULL,
   empty_row <- data.frame(mw = NA_real_, logp = NA_real_, hbd = NA_integer_,
                            hba = NA_integer_, tpsa = NA_real_,
                            rotatable_bonds = NA_integer_, n_atoms = NA_integer_, n_heavy = NA_integer_,
-                           wlogp_proxy = NA_real_, amr = NA_real_)
+                           wlogp_proxy = NA_real_, amr = NA_real_,
+                           fraction_csp3 = NA_real_, n_arom_atoms = NA_integer_)
   rows <- lapply(mols, function(m) {
     if (is.null(m)) return(empty_row)
     tryCatch({
+      ## aromaticity must be perceived before the descriptors are read (Kekule input);
+      ## if perception throws, the aromatic count would come from unprepared flags -> NA
+      arom_ok <- tryCatch({ rcdk::do.aromaticity(m); TRUE }, error = function(e) FALSE)
       rcdk::convert.implicit.to.explicit(m)
       data.frame(
         mw  = .safe_mw(m),
@@ -221,7 +244,9 @@ adme_local <- function(proj, compound_ids = NULL,
         hbd = as.integer(.safe_desc(m, "org.openscience.cdk.qsar.descriptors.molecular.HBondDonorCountDescriptor", "nHBDon")),
         hba = as.integer(.safe_desc(m, "org.openscience.cdk.qsar.descriptors.molecular.HBondAcceptorCountDescriptor", "nHBAcc")),
         tpsa = .safe_desc(m, "org.openscience.cdk.qsar.descriptors.molecular.TPSADescriptor", "TopoPSA"),
-        rotatable_bonds = as.integer(.safe_desc(m, "org.openscience.cdk.qsar.descriptors.molecular.RotatableBondsCountDescriptor", "nRotB")),
+        rotatable_bonds = .rotatable_bonds_veber(m),
+        fraction_csp3 = .safe_desc(m, "org.openscience.cdk.qsar.descriptors.molecular.FractionalCSP3Descriptor", "Fsp3"),
+        n_arom_atoms = if (arom_ok) as.integer(.safe_desc(m, "org.openscience.cdk.qsar.descriptors.molecular.AromaticAtomsCountDescriptor", "naAromAtom")) else NA_integer_,
         n_atoms = as.integer(tryCatch(rcdk::get.atom.count(m), error = function(e) NA_integer_)),
         n_heavy = tryCatch(sum(vapply(rcdk::get.atoms(m), function(a) rcdk::get.symbol(a) != "H", logical(1))),
                           error = function(e) NA_integer_),
@@ -237,44 +262,43 @@ adme_local <- function(proj, compound_ids = NULL,
   do.call(rbind, rows)
 }
 
+#' Average molecular weight (natural isotopic abundance), not the monoisotopic mass
 #' @keywords internal
 .safe_mw <- function(mol) {
-  tryCatch(rcdk::get.exact.mass(mol), error = function(e) NA_real_)
+  tryCatch(rcdk::get.natural.mass(mol), error = function(e) NA_real_)
+}
+
+#' Rotatable bonds as Veber et al. (2002) define them
+#' @description Single non-ring bonds to non-terminal heavy atoms, **excluding
+#'   amide C-N bonds** (CDK `RotatableBondsCountDescriptor` with
+#'   `includeTerminals = FALSE, excludeAmides = TRUE`, set through rJava --
+#'   `rcdk::eval.desc()` only exposes the defaults, which keep amides).
+#' @param mol An rcdk molecule.
+#' @return Integer, `NA_integer_` on failure.
+#' @keywords internal
+.rotatable_bonds_veber <- function(mol) {
+  tryCatch({
+    d <- rJava::.jnew("org/openscience/cdk/qsar/descriptors/molecular/RotatableBondsCountDescriptor")
+    params <- rJava::.jarray(list(rJava::.jnew("java/lang/Boolean", FALSE), rJava::.jnew("java/lang/Boolean", TRUE)),
+                             contents.class = "java/lang/Object")
+    rJava::.jcall(d, "V", "setParameters", params)
+    ac <- rJava::.jcast(mol, "org/openscience/cdk/interfaces/IAtomContainer")
+    dv <- rJava::.jcall(d, "Lorg/openscience/cdk/qsar/DescriptorValue;", "calculate", ac)
+    ## CDK can hand back a value carrying an exception instead of throwing: treat that as a failure
+    if (!rJava::is.jnull(rJava::.jcall(dv, "Ljava/lang/Exception;", "getException"))) return(NA_integer_)
+    res <- rJava::.jcall(dv, "Lorg/openscience/cdk/qsar/result/IDescriptorResult;", "getValue")
+    as.integer(rJava::.jcall(rJava::.jcast(res, "org/openscience/cdk/qsar/result/IntegerResult"), "I", "intValue"))
+  }, error = function(e) NA_integer_)
 }
 
 #' @keywords internal
 .safe_desc <- function(mol, desc_name, col) {
   tryCatch({
     val <- rcdk::eval.desc(mol, desc_name, verbose = FALSE)
-    as.numeric(val[[col]])
+    out <- as.numeric(val[[col]])
+    ## Inf/NaN from a descriptor is a failure, not a value the rules should compare
+    if (length(out) != 1L || !is.finite(out)) NA_real_ else out
   }, error = function(e) NA_real_)
-}
-
-#' Rough SMILES-regex proxies for Fsp3, aromatic proportion, and ring count
-#'
-#' See the "Radar-chart descriptors" note in [adme_local()] -- these are
-#' cheap heuristics over the raw SMILES string, not true CDK hybridization/
-#' aromaticity/ring perception.
-#' @keywords internal
-.smiles_approx_descriptors <- function(smiles, n_atoms) {
-  vals <- Map(function(s, n_heavy) {
-    if (is.na(s) || !nzchar(s) || is.na(n_heavy) || n_heavy == 0) {
-      return(c(fraction_csp3_approx = NA_real_, aromatic_proportion_approx = NA_real_,
-               n_rings_approx = NA_real_))
-    }
-    atoms <- regmatches(s, gregexpr("\\[[^]]*\\]|Br|Cl|[BCNOPSFIbcnosp]", s, perl = TRUE))[[1]]
-    atoms <- sub("^\\[[0-9]*([A-Z][a-z]?|se|as|[bcnops]).*\\]$", "\\1", atoms, perl = TRUE)
-    aromatic_c     <- sum(atoms == "c")
-    aromatic_other <- sum(atoms %in% c("b", "n", "o", "p", "s", "se", "as"))
-    aliphatic_c    <- sum(atoms == "C")
-    total_carbon <- aromatic_c + aliphatic_c
-    c(
-      fraction_csp3_approx = if (total_carbon > 0) aliphatic_c / total_carbon else NA_real_,
-      aromatic_proportion_approx = (aromatic_c + aromatic_other) / n_heavy,
-      n_rings_approx = .smiles_ring_count_approx(s)
-    )
-  }, smiles, n_atoms)
-  as.data.frame(do.call(rbind, vals))
 }
 
 #' Count ring-closure digit pairs in a SMILES string (approximate ring count)

@@ -40,20 +40,52 @@ test_that("adme_local() divides aromatic atoms by heavy atoms for ESOL", {
   ## uses total atoms, whereas ESOL's aromatic proportion uses heavy atoms.
   expect_equal(adme$n_atoms, 12L)
   expect_equal(adme$aromatic_proportion_approx, 1)
+  expect_true(all(is.finite(c(adme$logp, adme$mw, adme$rotatable_bonds, adme$logs_esol))))
   expect_equal(adme$logs_esol,
                0.16 - 0.63 * adme$logp - 0.0062 * adme$mw +
                  0.066 * adme$rotatable_bonds - 0.74)
 })
 
-test_that("SMILES approximation counts adjacent atoms without confusing element symbols", {
-  out <- patliR:::.smiles_approx_descriptors(
-    c("Cc1ccccc1", "c1ccncc1", "Clc1ccccc1", "[13CH3]c1ccccc1", "Cn1cccc1", "[Sc+3]"),
-    c(7, 6, 7, 7, 6, 1)
-  )
-  ## The uppercase C before aromatic c/n is still carbon; aromatic n
-  ## before c is still nitrogen. Bracketed Sc and chlorine are not carbon.
-  expect_equal(out$fraction_csp3_approx, c(1/7, 0, 0, 1/7, 1/5, NA_real_))
-  expect_equal(out$aromatic_proportion_approx, c(6/7, 1, 6/7, 6/7, 5/6, 0))
+.adme_one <- function(smiles) {
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_single_compound(), identifier = "pubchem")
+  cmp <- compounds(proj)
+  cmp$smiles <- smiles
+  compounds(proj) <- cmp
+  patliRResults(adme_local(proj), "adme_local")
+}
+
+test_that("Fsp3 and aromatic proportion come from the molecular graph, not the SMILES spelling", {
+  ## regression: the regex proxy gave Fsp3 = 1 for C=C and 0 vs 1 for the two benzene spellings
+  expect_equal(.adme_one("C=C")$fraction_csp3_approx, 0)
+  expect_equal(.adme_one("CC(=O)OC")$fraction_csp3_approx, 2 / 3)
+  a <- .adme_one("c1ccccc1")
+  b <- .adme_one("C1=CC=CC=C1")
+  expect_equal(a$fraction_csp3_approx, 0)
+  expect_equal(b$fraction_csp3_approx, 0)
+  expect_equal(a$aromatic_proportion_approx, 1)
+  expect_equal(b$aromatic_proportion_approx, 1)
+  expect_true(is.finite(a$logs_esol) && is.finite(b$logs_esol))
+  expect_equal(a$logs_esol, b$logs_esol)
+})
+
+test_that("mw is the average molecular weight, not the monoisotopic mass", {
+  ## C12H6Br4O2: 497.71 monoisotopic vs 501.79 average -> fails the 500 gate on average MW
+  d <- .adme_one("Oc1c(Br)cc(Br)cc1-c1cc(Br)cc(Br)c1O")
+  expect_equal(d$mw, 501.79, tolerance = 1e-3)
+  expect_false(d$ro5_pass)
+})
+
+test_that("rotatable_bonds excludes amide C-N bonds as in Veber et al.", {
+  expect_equal(.adme_one("CCCCCCCCCCCC(=O)NC")$rotatable_bonds, 10L)  # 11 with CDK's default
+  expect_equal(.adme_one("CC(C)Cc1ccc(cc1)C(C)C(=O)O")$rotatable_bonds, 4L)
+})
+
+test_that("Oprea ranges are inclusive at their endpoints", {
+  ## ethyl benzoate: 1 ring, 2 acceptors, 3 rotatable bonds, 0 donors -> inside every published range
+  d <- .adme_one("CCOC(=O)c1ccccc1")
+  expect_equal(d$n_rings_approx, 1)
+  expect_true(d$oprea_pass)
 })
 
 test_that("adme_local() re-running on a subset of compounds does not wipe out the rest of the table", {

@@ -40,8 +40,8 @@ A \code{patchwork} object (bar chart on top of the dot-matrix,
 }
 \description{
 Which compounds pass which \emph{combination} of \code{\link[=adme_filter]{adme_filter()}}'s rules, and
-how many -- e.g. "42 compounds pass Ro5+Veber+Ghose but fail Oprea
-(not lead-like)". Needs \code{\link[=adme_filter]{adme_filter()}} to have been run first (any
+how many -- e.g. "42 compounds pass Ro5+Veber+Ghose but fail the Oprea
+ranges". Needs \code{\link[=adme_filter]{adme_filter()}} to have been run first (any
 \code{rules} selection with 2+ rules).
 }
 \examples{

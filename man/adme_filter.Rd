@@ -16,9 +16,9 @@ adme_filter(
 \item{proj}{A \code{\link[=PatliRProject-class]{PatliRProject}} object.}
 
 \item{rules}{Character vector, any of \code{"ro5"}, \code{"veber"}, \code{"ghose"},
-\code{"egan"}, \code{"oprea"}, \code{"route"}. \code{"oprea"} is the lead-likeness rule
-(Oprea 2000) -- narrower than the drug-likeness rules, meant for
-hit-to-lead triage rather than a final candidate; see \code{\link[=adme_local]{adme_local()}}
+\code{"egan"}, \code{"oprea"}, \code{"route"}. \code{"oprea"} is the set of property ranges
+(Oprea 2000: HBD 0-2, HBA 2-9, rotatable bonds 2-8, rings 1-4, inclusive)
+holding most of the drug-like compounds that paper surveyed; see \code{\link[=adme_local]{adme_local()}}
 for every rule's exact criteria and citation. \code{"route"} expands to
 every \verb{route_*} column \code{\link[=adme_local]{adme_local()}} computed (whichever routes you
 asked for there).}

@@ -12,8 +12,8 @@ NULL
 #'
 #' @description
 #' Which compounds pass which *combination* of [adme_filter()]'s rules, and
-#' how many -- e.g. "42 compounds pass Ro5+Veber+Ghose but fail Oprea
-#' (not lead-like)". Needs [adme_filter()] to have been run first (any
+#' how many -- e.g. "42 compounds pass Ro5+Veber+Ghose but fail the Oprea
+#' ranges". Needs [adme_filter()] to have been run first (any
 #' `rules` selection with 2+ rules).
 #'
 #' @inheritParams network_build

@@ -11,9 +11,9 @@ NULL
 #'
 #' @inheritParams compounds
 #' @param rules Character vector, any of `"ro5"`, `"veber"`, `"ghose"`,
-#'   `"egan"`, `"oprea"`, `"route"`. `"oprea"` is the lead-likeness rule
-#'   (Oprea 2000) -- narrower than the drug-likeness rules, meant for
-#'   hit-to-lead triage rather than a final candidate; see [adme_local()]
+#'   `"egan"`, `"oprea"`, `"route"`. `"oprea"` is the set of property ranges
+#'   (Oprea 2000: HBD 0-2, HBA 2-9, rotatable bonds 2-8, rings 1-4, inclusive)
+#'   holding most of the drug-like compounds that paper surveyed; see [adme_local()]
 #'   for every rule's exact criteria and citation. `"route"` expands to
 #'   every `route_*` column [adme_local()] computed (whichever routes you
 #'   asked for there).
@@ -90,8 +90,17 @@ adme_filter <- function(proj, rules = c("ro5", "veber", "ghose", "egan", "oprea"
   }
 
   fails_any <- unique(long$compound_id[!is.na(long$pass) & !long$pass])
+  unknown <- vapply(rule_cols, function(col) sum(is.na(adme[[col]])), integer(1))
+  if (any(unknown > 0)) {
+    ## a compound whose descriptors could not be computed is kept, not passed: say so
+    cli::cli_inform(c("!" = "Compounds with no result (descriptors missing) are kept, not evaluated: {paste0(names(unknown)[unknown > 0], ' = ', unknown[unknown > 0], collapse = ', ')}."))
+  }
   if (length(fails_any) == 0) {
-    cli::cli_inform("No compounds fail any of the selected rules; nothing to cut.")
+    if (all(unknown == nrow(adme))) {
+      cli::cli_inform("None of the selected rules could be evaluated (all results are NA); nothing to cut.")
+    } else {
+      cli::cli_inform("No compounds fail any of the selected rules; nothing to cut.")
+    }
     return(proj)
   }
 

@@ -33,7 +33,7 @@ The updated \code{proj}, with an \code{adme_local} entry in
 Computes molecular descriptors with \code{rcdk} for every compound in
 \code{\link[=compounds]{compounds()}} (or a subset) and derives: the Lipinski Rule of Five
 (Ro5), the Veber rule, the Ghose filter, the Egan filter, the Oprea
-lead-likeness rule, a BOILED-Egg-style estimate of passive GI
+property ranges, a BOILED-Egg-style estimate of passive GI
 absorption / BBB permeation, and one physicochemical compatibility flag
 per administration route.
 }
@@ -45,22 +45,34 @@ criterion:
 \item \strong{Lipinski Ro5} (\code{ro5_pass}) -- Lipinski et al. (2001), \emph{Adv.
 Drug Deliv. Rev.} 46, 3-26: MW <= 500, logP <= 5, HBD <= 5, HBA <= 10.
 \item \strong{Veber} (\code{veber_pass}) -- Veber et al. (2002), \emph{J. Med. Chem.}
-45, 2615-2623: TPSA <= 140, rotatable bonds <= 10.
+45, 2615-2623: TPSA <= 140, rotatable bonds <= 10, where (as in the
+paper) a rotatable bond is a single non-ring bond to a non-terminal
+heavy atom \strong{excluding amide C-N bonds}; \code{rotatable_bonds} is counted
+that way (CDK \code{RotatableBondsCountDescriptor}, \code{excludeAmides = TRUE}).
 \item \strong{Ghose} (\code{ghose_pass}) -- Ghose et al. (1999), \emph{J. Comb.
-Chem.} 1, 55-68: 160 <= MW <= 480, -0.4 <= logP <= 5.6, 20 <= heavy
-atoms <= 70, 40 <= molar refractivity (AMR) <= 130. All four
-criteria now checked (an earlier version of this function omitted
-the AMR term).
+Chem.} 1, 55-68: 160 <= MW <= 480, -0.4 <= logP <= 5.6, 20 <= atoms
+<= 70 (\code{n_atoms} counts \strong{all atoms including hydrogens}, as the
+original atom-count criterion does), 40 <= molar refractivity (AMR)
+<= 130. All four criteria checked.
 \item \strong{Egan} (\code{egan_pass}) -- Egan et al. (2000), \emph{J. Med. Chem.}
 43, 3867-3877 (the "egg" model that later BOILED-Egg extends):
 logP <= 5.88, TPSA <= 131.6.
-\item \strong{Oprea lead-likeness} (\code{oprea_pass}) -- Oprea (2000), \emph{J.
-Comput. Aided Mol. Des.} 14, 251-264: HBD < 2, 2 < HBA < 10,
-2 < rotatable bonds < 8, 1 < ring count < 4. This is the standard
-literature "lead-like properties" rule (narrower than drug-likeness,
-meant for hit-to-lead triage rather than a final candidate) -- see
+\item \strong{Oprea property ranges} (\code{oprea_pass}) -- Oprea (2000), \emph{J.
+Comput. Aided Mol. Des.} 14, 251-264: 0 <= HBD <= 2, 2 <= HBA <= 9,
+2 <= rotatable bonds <= 8, 1 <= ring count <= 4 (inclusive ranges;
+the paper reports them as the ranges holding ~70\% of the \emph{drug-like}
+compounds it surveyed, not as a stricter lead-likeness rule -- an
+earlier version used narrower, exclusive limits). See
 \code{adme_filter(rules = "oprea")}.
 }
+\strong{Descriptor conventions.} \code{mw} is the average molecular weight (natural
+isotopic abundance, \code{rcdk::get.natural.mass()}), not the monoisotopic mass.
+\code{logp} is CDK's XLogP and \code{hba}/\code{hbd} are CDK's donor/acceptor counts, so
+the rules above are adapted screens on CDK descriptors, not bit-for-bit
+reproductions of the papers' own logP/HBA definitions. \code{ro5_pass} requires
+all four Lipinski criteria (zero violations); the original paper also
+tolerates one violation. Structures are used as supplied (no salt
+stripping or neutralisation).
 \strong{Deliberately not implemented}: Hughes et al. (2008, \emph{Bioorg. Med.
 Chem. Lett.} 18, 4872-4875), Ritchie & Macdonald (2009, \emph{Drug Discov.
 Today} 14, 1011-1020) and Lovering et al. (2009, \emph{J. Med. Chem.} 52,
@@ -82,10 +94,12 @@ The one remaining approximation: the original model is defined on
 \strong{WLogP} (Wildman & Crippen's atom-contribution logP, as implemented in
 RDKit); \code{rcdk}/CDK has no identical implementation, so \code{wlogp_proxy} uses
 CDK's own ALogP (\code{rcdk::get.alogp()}, Ghose-Crippen-style, a different
-but methodologically related atom-contribution method) instead. This can
-shift a compound slightly relative to where SwissADME itself would place
-it -- treat \code{gi_absorption}/\code{bbb_permeant} as "very likely right", not
-"certified identical to SwissADME's own call".
+but methodologically related atom-contribution method) instead. The two
+logP values can differ enough to move a compound across an ellipse
+boundary, and this substitution has not been validated here against
+SwissADME's own calls -- treat \code{gi_absorption}/\code{bbb_permeant} as an
+approximate screen, most reliable for compounds well inside or well
+outside the ellipses.
 }
 
 \section{Route criteria and their references}{
@@ -108,16 +122,16 @@ screen, not a delivery-route decision.
 
 \section{Radar-chart descriptors (please also read)}{
 
-\code{fraction_csp3_approx} and \code{aromatic_proportion_approx} are computed with
-a lightweight regex heuristic over the SMILES string itself (lowercase
-aromatic atoms vs. uppercase \code{C}), \strong{not} true CDK hybridization/
-aromaticity perception -- \code{fraction_csp3_approx} therefore over-counts
-non-aromatic sp2 carbons (e.g. in C=C or C=O) as if they were sp3. It is
-good enough to place a compound roughly on \code{\link[=plot_admet_radar]{plot_admet_radar()}}'s
-INSATU axis, not for anything that needs a rigorous Fsp3. \code{logs_esol} is
-the published Delaney (2004) ESOL equation applied to \code{logp}, \code{mw},
-\code{rotatable_bonds}, and \code{aromatic_proportion_approx} -- so it inherits
-the same approximation for its aromatic-proportion term. \code{n_rings_approx}
+\code{fraction_csp3_approx} is CDK's \code{FractionalCSP3Descriptor} (sp3 carbons /
+all carbons, from perceived hybridization) and \code{aromatic_proportion_approx}
+is CDK's aromatic-atom count (after aromaticity perception) divided by the
+heavy-atom count, so neither depends on how the SMILES was written (the
+\verb{_approx} suffix is kept for column-name stability; an earlier version
+used a SMILES-string regex heuristic that mistook C=C and C=O carbons for
+sp3). \code{logs_esol} is
+the published Delaney (2004) ESOL equation applied to \code{logp} (CDK XLogP,
+not the predictor the original coefficients were fitted with), \code{mw},
+\code{rotatable_bonds}, and \code{aromatic_proportion_approx}. \code{n_rings_approx}
 counts SMILES ring-closure digit pairs (single digits and \verb{\%nn}
 two-digit forms, outside \verb{[...]} brackets so isotope/charge numbers
 are not miscounted) -- deterministic per the SMILES specification for

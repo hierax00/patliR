@@ -4,6 +4,23 @@
 
 - **`prep_binarize(min_replicates = )`**: an alternative presence rule based on replicate consistency. A compound is present in a condition when it is detected (abundance > 0) in at least `min_replicates` replicates (e.g. `2` of 3: absent if two or three replicates are zero, present if two or three have a value); the quartile threshold is not applied. The default (`NULL`) keeps the Q1 rule.
 
+## Bug fixes: `adme_local()` descriptors
+
+- **`mw`** is now the average molecular weight (`rcdk::get.natural.mass()`), not the
+  monoisotopic mass; compounds near a 480/500 gate (e.g. polybrominated ones) can change class.
+- **`fraction_csp3_approx` / `aromatic_proportion_approx`** are read from the perceived
+  molecular graph (CDK `FractionalCSP3Descriptor`, aromatic-atom count / heavy atoms) instead of a
+  SMILES-string regex that counted C=C and C=O carbons as sp3 and depended on the SMILES spelling.
+  Radar INSATU and the ESOL solubility estimate change accordingly.
+- **`rotatable_bonds`** excludes amide C-N bonds, as in Veber et al. (2002); it feeds `veber_pass`,
+  `oprea_pass` and ESOL.
+- **`oprea_pass`** uses the paper's inclusive ranges (HBD 0-2, HBA 2-9, rotatable bonds 2-8, rings 1-4) and is
+  documented as a property-range screen, not lead-likeness.
+- Descriptor failures are logged per descriptor, non-finite values become `NA`, `adme_filter()` reports
+  compounds it could not evaluate, and `plot_boiled_egg()` labels them "Not computed".
+- Re-run `adme_local()` for the whole project after upgrading: rows computed by an earlier version keep the
+  old conventions until they are recomputed.
+
 ## Bug fixes: `prep_*`, `plot_*`, `report_generate()`, `tox_report()`
 
 - **`prep_binarize()`** now computes the Q1 (`q`) presence threshold over

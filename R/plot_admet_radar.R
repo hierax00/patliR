@@ -17,8 +17,8 @@ NULL
 .radar_axes <- data.frame(
   axis = c("LIPO", "SIZE", "POLAR", "INSOLU", "INSATU", "FLEX"),
   label = c(
-    "LIPO\n(XLOGP3)", "SIZE\n(MW)", "POLAR\n(TPSA)",
-    "INSOLU\n(Log S)", "INSATU\n(Fsp3, approx.)", "FLEX\n(rotatable bonds)"
+    "LIPO\n(XLogP, CDK)", "SIZE\n(MW)", "POLAR\n(TPSA)",
+    "INSOLU\n(Log S, ESOL)", "INSATU\n(Fsp3)", "FLEX\n(rotatable bonds)"
   ),
   property = c("logp", "mw", "tpsa", "logs_esol", "fraction_csp3_approx", "rotatable_bonds"),
   axis_min = c(-2, 0, 0, -10, 0, 0),
@@ -59,10 +59,10 @@ NULL
 #' the package source for the exact reference); the outer axis scale is
 #' our own display choice, not a literature value. INSOLU (`logs_esol`) and
 #' INSATU (`fraction_csp3_approx`) both inherit the approximations
-#' documented in [adme_local()] -- in particular, INSATU is a rough
-#' aliphatic-vs-aromatic-carbon proxy from the SMILES string, not a true
-#' Fsp3 from hybridization perception. Treat this plot as a good first
-#' read, not a certified reproduction of SwissADME's own figure.
+#' documented in [adme_local()] -- INSOLU uses CDK's XLogP inside the ESOL
+#' equation, and LIPO is CDK's XLogP rather than the XLOGP3 SwissADME's
+#' own radar uses. Treat this plot as a first read, not a reproduction of
+#' SwissADME's own figure.
 #'
 #' @inheritParams compounds
 #' @param compound_ids Character vector of `compounds(proj)$id`, or `NULL`

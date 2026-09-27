@@ -7,7 +7,9 @@
 adme_local(
   proj,
   compound_ids = NULL,
-  routes = c("oral", "topical", "ophthalmic", "injectable")
+  routes = c("oral", "topical", "ophthalmic", "injectable"),
+  wlogp_source = c("cdk", "rdkit"),
+  rdkit_qc = FALSE
 )
 }
 \arguments{
@@ -18,12 +20,46 @@ adme_local(
 
 \item{routes}{Character vector, any of \code{"oral"}, \code{"topical"},
 \code{"ophthalmic"}, \code{"injectable"}.}
+
+\item{wlogp_source}{\code{"cdk"} (default, no Python ever invoked): \code{wlogp_proxy}
+is CDK's ALogP, an atom-contribution method related to but not identical
+to Wildman & Crippen's WLogP (see the BOILED-Egg section). \code{"rdkit"}:
+compute the actual Wildman & Crippen (1999) WLogP with \code{RDKit::Crippen.MolLogP()},
+via an optional \code{reticulate} + Python \code{rdkit} environment -- exactly the
+quantity BOILED-Egg was built on, no proxy. Needs \code{reticulate} (Suggests)
+and a \code{rdkit} Python package \code{reticulate} can resolve (installed once,
+cached by \code{reticulate}/\code{uv} after the first call -- the \emph{first} call with
+\code{wlogp_source = "rdkit"} may download it, which needs internet). If it
+cannot be resolved, \code{adme_local()} warns and falls back to \code{"cdk"}
+automatically -- this argument never turns a working call into an error.}
+
+\item{rdkit_qc}{Logical, default \code{FALSE}. Adds four \strong{extra, informational}
+columns from the same optional RDKit -- never replacing or filtering the
+CDK-based ones, purely a second opinion to look at side by side:
+\code{hba_lipinski_rdkit}/\code{hbd_lipinski_rdkit} (RDKit's
+\code{CalcNumLipinskiHBA()}/\code{CalcNumLipinskiHBD()}, the literal N+O count
+Lipinski et al. 2001 define -- CDK's \code{hba}/\code{hbd} use CDK's own donor/
+acceptor rules instead, which can disagree at the margins, e.g. an N-O
+bond), \code{tpsa_rdkit} (RDKit's \code{TPSA()}, the same Ertl 2000 fragment
+method as CDK's \code{tpsa} -- implementation cross-check) and
+\code{fraction_csp3_rdkit}/\code{aromatic_proportion_rdkit} (RDKit's own
+hybridization/aromaticity perception -- CDK's \code{fraction_csp3_approx}/
+\code{aromatic_proportion_approx} already come from CDK's graph perception,
+not a proxy, but the two toolkits' \emph{aromaticity models} (which ring
+systems count as aromatic) can differ on edge cases, e.g. some fused
+heterocycles -- a large disagreement is worth a manual look, not
+evidence either one is wrong). Same graceful degradation as
+\code{wlogp_source = "rdkit"}: unavailable RDKit warns once and every
+\verb{_rdkit} column is \code{NA}, nothing else changes.}
 }
 \value{
 The updated \code{proj}, with an \code{adme_local} entry in
 \code{\link[=patliRResults]{patliRResults()}} (columns \code{compound_id}, \code{mw}, \code{logp}, \code{hbd}, \code{hba},
-\code{tpsa}, \code{rotatable_bonds}, \code{n_atoms}, \code{amr}, \code{wlogp_proxy},
-\code{fraction_csp3_approx}, \code{aromatic_proportion_approx},
+\code{tpsa}, \code{rotatable_bonds}, \code{n_atoms}, \code{amr}, \code{wlogp_proxy}, \code{wlogp_source}
+(\code{"cdk_alogp_proxy"} or \code{"rdkit_wlogp"}, per compound),
+\code{fraction_csp3_approx}, \code{aromatic_proportion_approx} (plus, when
+\code{rdkit_qc = TRUE}, \code{hba_lipinski_rdkit}, \code{hbd_lipinski_rdkit},
+\code{tpsa_rdkit}, \code{fraction_csp3_rdkit}, \code{aromatic_proportion_rdkit}),
 \code{n_rings_approx}, \code{logs_esol}, \code{ro5_pass}, \code{veber_pass}, \code{ghose_pass},
 \code{egan_pass}, \code{oprea_pass}, \code{gi_absorption}, \code{bbb_permeant},
 \code{route_oral}, \code{route_topical}, \code{route_ophthalmic},

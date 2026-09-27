@@ -39,6 +39,7 @@ Imports:
 Suggests:
     testthat (>= 3.0.0),
     withr,
+    reticulate,
     parallel,
     knitr,
     rmarkdown,
@@ -101,6 +102,7 @@ Collate:
     'network_proximity.R'
     'network_bowtie.R'
     'network_centrality.R'
+    'network_condition_compare.R'
     'network_layers.R'
     'network_degeneracy.R'
     'network_enrich.R'
@@ -121,16 +123,19 @@ Collate:
     'plot_bowtie.R'
     'plot_centrality.R'
     'plot_chemical_space.R'
+    'plot_condition_compare.R'
+    'plot_condition_disease_flow.R'
     'plot_network_layers.R'
     'plot_disease_map.R'
     'targets_disease.R'
     'plot_disease_network.R'
     'plot_enrichment.R'
     'plot_gochord.R'
+    'plot_ppi_network.R'
+    'plot_gpcr_flow.R'
     'plot_heatmap.R'
     'plot_network_degeneracy.R'
     'plot_pathway_network.R'
-    'plot_ppi_network.R'
     'plot_proximity.R'
     'rank_candidates.R'
     'plot_rank.R'

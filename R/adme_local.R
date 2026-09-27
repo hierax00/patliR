@@ -93,6 +93,35 @@ NULL
 #'   (default) for every compound currently in `proj`.
 #' @param routes Character vector, any of `"oral"`, `"topical"`,
 #'   `"ophthalmic"`, `"injectable"`.
+#' @param wlogp_source `"cdk"` (default, no Python ever invoked): `wlogp_proxy`
+#'   is CDK's ALogP, an atom-contribution method related to but not identical
+#'   to Wildman & Crippen's WLogP (see the BOILED-Egg section). `"rdkit"`:
+#'   compute the actual Wildman & Crippen (1999) WLogP with `RDKit::Crippen.MolLogP()`,
+#'   via an optional `reticulate` + Python `rdkit` environment -- exactly the
+#'   quantity BOILED-Egg was built on, no proxy. Needs `reticulate` (Suggests)
+#'   and a `rdkit` Python package `reticulate` can resolve (installed once,
+#'   cached by `reticulate`/`uv` after the first call -- the *first* call with
+#'   `wlogp_source = "rdkit"` may download it, which needs internet). If it
+#'   cannot be resolved, `adme_local()` warns and falls back to `"cdk"`
+#'   automatically -- this argument never turns a working call into an error.
+#' @param rdkit_qc Logical, default `FALSE`. Adds four **extra, informational**
+#'   columns from the same optional RDKit -- never replacing or filtering the
+#'   CDK-based ones, purely a second opinion to look at side by side:
+#'   `hba_lipinski_rdkit`/`hbd_lipinski_rdkit` (RDKit's
+#'   `CalcNumLipinskiHBA()`/`CalcNumLipinskiHBD()`, the literal N+O count
+#'   Lipinski et al. 2001 define -- CDK's `hba`/`hbd` use CDK's own donor/
+#'   acceptor rules instead, which can disagree at the margins, e.g. an N-O
+#'   bond), `tpsa_rdkit` (RDKit's `TPSA()`, the same Ertl 2000 fragment
+#'   method as CDK's `tpsa` -- implementation cross-check) and
+#'   `fraction_csp3_rdkit`/`aromatic_proportion_rdkit` (RDKit's own
+#'   hybridization/aromaticity perception -- CDK's `fraction_csp3_approx`/
+#'   `aromatic_proportion_approx` already come from CDK's graph perception,
+#'   not a proxy, but the two toolkits' *aromaticity models* (which ring
+#'   systems count as aromatic) can differ on edge cases, e.g. some fused
+#'   heterocycles -- a large disagreement is worth a manual look, not
+#'   evidence either one is wrong). Same graceful degradation as
+#'   `wlogp_source = "rdkit"`: unavailable RDKit warns once and every
+#'   `_rdkit` column is `NA`, nothing else changes.
 #'
 #' @section Radar-chart descriptors (please also read):
 #' `fraction_csp3_approx` is CDK's `FractionalCSP3Descriptor` (sp3 carbons /
@@ -114,8 +143,11 @@ NULL
 #'
 #' @return The updated `proj`, with an `adme_local` entry in
 #'   [patliRResults()] (columns `compound_id`, `mw`, `logp`, `hbd`, `hba`,
-#'   `tpsa`, `rotatable_bonds`, `n_atoms`, `amr`, `wlogp_proxy`,
-#'   `fraction_csp3_approx`, `aromatic_proportion_approx`,
+#'   `tpsa`, `rotatable_bonds`, `n_atoms`, `amr`, `wlogp_proxy`, `wlogp_source`
+#'   (`"cdk_alogp_proxy"` or `"rdkit_wlogp"`, per compound),
+#'   `fraction_csp3_approx`, `aromatic_proportion_approx` (plus, when
+#'   `rdkit_qc = TRUE`, `hba_lipinski_rdkit`, `hbd_lipinski_rdkit`,
+#'   `tpsa_rdkit`, `fraction_csp3_rdkit`, `aromatic_proportion_rdkit`),
 #'   `n_rings_approx`, `logs_esol`, `ro5_pass`, `veber_pass`, `ghose_pass`,
 #'   `egan_pass`, `oprea_pass`, `gi_absorption`, `bbb_permeant`,
 #'   `route_oral`, `route_topical`, `route_ophthalmic`,
@@ -134,9 +166,12 @@ NULL
 #'
 #' @export
 adme_local <- function(proj, compound_ids = NULL,
-                        routes = c("oral", "topical", "ophthalmic", "injectable")) {
+                        routes = c("oral", "topical", "ophthalmic", "injectable"),
+                        wlogp_source = c("cdk", "rdkit"), rdkit_qc = FALSE) {
   stopifnot(is(proj, "PatliRProject"))
   routes <- match.arg(routes, several.ok = TRUE)
+  wlogp_source <- match.arg(wlogp_source)
+  .pathway_check_flag(rdkit_qc, "rdkit_qc")
 
   cmp <- compounds(proj)
   if (!is.null(compound_ids)) cmp <- cmp[cmp$id %in% compound_ids, , drop = FALSE]
@@ -199,6 +234,35 @@ adme_local <- function(proj, compound_ids = NULL,
     n_rings_approx >= 1 & n_rings_approx <= 4)
 
   out$wlogp_proxy <- desc$wlogp_proxy
+  out$wlogp_source <- "cdk_alogp_proxy"
+  rk <- NULL
+  if (wlogp_source == "rdkit" || rdkit_qc) {
+    rk <- .rdkit_descriptors(cmp$smiles)
+    if (is.null(rk)) {
+      cli::cli_warn(c(
+        "!" = "{if (wlogp_source == 'rdkit') '{.arg wlogp_source} = {.val rdkit}' else '{.arg rdkit_qc} = TRUE'} needed a Python {.pkg rdkit} that could not be resolved.",
+        "i" = "wlogp_source: falling back to the CDK ALogP proxy. rdkit_qc: every {.code _rdkit} column is {.val NA}."
+      ))
+    }
+  }
+  if (wlogp_source == "rdkit") {
+    if (!is.null(rk)) {
+      use <- !is.na(rk$wlogp)
+      out$wlogp_proxy[use] <- rk$wlogp[use]
+      out$wlogp_source[use] <- "rdkit_wlogp"
+      if (any(!use)) {
+        proj <- .log_append(proj, step = "adme_local", id = cmp$id[!use & !failed],
+                            message = "RDKit could not parse this structure for WLogP; kept the CDK ALogP proxy")
+      }
+    }
+  }
+  if (rdkit_qc) {
+    out$hba_lipinski_rdkit <- if (!is.null(rk)) rk$hba_lipinski else NA_integer_
+    out$hbd_lipinski_rdkit <- if (!is.null(rk)) rk$hbd_lipinski else NA_integer_
+    out$tpsa_rdkit <- if (!is.null(rk)) rk$tpsa else NA_real_
+    out$fraction_csp3_rdkit <- if (!is.null(rk)) rk$fraction_csp3 else NA_real_
+    out$aromatic_proportion_rdkit <- if (!is.null(rk)) rk$aromatic_proportion else NA_real_
+  }
   egg <- .boiled_egg(out$tpsa, out$wlogp_proxy)
   out$gi_absorption <- egg$gi_absorption
   out$bbb_permeant  <- egg$bbb_permeant
@@ -328,6 +392,78 @@ adme_local <- function(proj, compound_ids = NULL,
   remainder <- gsub("%\\d{2}", "", no_brackets)
   single_digit <- regmatches(remainder, gregexpr("\\d", remainder))[[1]]
   floor((length(two_digit) + length(single_digit)) / 2)
+}
+
+#' RDKit descriptors, via an optional Python `rdkit` (batched, one Python call)
+#'
+#' @description
+#' Everything [adme_local()] can optionally pull from RDKit, computed in a
+#' single Python call (not one per molecule -- reticulate's R/Python boundary
+#' has real per-call overhead): `wlogp` (`Crippen.MolLogP()`, a direct
+#' implementation of Wildman & Crippen's (1999) atom-contribution logP --
+#' the quantity BOILED-Egg (Daina & Zoete 2016) is actually defined on),
+#' `hba_lipinski`/`hbd_lipinski` (`rdMolDescriptors.CalcNumLipinskiHBA()`/
+#' `CalcNumLipinskiHBD()`, the literal N+O count Lipinski et al. 2001
+#' define), `tpsa` (`Descriptors.TPSA()`, Ertl et al. 2000, same method as
+#' CDK's `tpsa` -- a cross-check, not a different definition), and
+#' `fraction_csp3`/`aromatic_proportion` (RDKit's own hybridization/
+#' aromaticity perception, a cross-check against CDK's
+#' `fraction_csp3_approx`/`aromatic_proportion_approx`). Every failure mode
+#' (no `reticulate`, no Python, no `rdkit` package, offline on the first
+#' call that would need to fetch it, one bad SMILES) is caught: a single
+#' unusable molecule is `NA` in every column; RDKit unavailable at all
+#' returns `NULL` for the whole call -- callers fall back / warn, never error.
+#'
+#' @param smiles Character vector of SMILES.
+#' @return A `data.frame(wlogp, hba_lipinski, hbd_lipinski, tpsa,
+#'   fraction_csp3, aromatic_proportion)`, one row per `smiles` (`NA` for
+#'   any molecule RDKit could not parse), or `NULL` if RDKit could not be
+#'   made available at all.
+#' @keywords internal
+.rdkit_descriptors <- function(smiles) {
+  if (!requireNamespace("reticulate", quietly = TRUE)) return(NULL)
+  empty <- data.frame(wlogp = NA_real_, hba_lipinski = NA_integer_, hbd_lipinski = NA_integer_,
+                      tpsa = NA_real_, fraction_csp3 = NA_real_, aromatic_proportion = NA_real_)
+  ok <- tryCatch({
+    reticulate::py_require("rdkit")
+    isTRUE(reticulate::py_module_available("rdkit"))
+  }, error = function(e) FALSE)
+  if (!isTRUE(ok)) return(NULL)
+  py_fun <- tryCatch({
+    reticulate::py_run_string(paste(
+      "def patliR_rdkit_batch(smiles_list):",
+      "    from rdkit import Chem",
+      "    from rdkit.Chem import Crippen, Descriptors, rdMolDescriptors",
+      "    out = []",
+      "    for smi in smiles_list:",
+      "        m = None if smi is None else Chem.MolFromSmiles(smi)",
+      "        if m is None:",
+      "            out.append(dict(wlogp=None, hba_lipinski=None, hbd_lipinski=None,",
+      "                            tpsa=None, fraction_csp3=None, aromatic_proportion=None))",
+      "            continue",
+      "        n_heavy = m.GetNumHeavyAtoms()",
+      "        n_arom = sum(1 for a in m.GetAtoms() if a.GetIsAromatic())",
+      "        out.append(dict(",
+      "            wlogp=Crippen.MolLogP(m),",
+      "            hba_lipinski=rdMolDescriptors.CalcNumLipinskiHBA(m),",
+      "            hbd_lipinski=rdMolDescriptors.CalcNumLipinskiHBD(m),",
+      "            tpsa=Descriptors.TPSA(m),",
+      "            fraction_csp3=Descriptors.FractionCSP3(m),",
+      "            aromatic_proportion=(n_arom / n_heavy if n_heavy else None),",
+      "        ))",
+      "    return out",
+      sep = "\n"
+    ))$patliR_rdkit_batch
+  }, error = function(e) NULL)
+  if (is.null(py_fun)) return(NULL)
+  ## one Python call for every molecule, not one call per molecule
+  smi_in <- ifelse(is.na(smiles) | !nzchar(smiles), NA_character_, smiles)
+  res <- tryCatch(py_fun(as.list(smi_in)), error = function(e) NULL)
+  if (is.null(res)) return(NULL)
+  rows <- lapply(res, function(r) as.data.frame(lapply(r, function(x) if (is.null(x)) NA else x)))
+  out <- do.call(rbind, rows)
+  rownames(out) <- NULL
+  out
 }
 
 #' Real BOILED-Egg GI absorption / BBB permeation call (point-in-polygon)

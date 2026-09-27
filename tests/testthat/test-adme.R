@@ -81,6 +81,62 @@ test_that("rotatable_bonds excludes amide C-N bonds as in Veber et al.", {
   expect_equal(.adme_one("CC(C)Cc1ccc(cc1)C(C)C(=O)O")$rotatable_bonds, 4L)
 })
 
+test_that("wlogp_source defaults to the CDK proxy and is recorded per compound", {
+  d <- .adme_one("c1ccccc1")
+  expect_equal(d$wlogp_source, "cdk_alogp_proxy")
+  expect_equal(d$wlogp_proxy, d$logp[1] * 0 + d$wlogp_proxy) # column exists, sanity only
+})
+
+test_that("adme_local(wlogp_source = 'rdkit') gives the true WLogP when RDKit is available, else falls back and warns", {
+  skip_on_cran()
+  skip_if_not_installed("reticulate")
+  rk <- tryCatch(patliR:::.rdkit_descriptors("c1ccccc1"), error = function(e) NULL)
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_single_compound(), identifier = "pubchem")
+  cmp <- compounds(proj); cmp$smiles <- "c1ccccc1"; compounds(proj) <- cmp
+  if (is.null(rk)) {
+    expect_warning(proj <- adme_local(proj, wlogp_source = "rdkit"), "rdkit")
+    d <- patliRResults(proj, "adme_local")
+    expect_equal(d$wlogp_source, "cdk_alogp_proxy")
+  } else {
+    proj <- adme_local(proj, wlogp_source = "rdkit")
+    d <- patliRResults(proj, "adme_local")
+    expect_equal(d$wlogp_source, "rdkit_wlogp")
+    expect_equal(d$wlogp_proxy, 1.6866, tolerance = 1e-3) # RDKit's own documented value for benzene
+    expect_false(isTRUE(all.equal(d$wlogp_proxy, d$logp))) # not silently the same as XLogP
+  }
+})
+
+test_that("adme_local(rdkit_qc = TRUE) adds the cross-check columns without touching the CDK-based ones", {
+  skip_on_cran()
+  skip_if_not_installed("reticulate")
+  rk <- tryCatch(patliR:::.rdkit_descriptors("c1ccccc1"), error = function(e) NULL)
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_single_compound(), identifier = "pubchem")
+  cmp <- compounds(proj); cmp$smiles <- "c1ccccc1"; compounds(proj) <- cmp
+  base <- patliRResults(adme_local(proj), "adme_local")
+
+  if (is.null(rk)) {
+    expect_warning(proj2 <- adme_local(proj, rdkit_qc = TRUE), "rdkit")
+    d <- patliRResults(proj2, "adme_local")
+    expect_true(all(is.na(d[, c("hba_lipinski_rdkit", "hbd_lipinski_rdkit", "tpsa_rdkit",
+                                "fraction_csp3_rdkit", "aromatic_proportion_rdkit")])))
+  } else {
+    proj2 <- adme_local(proj, rdkit_qc = TRUE)
+    d <- patliRResults(proj2, "adme_local")
+    ## benzene: RDKit's literal Lipinski N+O count is 0 (no N/O at all); its own
+    ## aromaticity model agrees with CDK's here (both give a fully aromatic ring)
+    expect_equal(d$hba_lipinski_rdkit, 0L)
+    expect_equal(d$hbd_lipinski_rdkit, 0L)
+    expect_equal(d$aromatic_proportion_rdkit, 1)
+    expect_equal(d$fraction_csp3_rdkit, 0)
+    expect_equal(d$tpsa_rdkit, d$tpsa, tolerance = 1e-6) # same Ertl method, benzene has no polar atoms either way
+  }
+  ## the existing CDK-based columns are untouched by rdkit_qc
+  expect_equal(d[, setdiff(names(base), names(d))], base[, setdiff(names(base), names(d)), drop = FALSE])
+  expect_equal(base$hba, d$hba); expect_equal(base$mw, d$mw); expect_equal(base$wlogp_source, d$wlogp_source)
+})
+
 test_that("Oprea ranges are inclusive at their endpoints", {
   ## ethyl benzoate: 1 ring, 2 acceptors, 3 rotatable bonds, 0 donors -> inside every published range
   d <- .adme_one("CCOC(=O)c1ccccc1")

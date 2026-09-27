@@ -131,7 +131,22 @@ within the full cascade (unfilled boxes = genes it does not hit).
 \examples{
 \dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
-# ... network_build(), network_enrich(db = "kegg"), then the full topology:
+compound_list <- read.csv(
+  system.file("extdata", "input_compound_list.csv", package = "patliR")
+)
+proj <- prep_compounds(proj, compound_list, identifier = "pubchem")
+abundance <- read.csv(
+  system.file("extdata", "input_abundance_matrix.csv", package = "patliR"),
+  check.names = FALSE
+)
+proj <- prep_binarize(proj, abundance)
+proj <- targets_import_batch(
+  proj,
+  system.file("extdata", "import_targets", package = "patliR"),
+  platform = "superpred"
+)
+proj <- network_build(proj)
+# the full topology of two pathways (needs internet):
 proj <- network_kegg_topology(proj, condition = "FLO-ET",
                               pathway_ids = c("hsa04010", "hsa04020"),
                               restrict_to_network = FALSE) # needs internet

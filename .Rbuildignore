@@ -13,3 +13,4 @@
 ^METHODS\.md$
 ^AUDIT\.md$
 ^codemeta\.json$
+^tests/testthat/Rplots\.pdf$

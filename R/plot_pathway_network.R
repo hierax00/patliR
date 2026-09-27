@@ -129,8 +129,22 @@ NULL
 #' @examples
 #' \dontrun{
 #' proj <- patliR_project(tempfile("patliR_demo_"))
-#' # ... build the project, run network_build() and
-#' # network_enrich(condition = "FLO-ET", db = "kegg") ...
+#' compound_list <- read.csv(
+#'   system.file("extdata", "input_compound_list.csv", package = "patliR")
+#' )
+#' proj <- prep_compounds(proj, compound_list, identifier = "pubchem")
+#' abundance <- read.csv(
+#'   system.file("extdata", "input_abundance_matrix.csv", package = "patliR"),
+#'   check.names = FALSE
+#' )
+#' proj <- prep_binarize(proj, abundance)
+#' proj <- targets_import_batch(
+#'   proj,
+#'   system.file("extdata", "import_targets", package = "patliR"),
+#'   platform = "superpred"
+#' )
+#' proj <- network_build(proj)
+#' proj <- network_enrich(proj, condition = "FLO-ET", db = "kegg") # needs internet
 #' plot_pathway_network(proj, condition = "FLO-ET", db = "kegg", save = FALSE)
 #' # rings on the pathways enriched in hypertension genes
 #' proj <- disease_genes_fetch(proj, "hypertension")
@@ -984,7 +998,22 @@ plot_pathway_network <- function(proj, condition = NULL, db = c("kegg", "reactom
 #' @examples
 #' \dontrun{
 #' proj <- patliR_project(tempfile("patliR_demo_"))
-#' # ... network_build(), network_enrich(db = "kegg"), then the full topology:
+#' compound_list <- read.csv(
+#'   system.file("extdata", "input_compound_list.csv", package = "patliR")
+#' )
+#' proj <- prep_compounds(proj, compound_list, identifier = "pubchem")
+#' abundance <- read.csv(
+#'   system.file("extdata", "input_abundance_matrix.csv", package = "patliR"),
+#'   check.names = FALSE
+#' )
+#' proj <- prep_binarize(proj, abundance)
+#' proj <- targets_import_batch(
+#'   proj,
+#'   system.file("extdata", "import_targets", package = "patliR"),
+#'   platform = "superpred"
+#' )
+#' proj <- network_build(proj)
+#' # the full topology of two pathways (needs internet):
 #' proj <- network_kegg_topology(proj, condition = "FLO-ET",
 #'                               pathway_ids = c("hsa04010", "hsa04020"),
 #'                               restrict_to_network = FALSE) # needs internet
@@ -1350,7 +1379,9 @@ plot_kegg_topology <- function(proj, condition = NULL, pathway_id = NULL, top_n_
 .kegg_topology_box_size <- function(label, size) {
   fs <- size * ggplot2::.pt / 72
   pad <- 0.25 * fs * 1.2
-  list(hw = nchar(label) * 0.56 * fs / 2 + pad, hh = fs * 0.62 + pad)
+  ## 0.64 em per character: gene symbols are mostly capitals and the hit boxes are bold
+  ## (0.56 under-estimated the width of e.g. "CACNA1B/A1C/A1H/B1 +22" and clipped it)
+  list(hw = nchar(label) * 0.64 * fs / 2 + pad, hh = fs * 0.62 + pad)
 }
 
 #' Boxes, box-level edges and abstract layout of one pathway panel
@@ -1980,6 +2011,22 @@ plot_kegg_topology <- function(proj, condition = NULL, pathway_id = NULL, top_n_
 #'
 #' @examples
 #' \dontrun{
+#' proj <- patliR_project(tempfile("patliR_demo_"))
+#' compound_list <- read.csv(
+#'   system.file("extdata", "input_compound_list.csv", package = "patliR")
+#' )
+#' proj <- prep_compounds(proj, compound_list, identifier = "pubchem")
+#' abundance <- read.csv(
+#'   system.file("extdata", "input_abundance_matrix.csv", package = "patliR"),
+#'   check.names = FALSE
+#' )
+#' proj <- prep_binarize(proj, abundance)
+#' proj <- targets_import_batch(
+#'   proj,
+#'   system.file("extdata", "import_targets", package = "patliR"),
+#'   platform = "superpred"
+#' )
+#' proj <- network_build(proj)
 #' proj <- network_kegg_topology(proj, condition = "FLO-ET", restrict_to_network = FALSE)
 #' proj <- disease_genes_fetch(proj, "hypertension")
 #' r <- kegg_routes(proj, condition = "FLO-ET", disease = "MONDO_0005044")

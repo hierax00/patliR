@@ -115,8 +115,25 @@ hit it. Requires \code{network_centrality}.}
 \examples{
 \dontrun{
 proj <- patliR_project(tempfile("patliR_demo_"))
-# ... build the project, run network_build/network_centrality/adme_local/
-# adme_filter/rank_candidates() ...
+compound_list <- read.csv(
+  system.file("extdata", "input_compound_list.csv", package = "patliR")
+)
+proj <- prep_compounds(proj, compound_list, identifier = "pubchem")
+abundance <- read.csv(
+  system.file("extdata", "input_abundance_matrix.csv", package = "patliR"),
+  check.names = FALSE
+)
+proj <- prep_binarize(proj, abundance)
+proj <- targets_import_batch(
+  proj,
+  system.file("extdata", "import_targets", package = "patliR"),
+  platform = "superpred"
+)
+proj <- network_build(proj)
+proj <- network_centrality(proj)
+proj <- adme_local(proj)
+proj <- adme_filter(proj)
+proj <- rank_candidates(proj, condition = "FLO-ET")
 plot_rank(proj, condition = "FLO-ET", view = "pareto", save = FALSE)
 plot_rank(proj, condition = "FLO-ET", view = "heatmap", save = FALSE)
 }

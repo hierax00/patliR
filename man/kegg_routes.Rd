@@ -124,6 +124,22 @@ destinations need no route; they are returned in
 
 \examples{
 \dontrun{
+proj <- patliR_project(tempfile("patliR_demo_"))
+compound_list <- read.csv(
+  system.file("extdata", "input_compound_list.csv", package = "patliR")
+)
+proj <- prep_compounds(proj, compound_list, identifier = "pubchem")
+abundance <- read.csv(
+  system.file("extdata", "input_abundance_matrix.csv", package = "patliR"),
+  check.names = FALSE
+)
+proj <- prep_binarize(proj, abundance)
+proj <- targets_import_batch(
+  proj,
+  system.file("extdata", "import_targets", package = "patliR"),
+  platform = "superpred"
+)
+proj <- network_build(proj)
 proj <- network_kegg_topology(proj, condition = "FLO-ET", restrict_to_network = FALSE)
 proj <- disease_genes_fetch(proj, "hypertension")
 r <- kegg_routes(proj, condition = "FLO-ET", disease = "MONDO_0005044")

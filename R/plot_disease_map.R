@@ -292,7 +292,7 @@ disease_map_classes <- function() {
     `Immune & inflammatory` = c(
       "(?<!non-)autoimmun", "autoinflamm", "inflamm", "immunodeficien", "(?<![a-z-])immune", "lupus",
       "rheumatoid", "psoriatic arthritis", "juvenile idiopathic arthritis", "spondylitis", "vasculitis",
-      "arteritis", "polyangiitis", "sj(o|ö)gren", "sarcoidosis", "graft versus host", "crohn", "colitis",
+      "arteritis", "polyangiitis", "sj.?gren", "sarcoidosis", "graft versus host", "crohn", "colitis",
       "celiac", "allerg", "atopy", "hypersensitivity", "anaphyla", "agammaglobulin", "hyper-ige",
       "behcet", "hemophagocytic", "lymphoproliferative", "whim syndrome", "mhc class", "myasthenia gravis",
       "eosinophil", "lymphaden", "fever"

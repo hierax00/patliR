@@ -37,6 +37,7 @@ Imports:
     igraph (>= 2.0.0)
 Suggests:
     testthat (>= 3.0.0),
+    withr,
     parallel,
     knitr,
     rmarkdown,

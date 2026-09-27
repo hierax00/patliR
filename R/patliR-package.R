@@ -32,3 +32,7 @@
 #' @importFrom rlang .data
 ## usethis namespace: end
 NULL
+
+## columns referenced by bare name inside with(out, ...) in adme_local()
+utils::globalVariables(c("logp", "mw", "rotatable_bonds", "aromatic_proportion_approx", "hbd", "hba",
+                         "tpsa", "n_atoms", "amr", "n_rings_approx"))

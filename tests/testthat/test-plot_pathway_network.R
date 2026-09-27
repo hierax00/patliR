@@ -296,6 +296,57 @@ test_that("plot_kegg_topology() validates arguments and explains a missing pathw
   expect_error(plot_kegg_topology(.test_project(), save = FALSE), "network_kegg_topology")
 })
 
+test_that(".kegg_topology_label_mask() is bounded, target-first and deterministic", {
+  nodes <- data.frame(box = letters[1:5], is_target = c(TRUE, FALSE, FALSE, FALSE, FALSE),
+                      n_compounds = c(2L, 0L, 0L, 0L, 0L), max_weight = c(0.9, NA, NA, NA, NA),
+                      stringsAsFactors = FALSE)
+  e <- data.frame(from_box = c("a", "b", "d"), to_box = c("b", "c", "a"), stringsAsFactors = FALSE)
+  mask <- patliR:::.kegg_topology_label_mask
+  ## the target and the boxes linked to it (b: its target, d: linked into it), not the far box c or e
+  expect_equal(which(mask(nodes, e, "target_neighbors", NULL)), c(1L, 2L, 4L))
+  expect_equal(which(mask(nodes, e, "target_neighbors", 1L)), 1L)
+  expect_false(any(mask(nodes, e, "all", 0L)))
+  expect_true(all(mask(nodes, e, "all", NULL)))
+  perm <- c(4, 2, 5, 1, 3)
+  np <- nodes[perm, ]
+  expect_equal(sort(np$box[mask(np, e, "target_neighbors", NULL)]),
+               sort(nodes$box[mask(nodes, e, "target_neighbors", NULL)]))
+  nodes$is_target[] <- FALSE
+  expect_false(any(mask(nodes, e, "target_neighbors", NULL)))
+})
+
+test_that("plot_kegg_topology() caps the labels but keeps every node, relation and name", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .pw_topology_project()
+  p_cap <- plot_kegg_topology(proj, save = FALSE, max_labels = 1L)
+  p_all <- plot_kegg_topology(proj, save = FALSE, label_scope = "all", max_labels = NULL)
+  n <- attr(p_cap, "nodes")
+  expect_true(all(tapply(n$show_label, n$pathway_id, sum) <= 1L))
+  expect_true(all(n$display_label[!n$show_label] == ""))
+  expect_equal(n$label, attr(p_all, "nodes")$label)
+  expect_true(all(attr(p_all, "nodes")$show_label))
+  expect_equal(attr(p_cap, "edges"), attr(p_all, "edges"))
+  expect_equal(attr(p_cap, "pathway_summary"), attr(p_all, "pathway_summary"))
+  expect_no_error(ggplot2::ggplot_build(p_cap))
+  expect_error(plot_kegg_topology(proj, save = FALSE, max_labels = -1), "max_labels")
+})
+
+test_that("plot_kegg_topology(focus = 'targets') keeps only relations that touch a target", {
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .pw_topology_project()
+  full <- plot_kegg_topology(proj, pathway_id = "hsa09001", save = FALSE)
+  foc  <- plot_kegg_topology(proj, pathway_id = "hsa09001", save = FALSE, focus = "targets")
+  nf <- attr(foc, "nodes")
+  ef <- attr(foc, "edges")
+  expect_lte(nrow(ef), nrow(attr(full, "edges")))
+  ## every drawn relation has a target at one end
+  tg <- nf$box[nf$is_target]
+  expect_true(all(ef$from %in% tg | ef$to %in% tg))
+  ## no target is dropped
+  expect_setequal(tg, attr(full, "nodes")$box[attr(full, "nodes")$is_target])
+  expect_no_error(ggplot2::ggplot_build(foc))
+})
+
 test_that("plot_kegg_topology() saves a PNG and logs it keyed by pathways", {
   testthat::skip_if_not_installed("ggplot2")
   proj <- .pw_topology_project()

@@ -20,7 +20,10 @@ plot_kegg_topology(
   out_dir = NULL,
   width = NULL,
   height = NULL,
-  dpi = 150
+  dpi = 150,
+  label_scope = c("target_neighbors", "all"),
+  max_labels = 40L,
+  focus = c("none", "targets")
 )
 }
 \arguments{
@@ -58,6 +61,20 @@ from the number of panels.}
 
 \item{dpi}{Numeric resolution in dots per inch for raster output, passed
 to \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}.}
+
+\item{label_scope}{\code{"target_neighbors"} (default) writes a text label only on
+targets of the extract and on the boxes directly linked to them; \code{"all"}
+labels every box (unreadable on dense pathways such as MAPK). Unlabelled boxes
+stay in the drawing; their names remain in \code{attr(., "nodes")$label}.}
+
+\item{max_labels}{Integer, default \code{40}: at most this many labelled boxes per
+pathway, targets first (most compounds, then highest probability). \code{NULL} = no
+cap. \verb{label_scope = "all", max_labels = NULL} restores the earlier behaviour.}
+
+\item{focus}{\code{"none"} (default) draws every stored relation; \code{"targets"} draws
+only the relations that touch a target of the extract (and the genes at their
+other ends). Use it for dense pathways such as MAPK, where the full relation
+set hides the targets; the pathway summary still reports the full pathway.}
 }
 \value{
 A \code{ggplot} (or \code{girafe}) object with attributes

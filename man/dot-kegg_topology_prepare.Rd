@@ -4,7 +4,16 @@
 \alias{.kegg_topology_prepare}
 \title{Boxes, box-level edges and abstract layout of one pathway panel}
 \usage{
-.kegg_topology_prepare(t, genes, collapse_paralogs, layout, label_max_chars)
+.kegg_topology_prepare(
+  t,
+  genes,
+  collapse_paralogs,
+  layout,
+  label_max_chars,
+  label_scope = "all",
+  max_labels = NULL,
+  focus = "none"
+)
 }
 \value{
 \code{list(pathway_id, nodes, e, xy, layout)}; \code{xy} in abstract

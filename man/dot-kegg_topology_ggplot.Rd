@@ -16,7 +16,8 @@
   panel_h,
   engine,
   width,
-  restricted = FALSE
+  restricted = FALSE,
+  focus = "none"
 )
 }
 \description{

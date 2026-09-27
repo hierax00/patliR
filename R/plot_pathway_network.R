@@ -946,6 +946,17 @@ plot_pathway_network <- function(proj, condition = NULL, db = c("kegg", "reactom
 #' @param layout `"auto"` (default), `"sugiyama"`, `"fr"` or `"kk"`.
 #' @param collapse_paralogs Logical, default `TRUE` (see the section above).
 #' @param label_max_chars Integer, default `18`: longer box labels are cut.
+#' @param label_scope `"target_neighbors"` (default) writes a text label only on
+#'   targets of the extract and on the boxes directly linked to them; `"all"`
+#'   labels every box (unreadable on dense pathways such as MAPK). Unlabelled boxes
+#'   stay in the drawing; their names remain in `attr(., "nodes")$label`.
+#' @param max_labels Integer, default `40`: at most this many labelled boxes per
+#'   pathway, targets first (most compounds, then highest probability). `NULL` = no
+#'   cap. `label_scope = "all", max_labels = NULL` restores the earlier behaviour.
+#' @param focus `"none"` (default) draws every stored relation; `"targets"` draws
+#'   only the relations that touch a target of the extract (and the genes at their
+#'   other ends). Use it for dense pathways such as MAPK, where the full relation
+#'   set hides the targets; the pathway summary still reports the full pathway.
 #' @param ncol `NULL` (default, automatic) or the number of panel columns.
 #' @param seed Integer seed for the force-directed layouts.
 #' @param width,height Figure size in inches; `NULL` (default) picks a size
@@ -988,10 +999,15 @@ plot_kegg_topology <- function(proj, condition = NULL, pathway_id = NULL, top_n_
                                layout = c("auto", "sugiyama", "fr", "kk"), collapse_paralogs = TRUE,
                                label_max_chars = 18, ncol = NULL, seed = 1,
                                engine = c("static", "ggiraph"),
-                               save = TRUE, out_dir = NULL, width = NULL, height = NULL, dpi = 150) {
+                               save = TRUE, out_dir = NULL, width = NULL, height = NULL, dpi = 150,
+                               label_scope = c("target_neighbors", "all"), max_labels = 40L,
+                               focus = c("none", "targets")) {
   stopifnot(is(proj, "PatliRProject"))
   layout <- match.arg(layout)
   engine <- match.arg(engine)
+  label_scope <- match.arg(label_scope)
+  focus <- match.arg(focus)
+  if (!is.null(max_labels)) .pathway_check_count(max_labels, "max_labels", min = 0)
   .pathway_check_count(top_n_pathways, "top_n_pathways", min = 1)
   .pathway_check_flag(collapse_paralogs, "collapse_paralogs")
   .pathway_check_count(label_max_chars, "label_max_chars", min = 6)
@@ -1029,7 +1045,8 @@ plot_kegg_topology <- function(proj, condition = NULL, pathway_id = NULL, top_n_
   on.exit(restore_rng(), add = TRUE)
   prepared <- lapply(pids, function(pid) {
     .kegg_topology_prepare(topo[topo$pathway_id == pid, , drop = FALSE], genes, collapse_paralogs = collapse_paralogs,
-                           layout = layout, label_max_chars = label_max_chars)
+                           layout = layout, label_max_chars = label_max_chars,
+                           label_scope = label_scope, max_labels = max_labels, focus = focus)
   })
   restore_rng()
 
@@ -1063,7 +1080,7 @@ plot_kegg_topology <- function(proj, condition = NULL, pathway_id = NULL, top_n_
   restricted <- "restrict_to_network" %in% names(topo) && nrow(topo) > 0 &&
     isTRUE(all(as.logical(topo$restrict_to_network[topo$pathway_id %in% pids])))
   p <- .kegg_topology_ggplot(nodes, edges, paths, tees, summ, cond, ncol, panel_w, panel_h, engine, width,
-                             restricted = restricted)
+                             restricted = restricted, focus = focus)
   attr(p, "pathway_summary") <- summ
   attr(p, "nodes") <- nodes
   attr(p, "edges") <- edges
@@ -1340,7 +1357,8 @@ plot_kegg_topology <- function(proj, condition = NULL, pathway_id = NULL, top_n_
 #' @return `list(pathway_id, nodes, e, xy, layout)`; `xy` in abstract
 #'   layout units (see [.kegg_topology_layout()]).
 #' @keywords internal
-.kegg_topology_prepare <- function(t, genes, collapse_paralogs, layout, label_max_chars) {
+.kegg_topology_prepare <- function(t, genes, collapse_paralogs, layout, label_max_chars,
+                                   label_scope = "all", max_labels = NULL, focus = "none") {
   pid <- t$pathway_id[1]
   rel <- .kegg_topology_collapse_relations(t)
   gene_ids <- sort(unique(c(t$from_kegg, t$to_kegg)))
@@ -1375,14 +1393,45 @@ plot_kegg_topology <- function(proj, condition = NULL, pathway_id = NULL, top_n_
   e <- e[order(paste(e$from_box, e$to_box), eff_rank[e$effect]), , drop = FALSE]
   e <- e[!duplicated(paste(e$from_box, e$to_box)), , drop = FALSE]
 
+  ## focus: keep only the relations that touch a target of the extract, and the boxes
+  ## on either end of them (the rest of a dense pathway is context, not evidence)
+  if (focus == "targets") {
+    tg <- nodes$box[nodes$is_target]
+    e <- e[e$from_box %in% tg | e$to_box %in% tg, , drop = FALSE]
+    nodes <- nodes[nodes$box %in% c(e$from_box, e$to_box) | nodes$is_target, , drop = FALSE]
+  }
+
+  ## which boxes carry a text label (dense pathways: every box labelled is unreadable);
+  ## unlabelled boxes stay in the drawing as compact boxes and keep `label` in the node table
+  nodes$show_label <- .kegg_topology_label_mask(nodes, e, label_scope, max_labels)
+  nodes$display_label <- ifelse(nodes$show_label, nodes$label, "")
+
   ## label size (mm): hit genes grow with the number of compounds hitting them
   nodes$size <- .kegg_topology_label_size(nodes$n_compounds, nodes$is_target)
-  bs <- .kegg_topology_box_size(nodes$label, nodes$size)
+  bs <- .kegg_topology_box_size(nodes$display_label, nodes$size)
   nodes$hw <- bs$hw
   nodes$hh <- bs$hh
 
   lay <- .kegg_topology_layout(nodes$box, e[, c("from_box", "to_box")], layout)
   list(pathway_id = pid, nodes = nodes, e = e, xy = lay$xy, bends = lay$bends, layout = lay$used)
+}
+
+#' Which boxes get a text label
+#' @description Targets first (most compounds, then highest probability), then --
+#'   when `scope = "target_neighbors"` -- only boxes directly linked to a target;
+#'   at most `max_labels` per pathway. `scope = "all"`, `max_labels = NULL` labels everything.
+#' @param nodes,e Node table (`box`, `is_target`, `n_compounds`, `max_weight`) and
+#'   box-level relations (`from_box`, `to_box`).
+#' @return Logical vector, one per row of `nodes`.
+#' @keywords internal
+.kegg_topology_label_mask <- function(nodes, e, scope, max_labels) {
+  targets <- nodes$box[nodes$is_target]
+  adjacent <- unique(c(e$to_box[e$from_box %in% targets], e$from_box[e$to_box %in% targets]))
+  eligible <- if (scope == "all") rep(TRUE, nrow(nodes)) else nodes$is_target | nodes$box %in% adjacent
+  ranked <- order(!nodes$is_target, -nodes$n_compounds, -nodes$max_weight, nodes$box, na.last = TRUE)
+  ranked <- ranked[eligible[ranked]]
+  if (!is.null(max_labels)) ranked <- utils::head(ranked, max_labels)
+  seq_len(nrow(nodes)) %in% ranked
 }
 
 #' Fit a prepared panel into a `panel_w` x `panel_h` inch panel and compute
@@ -1684,7 +1733,7 @@ plot_kegg_topology <- function(proj, condition = NULL, pathway_id = NULL, top_n_
 #' Build the topology ggplot (one facet per pathway)
 #' @keywords internal
 .kegg_topology_ggplot <- function(nodes, edges, paths, tees, summ, cond, ncol, panel_w, panel_h, engine, width,
-                                  restricted = FALSE) {
+                                  restricted = FALSE, focus = "none") {
   strip <- stats::setNames(sprintf("%s (%s)\n%d of %d genes hit by the extract (%.0f%%)", summ$pathway_title, summ$pathway_id,
                                    summ$n_hit, summ$n_genes, 100 * summ$share_hit), summ$pathway_id)
   lev <- unname(strip[summ$pathway_id])
@@ -1737,7 +1786,7 @@ plot_kegg_topology <- function(proj, condition = NULL, pathway_id = NULL, top_n_
                                                                                         nodes$n_compounds, nodes$max_weight),
                                                                 "not a predicted target"), "")
   if (nrow(non_hits)) {
-    p <- p + ggplot2::geom_label(data = non_hits, ggplot2::aes(x = .data$x, y = .data$y, label = .data$label),
+    p <- p + ggplot2::geom_label(data = non_hits, ggplot2::aes(x = .data$x, y = .data$y, label = .data$display_label),
                                  size = .kegg_topology_label_size(0, FALSE), fill = "white", colour = "grey40", linewidth = 0.25,
                                  label.padding = ggplot2::unit(0.25, "lines"), label.r = ggplot2::unit(0.08, "lines"),
                                  show.legend = FALSE)
@@ -1748,7 +1797,7 @@ plot_kegg_topology <- function(proj, condition = NULL, pathway_id = NULL, top_n_
     for (is_dark in c(FALSE, TRUE)) {
       d <- hits[dark == is_dark, , drop = FALSE]
       if (nrow(d) == 0) next
-      p <- p + ggplot2::geom_label(data = d, ggplot2::aes(x = .data$x, y = .data$y, label = .data$label,
+      p <- p + ggplot2::geom_label(data = d, ggplot2::aes(x = .data$x, y = .data$y, label = .data$display_label,
                                                           fill = .data$max_weight, size = .data$size),
                                    show.legend = c(fill = !legend_done, size = !legend_done, colour = FALSE,
                                                    linetype = FALSE, linewidth = FALSE),
@@ -1781,7 +1830,10 @@ plot_kegg_topology <- function(proj, condition = NULL, pathway_id = NULL, top_n_
       sprintf("The %d pathways with the most extract targets among their KEGG relations. ", nrow(summ)),
     "Boxes = genes (paralogs with identical relations merged, e.g. MAPK1/3); filled boxes are targets of the extract, ",
     "fill = highest predicted probability, box size = number of compounds hitting it",
-    if (any(!nodes$is_target)) "; white boxes are not targeted. " else ". ",
+    if (any(!nodes$is_target)) "; white boxes are not targeted" else "",
+    if (focus == "targets") "; focus view: only relations that touch a target are drawn" else "",
+    if (any(!nodes$show_label)) sprintf("; %d boxes are left unlabelled (only targets and their neighbours are named)", sum(!nodes$show_label)) else "",
+    ". ",
     "Edges = KGML relations (PPrel/GErel/ECrel), colour and end = effect, line type = mechanism",
     if (restricted) paste0(
       ". Only relations between two targets of the extract are stored (network_kegg_topology(restrict_to_network = TRUE)); ",

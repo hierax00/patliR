@@ -125,6 +125,8 @@ Collate:
     'plot_chemical_space.R'
     'plot_condition_compare.R'
     'plot_condition_disease_flow.R'
+    'plot_condition_flow.R'
+    'plot_condition_trend.R'
     'plot_network_layers.R'
     'plot_disease_map.R'
     'targets_disease.R'

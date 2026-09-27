@@ -291,6 +291,17 @@ rank_candidates <- function(proj, condition = NULL, disease = NULL,
       }
     }
 
+    ## Both criteria key off (condition, disease_id) alone -- neither one
+    ## knows if the OTHER was computed on a different STRING interactome
+    ## (recompute proximity at a new score_threshold/network_type without
+    ## rerunning synergy, say). network_synergy() guards this at the point
+    ## it is itself run; this guards the same mismatch at the point the two
+    ## tables are actually combined, which a rerun of only one of them
+    ## bypasses.
+    if (all(c("proximity", "synergy") %in% used)) {
+      .rank_check_proximity_synergy_provenance(proj, cond, resolved_disease)
+    }
+
     if ("module_robustness" %in% criteria) {
       v <- .rank_criterion_module_robustness(proj, cond, compound_ids)
       if (is.null(v)) {
@@ -371,6 +382,19 @@ rank_candidates <- function(proj, condition = NULL, disease = NULL,
     }
   }
 
+  ## Two conditions can auto-detect a different subset of optional criteria
+  ## (e.g. one has network_hub_penalty results, the other does not), so
+  ## their out_df frames can have different column sets -- rbind() (unlike
+  ## a filling bind_rows()) errors on that ("number of columns of arguments
+  ## does not match"). Backfilling NA here, after each condition's own
+  ## ranking/RRA/Pareto was already computed and stored in `rows[[cond]]`,
+  ## only changes the shape of the final table -- it cannot retroactively
+  ## add a criterion to a condition that never had it.
+  all_cols <- unique(unlist(lapply(rows, names)))
+  rows <- lapply(rows, function(df) {
+    for (col in setdiff(all_cols, names(df))) df[[col]] <- NA_real_
+    df[, all_cols, drop = FALSE]
+  })
   result <- do.call(rbind, rows)
   rownames(result) <- NULL
   result <- .network_upsert(
@@ -409,7 +433,17 @@ rank_candidates <- function(proj, condition = NULL, disease = NULL,
 .rank_criterion_adme <- function(proj, compound_ids) {
   adme <- patliRResults(proj, "adme_filtered")
   if (is.null(adme) || nrow(adme) == 0) return(NULL)
-  agg <- stats::aggregate(pass ~ compound_id, data = adme, FUN = function(x) mean(as.logical(x)))
+  ## na.action = na.pass: formula aggregate() defaults to na.omit, which
+  ## would drop a compound's rows entirely if every rule's `pass` came out
+  ## NA (e.g. its descriptors failed to compute) *before* grouping -- if
+  ## that happened to be true for every compound, aggregate() errors
+  ## outright ("no rows to aggregate") instead of returning an empty
+  ## result. na.rm = TRUE in the FUN itself means a compound with some
+  ## known and some unknown rules is scored over the known ones only,
+  ## rather than an unknown rule silently counting as a fail.
+  agg <- stats::aggregate(pass ~ compound_id, data = adme,
+                          FUN = function(x) if (all(is.na(x))) NA else mean(as.logical(x), na.rm = TRUE),
+                          na.action = stats::na.pass)
   lookup <- stats::setNames(agg$pass, agg$compound_id)
   stats::setNames(unname(lookup[compound_ids]), compound_ids)
 }
@@ -491,6 +525,38 @@ rank_candidates <- function(proj, condition = NULL, disease = NULL,
   stats::setNames(unname(lookup[compound_ids]), compound_ids)
 }
 
+#' Abort if the `network_proximity`/`network_synergy` rows about to be
+#' combined for one `(condition, disease)` were computed on different STRING
+#' interactomes
+#' @details Compares whichever of `species`, `string_version`,
+#'   `score_threshold`, `network_type` both tables happen to carry (an older
+#'   table predating a column is not compared on it -- "unknown", not a
+#'   mismatch, the same policy [network_synergy()]'s own guard uses).
+#' @return `invisible(NULL)`; aborts on a mismatch.
+#' @keywords internal
+.rank_check_proximity_synergy_provenance <- function(proj, cond, disease) {
+  cols <- c("species", "string_version", "score_threshold", "network_type")
+  prox <- patliRResults(proj, "network_proximity")
+  syn  <- patliRResults(proj, "network_synergy")
+  p <- prox[prox$condition == cond & prox$disease_id == disease, , drop = FALSE]
+  s <- syn[syn$condition == cond & syn$disease_id == disease, , drop = FALSE]
+  shared <- intersect(intersect(cols, names(p)), names(s))
+
+  mism <- Filter(function(col) {
+    pv <- unique(as.character(p[[col]])); sv <- unique(as.character(s[[col]]))
+    length(pv) > 1 || length(sv) > 1 || !identical(pv, sv)
+  }, shared)
+
+  if (length(mism) > 0) {
+    cli::cli_abort(c(
+      "Condition {.val {cond}}: {.fn network_proximity} and {.fn network_synergy} disagree on {.val {mism}} -- they were computed on different STRING interactomes.",
+      "i" = "Combining them in {.fn rank_candidates} would silently rank compounds on incompatible proximity and synergy scores.",
+      "i" = "Re-run whichever one is stale with matching arguments before ranking, or drop {.val proximity}/{.val synergy} from {.arg criteria}."
+    ))
+  }
+  invisible(NULL)
+}
+
 #' Best (`max`) `synergy_score` among a compound's partners, plus its `P2`
 #' partnership count
 #' @return `list(best = <named numeric>, n_p2 = <named integer>)`, or `NULL`
@@ -567,6 +633,16 @@ rank_candidates <- function(proj, condition = NULL, disease = NULL,
     keep <- !is.na(v)
     if (!any(keep)) next
     v <- v[keep]; w <- w[keep]
+    ## network_build() explicitly permits an edge with no weight (import
+    ## probability) at all -- e.g. min_score = NULL keeps every edge
+    ## regardless of confidence -- so w can contain NA here even though v
+    ## does not. sum(w) would then be NA, and `if (sum(w) > 0)` errors
+    ## ("missing value where TRUE/FALSE needed") instead of falling through
+    ## to the unweighted mean() this switch already has for sum(w) == 0.
+    ## Treating an unknown weight as 0 (excluded from the weighted
+    ## contribution, not from v itself) reaches that existing fallback
+    ## naturally when every edge's weight is unknown.
+    w[is.na(w)] <- 0
     out[[cid]] <- switch(roll_up,
       weighted_mean = if (sum(w) > 0) sum(v * w) / sum(w) else mean(v),
       mean = mean(v),

@@ -173,6 +173,30 @@ test_that(".network_upsert() fails loudly, not with R's generic rbind message, o
   )
 })
 
+test_that(".network_upsert() does not abort on column removal when every existing row for that key is replaced (codex audit regression)", {
+  ## Before the fix, `only_old` was computed purely from column NAMES,
+  ## so it still fired even when `kept` (the existing rows NOT being
+  ## replaced) had zero rows -- meaning a full rerun of a condition with an
+  ## optional output disabled (e.g. network_condition_compare(permutation_test
+  ## = TRUE), then rerun with FALSE; or adme_local(rdkit_qc = TRUE) then
+  ## FALSE) aborted every time, even though nothing was actually losing data:
+  ## every old row for that key was about to be replaced anyway.
+  proj <- .test_project()
+  patliRResults(proj, "demo_slot") <- data.frame(
+    condition = "X", value = 1, extra = 5, stringsAsFactors = FALSE
+  )
+  ## new_rows lacks `extra`, but touched_keys covers the ONLY existing row
+  ## (condition "X"), so kept ends up with 0 rows -- nothing to lose
+  out <- patliR:::.network_upsert(
+    proj, "demo_slot",
+    data.frame(condition = "X", value = 9, stringsAsFactors = FALSE), "condition",
+    touched_keys = data.frame(condition = "X", stringsAsFactors = FALSE)
+  )
+  expect_equal(nrow(out), 1L)
+  expect_equal(out$value, 9)
+  expect_false("extra" %in% names(out))
+})
+
 test_that(".network_upsert() aborts on a type conflict on a shared column", {
   proj <- .test_project()
   patliRResults(proj, "demo_slot") <- data.frame(

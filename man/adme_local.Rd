@@ -33,7 +33,7 @@ cached by \code{reticulate}/\code{uv} after the first call -- the \emph{first} c
 cannot be resolved, \code{adme_local()} warns and falls back to \code{"cdk"}
 automatically -- this argument never turns a working call into an error.}
 
-\item{rdkit_qc}{Logical, default \code{FALSE}. Adds four \strong{extra, informational}
+\item{rdkit_qc}{Logical, default \code{FALSE}. Adds five \strong{extra, informational}
 columns from the same optional RDKit -- never replacing or filtering the
 CDK-based ones, purely a second opinion to look at side by side:
 \code{hba_lipinski_rdkit}/\code{hbd_lipinski_rdkit} (RDKit's

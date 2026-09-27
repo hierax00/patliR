@@ -89,9 +89,25 @@ prep_compounds <- function(proj, data,
   }
 
   n <- nrow(data)
-  pubchem_id <- if ("PubChemCID" %in% names(data)) as.character(data[["PubChemCID"]]) else rep(NA_character_, n)
+  ## `id_col` names whichever column `identifier` designates -- read THAT
+  ## column for that field (it used to be validated for presence and then
+  ## ignored, always reading the literal "PubChemCID"/"SMILES" names instead,
+  ## so a table using e.g. id_col = "CID" silently produced all-NA
+  ## pubchem_id). The *other* field still falls back to its own conventional
+  ## column name when present, unchanged from before -- e.g. identifier =
+  ## "smiles" with a nonstandard SMILES column name still picks up a
+  ## same-table "PubChemCID" column for the missing-SMILES-fetch bridge.
+  pubchem_id <- if (identifier == "pubchem") {
+    as.character(data[[id_col]])
+  } else if ("PubChemCID" %in% names(data)) {
+    as.character(data[["PubChemCID"]])
+  } else rep(NA_character_, n)
   name       <- if (!is.na(name_col) && name_col %in% names(data)) as.character(data[[name_col]]) else rep(NA_character_, n)
-  smiles     <- if ("SMILES" %in% names(data)) as.character(data[["SMILES"]]) else rep(NA_character_, n)
+  smiles     <- if (identifier == "smiles") {
+    as.character(data[[id_col]])
+  } else if ("SMILES" %in% names(data)) {
+    as.character(data[["SMILES"]])
+  } else rep(NA_character_, n)
   source_tag <- rep("input", n)
 
   ## Resolve missing SMILES. Only rows that also have a PubChemCID can be
@@ -190,9 +206,18 @@ prep_compounds <- function(proj, data,
   }
 
   if (nrow(new_rows) > 0) {
-    new_rows$id <- .next_compound_ids(existing$id, nrow(new_rows))
+    ## a compound removed earlier (e.g. adme_filter()'s hard_cutoff) is gone
+    ## from `existing`, so deriving the next id purely from its current rows
+    ## would reissue that removed compound's id to a completely different
+    ## molecule -- every downstream result table still keyed by the old id
+    ## (adme_local, targets_imported, network_edges, reference_compounds, ...)
+    ## would then silently look like it belongs to the new one. A persisted
+    ## high-water mark, never lowered by a removal, closes that gap.
+    min_start <- .compound_id_registry_max(proj) + 1L
+    new_rows$id <- .next_compound_ids(existing$id, nrow(new_rows), min_start = min_start)
     new_rows <- new_rows[, c("id", "pubchem_id", "name", "smiles", "canonical_smiles", "source")]
     compounds(proj) <- rbind(existing, new_rows)
+    proj <- .compound_id_registry_bump(proj, min_start + nrow(new_rows) - 1L)
   }
 
   .write_step_csv(proj, "01_compounds.csv", compounds(proj))

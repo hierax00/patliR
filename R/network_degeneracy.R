@@ -236,9 +236,15 @@ network_degeneracy <- function(proj, condition = NULL,
     ))
   }
 
+  ## snapshot the caller's RNG state *before* touching it -- see
+  ## network_proximity.R's identical comment (codex audit, 2026-09-27)
+  old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
   used_seed <- if (is.null(seed)) sample.int(.Machine$integer.max, 1) else as.integer(seed)
-  restore_rng <- .with_seed(used_seed)
-  on.exit(restore_rng(), add = TRUE)
+  set.seed(used_seed)
+  on.exit({
+    if (!is.null(old_seed)) assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    else if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv)
+  }, add = TRUE)
 
   ## ---- GOSemSim godata + annotation index (direct/enriched) -----------
   sem_data <- NULL

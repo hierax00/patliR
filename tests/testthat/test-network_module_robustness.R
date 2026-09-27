@@ -175,6 +175,28 @@ test_that("network_module_robustness() does not leak RNG state -- leiden, bipart
   }
 })
 
+test_that("network_module_robustness(seed = NULL) does not leak RNG state (codex audit regression)", {
+  ## seed = 42 above never exercises the auto-generation branch (`if
+  ## (is.null(seed)) seed <- sample.int(...)`) -- before the fix, that draw
+  ## permanently advanced the caller's RNG stream (or created a
+  ## `.Random.seed` where none existed), with nothing downstream restoring
+  ## it, since the function's own .with_seed(seed) calls only isolate
+  ## around the already-resolved numeric seed, not around picking it.
+  proj <- .network_stats_test_setup()
+  set.seed(321)
+  seed_before <- get(".Random.seed", envir = .GlobalEnv)
+  network_module_robustness(proj, condition = "FLO-ET", clustering = "leiden",
+                            attack = "both", n_random = 5L, seed = NULL)
+  seed_after <- get(".Random.seed", envir = .GlobalEnv)
+  expect_identical(seed_before, seed_after)
+
+  had_seed <- exists(".Random.seed", envir = .GlobalEnv)
+  if (had_seed) rm(".Random.seed", envir = .GlobalEnv)
+  network_module_robustness(proj, condition = "FLO-ET", clustering = "leiden",
+                            attack = "both", n_random = 5L, seed = NULL)
+  expect_false(exists(".Random.seed", envir = .GlobalEnv))
+})
+
 test_that("clustering = 'hdbscan' reproduces the pre-0.2.0 output given the same seed", {
   skip_if_not_installed("dbscan")
   proj <- .network_stats_test_setup()

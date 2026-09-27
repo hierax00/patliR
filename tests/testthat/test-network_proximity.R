@@ -185,6 +185,38 @@ test_that("network_proximity(network_type = 'physical') records network_type and
   )
 })
 
+test_that("network_proximity(seed = NULL) does not leak RNG state (codex audit regression, STRINGdb mocked)", {
+  ## Before the fix, .with_seed(used_seed) snapshotted the caller's RNG
+  ## state AFTER sample.int() had already drawn used_seed from it (used_seed
+  ## was generated in a separate statement, not lazily inside .with_seed()'s
+  ## own argument, so R's usual lazy-eval protection did not apply) --
+  ## restoring that snapshot left the caller's stream permanently advanced
+  ## by one draw whenever seed = NULL.
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  cond <- "FLO-ET"
+  edges <- patliRResults(proj, "network_edges")
+  cmp_uni <- unique(edges$uniprot_id[edges$condition == cond])
+  disease_uni <- paste0("DIS", seq_len(6))
+  proj <- disease_genes_import(
+    proj, data.frame(uniprot_id = disease_uni),
+    disease_id = "D_TEST", disease_name = "synthetic", source = "synthetic"
+  )
+  fake <- .fake_string_db(c(cmp_uni, disease_uni))
+  testthat::local_mocked_bindings(.network_stringdb = function(...) fake, .package = "patliR")
+
+  set.seed(555)
+  seed_before <- get(".Random.seed", envir = .GlobalEnv)
+  network_proximity(proj, condition = cond, disease = "D_TEST", n_random = 12, seed = NULL)
+  seed_after <- get(".Random.seed", envir = .GlobalEnv)
+  expect_identical(seed_before, seed_after)
+
+  had_seed <- exists(".Random.seed", envir = .GlobalEnv)
+  if (had_seed) rm(".Random.seed", envir = .GlobalEnv)
+  network_proximity(proj, condition = cond, disease = "D_TEST", n_random = 12, seed = NULL)
+  expect_false(exists(".Random.seed", envir = .GlobalEnv))
+})
+
 test_that("network_proximity(): d_observed == 0 exactly when S is a subset of T, surfaced in n_overlap (STRINGdb mocked)", {
   ## Spec 2.0 test (c).
   testthat::skip_if_not_installed("STRINGdb")
@@ -374,8 +406,10 @@ test_that("network_proximity(store_null = TRUE) writes network_proximity_null wi
 
   expect_identical(
     names(null),
-    c("condition", "compound_id", "disease_id", "disease_gene_source", "draw", "d_random")
+    c("condition", "compound_id", "disease_id", "disease_gene_source", "draw", "d_random",
+      "species", "string_version", "score_threshold", "network_type", "seed_used")
   )
+  expect_true(all(null$seed_used == 1L))
   ## one row per (compound, disease, draw) -- n_random rows per compound
   ## that received a main-table row (spec 3.7).
   expect_equal(nrow(null), 12L * nrow(main))

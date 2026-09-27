@@ -148,6 +148,50 @@ test_that("network_bowtie() warns on a degenerate (tiny) core", {
   )
 })
 
+test_that("network_bowtie() rerun drops a stale row for an edge removed from the network (codex audit regression)", {
+  ## Before the fix, touched_keys was built from the CURRENT network_edges,
+  ## so an edge no longer present (compound removed, or a target no longer
+  ## predicted) was absent from both the freshly computed result and
+  ## touched_keys -- its old bow-tie annotation from a previous run survived
+  ## untouched, a stale row mixed in with a rebuilt network.
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  edges <- patliRResults(proj, "network_edges")
+  flo <- edges[edges$condition == "FLO-ET", ]
+  testthat::skip_if(nrow(flo) < 2, "need at least 2 edges in the FLO-ET fixture")
+  removed <- flo[1, ]
+  uniprot_ids <- unique(flo$uniprot_id)
+  raw_actions <- data.frame(
+    item_id_a = "n1", item_id_b = "n2", is_directional = "t", a_is_acting = "t", score = 900,
+    stringsAsFactors = FALSE
+  )
+  fake_aliases <- data.frame(
+    string_protein_id = rep(c("n1", "n2"), length.out = length(uniprot_ids)),
+    alias = uniprot_ids, stringsAsFactors = FALSE
+  )
+  testthat::local_mocked_bindings(
+    .network_stringdb_actions_raw = function(...) raw_actions,
+    .network_stringdb_aliases_map = function(...) fake_aliases,
+    .package = "patliR"
+  )
+
+  proj <- suppressWarnings(network_bowtie(proj, condition = "FLO-ET", actions_score_threshold = 400))
+  bt <- patliRResults(proj, "network_bowtie")
+  expect_true(any(bt$condition == "FLO-ET" & bt$compound_id == removed$compound_id &
+                    bt$uniprot_id == removed$uniprot_id))
+
+  ## the edge disappears from the network (e.g. a rebuild after removing a
+  ## compound or a target no longer predicted) ...
+  patliRResults(proj, "network_edges") <- edges[!(edges$condition == "FLO-ET" &
+                                                      edges$compound_id == removed$compound_id &
+                                                      edges$uniprot_id == removed$uniprot_id), ]
+  ## ... and a rerun must not leave its bow-tie row behind
+  proj <- suppressWarnings(network_bowtie(proj, condition = "FLO-ET", actions_score_threshold = 400))
+  bt2 <- patliRResults(proj, "network_bowtie")
+  expect_false(any(bt2$condition == "FLO-ET" & bt2$compound_id == removed$compound_id &
+                     bt2$uniprot_id == removed$uniprot_id))
+})
+
 test_that("network_bowtie() no longer instantiates a second STRINGdb object just for UniProt -> STRING_id mapping", {
   testthat::skip_if_not_installed("STRINGdb")
   proj <- .network_stats_test_setup()

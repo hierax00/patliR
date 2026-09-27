@@ -436,14 +436,44 @@
 #' Next block of sequential internal compound ids, continuing from existing
 #' @param existing_ids Character vector of already-used ids, e.g. `"C0007"`.
 #' @param n How many new ids to generate.
+#' @param min_start Integer, default `1L`: the block starts at
+#'   `max(min_start, 1 + the highest number in existing_ids)`. Callers pass
+#'   the project's persisted id high-water mark here (see
+#'   `.compound_id_registry_max()`) so a ever-issued id is not reused for a
+#'   different molecule just because the compound that had it was removed
+#'   from `compounds(proj)`.
 #' @return Character vector of length `n`, e.g. `c("C0008", "C0009")`.
 #' @keywords internal
-.next_compound_ids <- function(existing_ids, n) {
+.next_compound_ids <- function(existing_ids, n, min_start = 1L) {
   used_numbers <- suppressWarnings(as.integer(sub("^C", "", existing_ids)))
-  start <- if (length(used_numbers) == 0 || all(is.na(used_numbers))) {
+  start_from_existing <- if (length(used_numbers) == 0 || all(is.na(used_numbers))) {
     1L
   } else {
     max(used_numbers, na.rm = TRUE) + 1L
   }
+  start <- max(start_from_existing, min_start)
   sprintf("C%04d", seq.int(start, length.out = n))
+}
+
+#' Highest compound-id number ever allocated in this project (persisted,
+#' survives a compound being removed from `compounds(proj)`)
+#' @return A single integer, `0L` if the project has no registry yet (an
+#'   older project, or one that never allocated a compound id).
+#' @keywords internal
+.compound_id_registry_max <- function(proj) {
+  reg <- patliRResults(proj, "compound_id_registry")
+  if (is.null(reg) || nrow(reg) == 0 || is.na(reg$max_id[1])) return(0L)
+  as.integer(reg$max_id[1])
+}
+
+#' Persist a new compound-id high-water mark (never lowered)
+#' @return `proj`, with the `compound_id_registry` results entry updated and
+#'   written to `results/compound_id_registry.csv`.
+#' @keywords internal
+.compound_id_registry_bump <- function(proj, new_max) {
+  new_max <- max(new_max, .compound_id_registry_max(proj))
+  reg <- data.frame(max_id = as.integer(new_max))
+  patliRResults(proj, "compound_id_registry") <- reg
+  .write_results_csv(proj, "compound_id_registry", reg)
+  proj
 }

@@ -200,7 +200,9 @@ test_that("refdb_build() writes both CSVs, the new schema, and a refdb_build log
            connectivity_smiles = "CCO")
     },
     .chembl_resolve = function(smiles, cids) {
-      data.frame(row = seq_along(smiles), inchikey = "AAAAAAAAAAAAAA-BBBBBBBBBB-N",
+      data.frame(row = seq_along(smiles),
+                 key = vapply(seq_along(smiles), function(i) patliR:::.refdb_identity_key(cids[i], smiles[i]), ""),
+                 inchikey = "AAAAAAAAAAAAAA-BBBBBBBBBB-N",
                  chembl_id = "CHEMBL999", parent_chembl_id = "CHEMBL999",
                  pref_name = "Demurol", match_type = "inchikey_exact",
                  stringsAsFactors = FALSE)
@@ -226,6 +228,55 @@ test_that("refdb_build() writes both CSVs, the new schema, and a refdb_build log
   expect_true(file.exists(file.path(projectDir(proj), "results", "reference_bioactivity.csv")))
   log_df <- projectLog(proj)
   expect_true(any(log_df$step == "refdb_build"))
+})
+
+test_that("refdb_build() attaches each compound's own ChEMBL identity even when a reordered rerun falls back to a cached batch", {
+  ## Regression for a real bug (codex audit, 2026-09-27): identity used to be
+  ## rejoined by row POSITION (`identity$row == i`), but the batch cache key
+  ## is order-independent (a hash of the sorted, deduplicated CID/SMILES
+  ## set) -- so a second call with the same two compounds reordered, that
+  ## falls back to the cache (simulated here via a live-call error under
+  ## warn_and_cache), used to silently swap their ChEMBL identities.
+  proj <- .test_project()
+  cmp_in <- .test_compound_list()[1:2, ]
+  proj <- prep_compounds(proj, cmp_in, identifier = "pubchem")
+  cmp0 <- compounds(proj)
+  cid_a <- cmp0$pubchem_id[1]; cid_b <- cmp0$pubchem_id[2]
+  id_a <- cmp0$id[1]; id_b <- cmp0$id[2]
+  chembl_of <- stats::setNames(c("CHEMBL_A", "CHEMBL_B"), c(cid_a, cid_b))
+
+  call_n <- 0L
+  fake_resolve <- function(smiles, cids) {
+    call_n <<- call_n + 1L
+    if (call_n > 1L) stop("simulated network failure")
+    data.frame(
+      row = seq_along(cids),
+      key = vapply(seq_along(cids), function(i) patliR:::.refdb_identity_key(cids[i], smiles[i]), ""),
+      inchikey = paste0("IK_", cids), chembl_id = unname(chembl_of[cids]),
+      parent_chembl_id = unname(chembl_of[cids]), pref_name = paste0("NAME_", cids),
+      match_type = "inchikey_exact", stringsAsFactors = FALSE
+    )
+  }
+  testthat::local_mocked_bindings(.chembl_resolve = fake_resolve, .package = "patliR")
+
+  ## first call: succeeds live, and caches the batch under an
+  ## order-independent key
+  proj <- refdb_build(proj, sources = "chembl", fetch_mode = "warn_and_cache")
+  rc1 <- patliRResults(proj, "reference_compounds")
+  expect_equal(rc1$external_id[rc1$compound_id == id_a], "CHEMBL_A")
+  expect_equal(rc1$external_id[rc1$compound_id == id_b], "CHEMBL_B")
+
+  ## reorder the SAME two compounds; the second call's live fetch fails, so
+  ## it falls back to the cache entry from the first call (same batch key)
+  compounds(proj) <- cmp0[c(2, 1), ]
+  expect_warning(
+    proj <- refdb_build(proj, sources = "chembl", fetch_mode = "warn_and_cache"),
+    "local cache"
+  )
+  rc2 <- patliRResults(proj, "reference_compounds")
+  rc2 <- rc2[rc2$source == "chembl", ]
+  expect_equal(rc2$external_id[rc2$compound_id == id_a], "CHEMBL_A")
+  expect_equal(rc2$external_id[rc2$compound_id == id_b], "CHEMBL_B")
 })
 
 ## Live-network tests (actual PubChem/ChEMBL calls) are intentionally left

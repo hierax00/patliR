@@ -130,7 +130,16 @@ refdb_build <- function(proj, sources = c("pubchem", "chembl"),
     }
 
     if ("chembl" %in% sources && !is.null(identity)) {
-      ch <- identity[identity$row == i, , drop = FALSE]
+      ## Join by chemical identity key, not by row position: `identity` may
+      ## be a cache hit from a batch built in a different row order (same
+      ## compound set, e.g. after re-prepping with rows reshuffled) -- `row`
+      ## would then silently attach another compound's identity/bioactivities.
+      ## Two rows sharing a key (a genuine duplicate CID/SMILES in this
+      ## batch, or both missing identity entirely) resolve identically, so
+      ## taking the first is safe.
+      key_i <- .refdb_identity_key(cid_key[i], smiles_key[i])
+      ch <- identity[!is.na(identity$key) & identity$key == key_i, , drop = FALSE]
+      if (nrow(ch) > 1) ch <- ch[1, , drop = FALSE]
       if (nrow(ch) == 1 && !is.na(ch$chembl_id)) {
         n_resolved <- n_resolved + 1L
         if (!identical(ch$match_type, "inchikey_exact")) n_weak <- n_weak + 1L
@@ -422,14 +431,21 @@ refdb_rebuild_cache <- function(proj) {
 #' @param smiles,cids Character vectors, same length (one entry per
 #'   compound, in `compounds()` order). `NA`/`""` allowed.
 #' @return A `data.frame` with one row per input compound: `row` (integer
-#'   position), `inchikey`, `chembl_id`, `parent_chembl_id`, `pref_name`,
-#'   `match_type`. `chembl_id` is `NA` for compounds that fell through the
-#'   whole chain.
+#'   position in *this* call), `key` (`.refdb_identity_key(cids[i],
+#'   smiles[i])` -- what the caller actually joins a cache hit back on,
+#'   since `row` is only meaningful within the batch that produced it),
+#'   `inchikey`, `chembl_id`, `parent_chembl_id`, `pref_name`, `match_type`.
+#'   `chembl_id` is `NA` for compounds that fell through the whole chain.
 #' @keywords internal
 .chembl_resolve <- function(smiles, cids) {
   n <- length(smiles)
   res <- data.frame(
     row = seq_len(n),
+    ## the chemical identity key each row was actually resolved for -- the
+    ## caller joins on this, not on `row`, so a cache hit against a table
+    ## built from a differently-ordered (but chemically identical) batch
+    ## still attaches every result to the right compound (see refdb_build()).
+    key = vapply(seq_len(n), function(i) .refdb_identity_key(cids[i], smiles[i]), character(1)),
     inchikey = NA_character_, chembl_id = NA_character_,
     parent_chembl_id = NA_character_, pref_name = NA_character_,
     match_type = NA_character_, stringsAsFactors = FALSE

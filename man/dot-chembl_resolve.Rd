@@ -13,9 +13,10 @@ compound, in \code{compounds()} order). \code{NA}/\code{""} allowed.}
 }
 \value{
 A \code{data.frame} with one row per input compound: \code{row} (integer
-position), \code{inchikey}, \code{chembl_id}, \code{parent_chembl_id}, \code{pref_name},
-\code{match_type}. \code{chembl_id} is \code{NA} for compounds that fell through the
-whole chain.
+position in \emph{this} call), \code{key} (\code{.refdb_identity_key(cids[i], smiles[i])} -- what the caller actually joins a cache hit back on,
+since \code{row} is only meaningful within the batch that produced it),
+\code{inchikey}, \code{chembl_id}, \code{parent_chembl_id}, \code{pref_name}, \code{match_type}.
+\code{chembl_id} is \code{NA} for compounds that fell through the whole chain.
 }
 \description{
 Never a similarity search. The chain, applied to whatever is still

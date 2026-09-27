@@ -106,9 +106,14 @@ When \code{store_null = TRUE}, also a \code{network_proximity_null} entry
 (columns \code{condition}, \code{compound_id}, \code{disease_id},
 \code{disease_gene_source}, \code{draw} (integer, \verb{1..n_random}), \code{d_random}
 (double, the resampled "closest" distance for that draw, \code{NA} when
-that draw's resampled pair had no finite path) -- \code{n_random} rows per
-compound that received a row in \code{network_proximity}), also written to
-\code{results/network_proximity_null.csv}.
+that draw's resampled pair had no finite path), and the same
+\code{species}/\code{string_version}/\code{score_threshold}/\code{network_type}/\code{seed_used}
+as the \code{network_proximity} row this null belongs to -- since a
+\code{store_null = FALSE} rerun leaves these draws untouched,
+\link[=plot_proximity]{plot_proximity(view = "null")} needs them to detect
+a main row that has since been recomputed differently -- \code{n_random}
+rows per compound that received a row in \code{network_proximity}), also
+written to \code{results/network_proximity_null.csv}.
 }
 \description{
 For each compound present in a condition's network (\code{\link[=network_build]{network_build()}}),

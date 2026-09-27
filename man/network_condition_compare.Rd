@@ -65,7 +65,12 @@ The updated \code{proj}. \code{patliRResults(proj, "network_condition_compare")}
 whether or not each one's z-score came out finite), \code{n_compounds_finite}
 (of those, how many did -- this is what feeds \code{mean_z}/\code{median_z}/\code{sd_z}/\code{best_z}),
 \code{best_z} (most negative, i.e. closest single compound), \code{n_disease_genes_hit},
-\code{n_disease_genes_total}, \code{disease_gene_coverage} (hit / total). Sorted
+\code{n_disease_genes_total}, \code{disease_gene_coverage} (hit / total),
+\code{disease_gene_source}, \code{score_threshold}, \code{species}, \code{string_version},
+\code{network_type} (this call's resolved proximity provenance, stamped onto
+every row -- comparing conditions computed with different values here,
+whether in one call or across separate calls for the same disease, is
+what this function's own consistency check aborts on). Sorted
 with the most negative (closest-to-disease) \code{aggregate} z first. When
 \code{permutation_test = TRUE}, also gains \code{perm_null_mean}, \code{perm_null_sd},
 \code{perm_p_value}, \code{perm_p_adjusted}, \code{perm_n_draws}, \code{perm_seed_used} --

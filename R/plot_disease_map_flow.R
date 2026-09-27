@@ -94,8 +94,16 @@ plot_disease_map_flow <- function(proj, conditions, disease_classes = NULL,
   n_dz <- stats::aggregate(disease_id ~ target_id + disease_class, assoc,
                            function(x) length(unique(x)))
   names(n_dz)[3] <- "n_diseases"
+  ## na.action = na.pass: formula aggregate() defaults to na.omit, which
+  ## drops every row with an NA response *before* grouping -- a
+  ## (target_id, disease_class) whose association_score is NA for every row
+  ## (e.g. a GO-sourced association, which carries no score at all) would
+  ## then vanish entirely instead of reaching the `all(is.na(x))` branch
+  ## below, and if EVERY row in `assoc` is unscored this aggregate() errors
+  ## outright ("no rows to aggregate") rather than returning an empty result.
   best_sc <- stats::aggregate(association_score ~ target_id + disease_class, assoc,
-                              function(x) if (all(is.na(x))) -Inf else max(x, na.rm = TRUE))
+                              function(x) if (all(is.na(x))) -Inf else max(x, na.rm = TRUE),
+                              na.action = stats::na.pass)
   agg <- merge(n_dz, best_sc, by = c("target_id", "disease_class"), all.x = TRUE)
   agg$association_score[is.na(agg$association_score)] <- -Inf
   agg <- agg[order(agg$target_id, -agg$n_diseases, -agg$association_score), , drop = FALSE]

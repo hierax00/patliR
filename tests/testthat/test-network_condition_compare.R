@@ -80,6 +80,40 @@ test_that("network_condition_compare() re-run wipes a target that no longer qual
   expect_false("t2" %in% tg$uniprot_id[tg$condition == "A"]) # not a stale leftover row
 })
 
+test_that("network_condition_compare() aborts when a later call's proximity provenance differs from a condition already stored for the same disease (codex audit regression)", {
+  ## The pre-existing check above only guards conditions passed to the SAME
+  ## call -- a single-condition call is trivially self-consistent, so a
+  ## second call comparing just "B" (recomputed at a different STRING
+  ## threshold) after "A" was already stored used to pass its own check and
+  ## get stored right alongside "A", silently combinable by
+  ## plot_condition_compare()/plot_condition_trend() reading the whole table.
+  proj <- .ccmp_fixture()
+  proj <- network_condition_compare(proj, conditions = "A", disease = "D1")
+  prox <- patliRResults(proj, "network_proximity")
+  prox$score_threshold[prox$condition == "B"] <- 700
+  patliRResults(proj, "network_proximity") <- prox
+  expect_error(network_condition_compare(proj, conditions = "B", disease = "D1"), "different")
+})
+
+test_that("network_condition_compare() lets a later call replace the SAME condition under new provenance (not a false positive)", {
+  proj <- .ccmp_fixture()
+  proj <- network_condition_compare(proj, conditions = "A", disease = "D1")
+  prox <- patliRResults(proj, "network_proximity")
+  prox$score_threshold[prox$condition == "A"] <- 700
+  patliRResults(proj, "network_proximity") <- prox
+  ## re-running "A" itself under new provenance is a legitimate change of
+  ## mind about A, not a cross-condition mismatch
+  expect_no_error(network_condition_compare(proj, conditions = "A", disease = "D1"))
+})
+
+test_that("network_condition_compare() stamps proximity provenance onto every output row", {
+  proj <- .ccmp_fixture()
+  proj <- network_condition_compare(proj, disease = "D1")
+  cmp <- patliRResults(proj, "network_condition_compare")
+  expect_true(all(c("disease_gene_source", "score_threshold", "species", "string_version") %in% names(cmp)))
+  expect_true(all(cmp$score_threshold == 400))
+})
+
 test_that(".condition_compare_disease_genes() collapses a duplicated accession to its highest association_score", {
   proj <- .ccmp_fixture()
   dg <- patliRResults(proj, "disease_genes")
@@ -214,6 +248,53 @@ test_that("network_condition_compare(permutation_test = TRUE) does not perturb t
   expect_equal(before, after)
 })
 
+test_that("network_condition_compare(permutation_test = TRUE) handles a singleton pooled z correctly (codex audit regression)", {
+  ## base R's sample(x, n) treats a length-1 NUMERIC x as "sample from 1:x"
+  ## (?sample's documented surprise), not "draw n values from the vector x".
+  ## With a single-compound pool (zc of length 1), the old
+  ## `sample(zc, length(ids))` therefore drew from 1:zc[[1]] instead of
+  ## returning zc[[1]] -- for a z of 5.5 this produced a fabricated null
+  ## distribution (integers 1-5) that never reached 5.5, giving a spuriously
+  ## small two-sided p-value (~2/(n_perm+1)) for what has only one possible
+  ## subset and is therefore not a real permutation test at all (true p = 1).
+  proj <- .test_project()
+  patliRResults(proj, "network_edges") <- data.frame(
+    condition = "A", compound_id = "c1", uniprot_id = "t1", weight = 0.9, stringsAsFactors = FALSE
+  )
+  patliRResults(proj, "disease_genes") <- data.frame(
+    disease_id = "D1", disease_name = "d", uniprot_id = "t1", gene_symbol = "T1",
+    association_score = 0.9, source = "test", fetched_at = Sys.time(), stringsAsFactors = FALSE
+  )
+  patliRResults(proj, "network_proximity") <- data.frame(
+    condition = "A", compound_id = "c1", disease_id = "D1",
+    disease_gene_source = "disease_genes", n_targets_mapped = 1, n_disease_genes_mapped = 1,
+    n_overlap = 1, d_observed = 1, d_random_mean = 2, d_random_sd = 1,
+    z_score = 5.5, p_empirical = 0.1, n_random = 100, seed_used = 1,
+    species = 9606, string_version = "12.0", score_threshold = 400,
+    n_tests_in_family = NA_integer_, p_adjusted = NA_real_, stringsAsFactors = FALSE
+  )
+  proj <- network_condition_compare(proj, disease = "D1", permutation_test = TRUE, n_perm = 500, seed = 1)
+  cmp <- patliRResults(proj, "network_condition_compare")
+  expect_equal(cmp$perm_null_mean, 5.5)
+  expect_equal(cmp$perm_null_sd, 0)
+  expect_equal(cmp$perm_p_value, 1)
+})
+
+test_that("network_condition_compare() rerun with permutation_test = FALSE after TRUE does not abort (codex audit regression)", {
+  ## .network_upsert() used to abort on column removal even when every
+  ## existing row for the touched keys was about to be replaced -- so
+  ## turning permutation_test off again after a TRUE run crashed instead of
+  ## just dropping the perm_* columns for this rerun.
+  proj <- .ccmp_fixture()
+  proj <- network_condition_compare(proj, disease = "D1", permutation_test = TRUE, n_perm = 200)
+  expect_true("perm_p_value" %in% names(patliRResults(proj, "network_condition_compare")))
+
+  proj <- network_condition_compare(proj, disease = "D1", permutation_test = FALSE)
+  cmp <- patliRResults(proj, "network_condition_compare")
+  expect_false("perm_p_value" %in% names(cmp))
+  expect_equal(cmp$condition, c("A", "B"))
+})
+
 test_that("network_condition_compare() rejects a non-positive n_perm", {
   proj <- .ccmp_fixture()
   expect_error(network_condition_compare(proj, disease = "D1", permutation_test = TRUE, n_perm = 0),
@@ -233,4 +314,32 @@ test_that("plot_condition_disease_flow() requires at least two diseases", {
   proj <- .ccmp_fixture()
   proj <- network_condition_compare(proj, disease = "D1")
   expect_error(plot_condition_disease_flow(proj, save = FALSE), "at least two diseases")
+})
+
+test_that("plot_condition_compare()/plot_condition_disease_flow() keep two diseases with the same display label distinct (codex audit regression)", {
+  ## Grouping/colouring/faceting by disease_label (display text) instead of
+  ## disease_id used to fuse two different diseases that happen to share a
+  ## name -- one dodge position / colour in plot_condition_compare(), one
+  ## merged alluvial stratum in plot_condition_disease_flow().
+  testthat::skip_if_not_installed("ggplot2")
+  testthat::skip_if_not_installed("ggalluvial")
+  proj <- .ccmp_two_disease_fixture()
+  dg <- patliRResults(proj, "disease_genes")
+  dg$disease_name[dg$disease_id %in% c("D1", "D2")] <- "same label"
+  patliRResults(proj, "disease_genes") <- dg
+
+  p <- plot_condition_compare(proj, save = FALSE)
+  tab <- attr(p, "table")
+  expect_setequal(tab$disease_id, c("D1", "D2"))
+  expect_equal(unique(tab$disease_label), "same label") # the label really did collide
+  built <- ggplot2::ggplot_build(p)
+  point_layer <- which(vapply(p$layers, function(l) inherits(l$geom, "GeomPoint"), logical(1)))
+  expect_length(unique(built$data[[point_layer]]$colour), 2L) # still two distinct colours
+
+  pf <- plot_condition_disease_flow(proj, save = FALSE)
+  tabf <- attr(pf, "table")
+  expect_setequal(tabf$disease_id, c("D1", "D2"))
+  builtf <- ggplot2::ggplot_build(pf)
+  alluvium_layer <- which(vapply(pf$layers, function(l) inherits(l$geom, "GeomAlluvium"), logical(1)))
+  expect_length(unique(builtf$data[[alluvium_layer]]$fill), 2L) # still two distinct strata
 })

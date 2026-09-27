@@ -56,7 +56,12 @@ NULL
 #'   whether or not each one's z-score came out finite), `n_compounds_finite`
 #'   (of those, how many did -- this is what feeds `mean_z`/`median_z`/`sd_z`/`best_z`),
 #'   `best_z` (most negative, i.e. closest single compound), `n_disease_genes_hit`,
-#'   `n_disease_genes_total`, `disease_gene_coverage` (hit / total). Sorted
+#'   `n_disease_genes_total`, `disease_gene_coverage` (hit / total),
+#'   `disease_gene_source`, `score_threshold`, `species`, `string_version`,
+#'   `network_type` (this call's resolved proximity provenance, stamped onto
+#'   every row -- comparing conditions computed with different values here,
+#'   whether in one call or across separate calls for the same disease, is
+#'   what this function's own consistency check aborts on). Sorted
 #'   with the most negative (closest-to-disease) `aggregate` z first. When
 #'   `permutation_test = TRUE`, also gains `perm_null_mean`, `perm_null_sd`,
 #'   `perm_p_value`, `perm_p_adjusted`, `perm_n_draws`, `perm_seed_used` --
@@ -121,14 +126,51 @@ network_condition_compare <- function(proj, conditions = NULL, disease,
     "disease_genes"
   }
 
+  ## The check above only guards THIS call's own conditions. A separate,
+  ## later call comparing a different subset of conditions for the SAME
+  ## disease (e.g. proximity recomputed at a different STRING threshold or
+  ## network_type for just one of them) would each pass their own internal
+  ## check and still end up stored side by side -- silently combinable by
+  ## plot_condition_compare()/plot_condition_trend(), which read every row
+  ## for a disease at once. Guard the write itself against whatever is
+  ## already stored for conditions this call is NOT about to replace.
+  existing_cmp <- patliRResults(proj, "network_condition_compare")
+  if (!is.null(existing_cmp) && nrow(existing_cmp) > 0) {
+    other <- existing_cmp[existing_cmp$disease_id == disease & !existing_cmp$condition %in% conditions, , drop = FALSE]
+    shared_cols <- intersect(provenance_cols, names(other))
+    if (nrow(other) > 0 && length(shared_cols) > 0) {
+      mism <- Filter(function(col) {
+        ov <- unique(as.character(other[[col]])); pv <- unique(as.character(prox[[col]]))
+        length(ov) > 1 || !identical(ov, pv)
+      }, shared_cols)
+      if (length(mism) > 0) {
+        cli::cli_abort(c(
+          "Condition(s) {.val {unique(other$condition)}}, already stored for {.val {disease}}, have different {.val {mism}} than this call.",
+          "i" = "Comparing or plotting conditions together across separate network_condition_compare() calls is only valid when they share the same proximity provenance.",
+          "i" = "Re-run the stored condition(s) with matching arguments, or restrict {.arg conditions} to just the ones computed the same way."
+        ))
+      }
+    }
+  }
+
   dg <- .condition_compare_disease_genes(proj, disease, source = disease_gene_source)
+
+  ## resolved provenance (already validated as unique across `conditions`
+  ## above), stamped onto every output row so a LATER call comparing a
+  ## different condition subset for the same disease -- or a plotting
+  ## consumer reading the whole stored table at once -- can detect a
+  ## mismatch instead of silently combining incompatible interactomes.
+  provenance_row <- stats::setNames(
+    lapply(provenance_cols, function(col) if (nrow(prox) > 0) unique(as.character(prox[[col]]))[1] else NA_character_),
+    provenance_cols
+  )
 
   rows <- lapply(conditions, function(cond) {
     p <- prox[prox$condition == cond, , drop = FALSE]
     z <- p$z_score[is.finite(p$z_score)]
     ct <- edges_all[edges_all$condition == cond, , drop = FALSE]
     hit <- unique(ct$uniprot_id[ct$uniprot_id %in% dg$uniprot_id])
-    data.frame(
+    out <- data.frame(
       condition = cond, disease_id = disease,
       n_compounds_present = length(unique(ct$compound_id)),
       n_compounds_scored = nrow(p), n_compounds_finite = length(z),
@@ -140,6 +182,8 @@ network_condition_compare <- function(proj, conditions = NULL, disease,
       disease_gene_coverage = if (nrow(dg) > 0) length(hit) / nrow(dg) else NA_real_,
       stringsAsFactors = FALSE
     )
+    for (col in names(provenance_row)) out[[col]] <- provenance_row[[col]]
+    out
   })
   result <- do.call(rbind, rows)
 
@@ -253,7 +297,13 @@ network_condition_compare <- function(proj, conditions = NULL, disease,
                         perm_p_value = NA_real_, stringsAsFactors = FALSE))
     }
     obs <- stat_fn(zc[ids])
-    null <- replicate(n_perm, stat_fn(sample(zc, length(ids))))
+    ## zc[sample.int(length(zc), length(ids))], NOT sample(zc, length(ids)):
+    ## base R's sample() treats a numeric vector of length 1 as "sample from
+    ## 1:that value" (?sample's documented surprise for a length-one x), so
+    ## with a single-compound pool sample(zc, 1) would draw from 1:zc[[1]]
+    ## instead of returning zc[[1]] itself, silently producing a null
+    ## distribution unrelated to the real (degenerate, single-value) one.
+    null <- replicate(n_perm, stat_fn(zc[sample.int(length(zc), length(ids))]))
     lo <- (1 + sum(null <= obs)) / (1 + n_perm)
     hi <- (1 + sum(null >= obs)) / (1 + n_perm)
     data.frame(condition = cond, perm_null_mean = mean(null), perm_null_sd = stats::sd(null),

@@ -53,6 +53,44 @@ test_that("rank_candidates() aborts if criteria= drops a mandatory criterion", {
   expect_error(rank_candidates(proj, condition = "FLO-ET", criteria = "centrality"), "mandatory")
 })
 
+test_that("rank_candidates() roll_up = 'weighted_mean' tolerates an NA edge weight (codex audit regression)", {
+  ## network_build() explicitly permits an edge with no weight at all (e.g.
+  ## min_score = NULL keeps every edge regardless of import-probability
+  ## confidence). Before the fix, .rank_rollup_target_to_compound() only
+  ## filtered on the target VALUE being non-NA, not the weight -- an NA
+  ## weight survived into sum(w), making `if (sum(w) > 0)` error ("missing
+  ## value where TRUE/FALSE needed") instead of falling through to the
+  ## unweighted mean() the switch already has for sum(w) == 0.
+  proj <- .rank_test_setup()
+  edges <- patliRResults(proj, "network_edges")
+  flo <- which(edges$condition == "FLO-ET")
+  testthat::skip_if(length(flo) == 0, "no FLO-ET edges in the fixture")
+  edges$weight[flo[1]] <- NA_real_
+  patliRResults(proj, "network_edges") <- edges
+  expect_no_error(rank_candidates(proj, condition = "FLO-ET", roll_up = "weighted_mean"))
+
+  ## every edge unweighted -> falls all the way through to the unweighted mean
+  edges$weight[flo] <- NA_real_
+  patliRResults(proj, "network_edges") <- edges
+  expect_no_error(rank_candidates(proj, condition = "FLO-ET", roll_up = "weighted_mean"))
+})
+
+test_that("rank_candidates() ADME criterion tolerates every rule's pass being NA for a compound (codex audit regression)", {
+  ## Formula aggregate() defaults to na.omit, dropping every row before
+  ## grouping -- if EVERY compound's `pass` came out NA (e.g. every
+  ## descriptor failed to compute), aggregate() used to error outright
+  ## ("no rows to aggregate") instead of returning an empty/NA result.
+  proj <- .network_stats_test_setup()
+  proj <- network_centrality(proj)
+  cps <- .rank_flo_compounds(proj)
+  adme <- data.frame(compound_id = rep(cps, each = 2), rule = c("ro5", "veber"),
+                     pass = NA, stringsAsFactors = FALSE)
+  patliRResults(proj, "adme_filtered") <- adme
+  proj2 <- rank_candidates(proj, condition = "FLO-ET", criteria = c("adme", "centrality"))
+  rc <- patliRResults(proj2, "rank_candidates")
+  expect_true(all(is.na(rc$crit_adme_pass_frac)))
+})
+
 test_that("rank_candidates() with only mandatory criteria produces a well-formed table", {
   proj <- .rank_test_setup()
   cps <- .rank_flo_compounds(proj)
@@ -161,6 +199,55 @@ test_that("rank_candidates() synergy criterion takes the best (max) partner scor
   expect_true(all(is.na(rc$crit_synergy_best[!rc$compound_id %in% c(a, b, d)])))
 })
 
+test_that("rank_candidates() aborts when proximity and synergy were computed on different STRING interactomes (codex audit regression)", {
+  ## Both criteria key off (condition, disease_id) alone, so recomputing
+  ## proximity at a new score_threshold/network_type without rerunning
+  ## synergy used to combine them silently -- network_synergy() only guards
+  ## this at the moment IT is run, not at the moment rank_candidates()
+  ## consumes both tables together, which a rerun of only one bypasses.
+  proj <- .rank_test_setup()
+  cps <- .rank_flo_compounds(proj)
+  testthat::skip_if(length(cps) < 2, "fixture needs at least 2 compounds")
+
+  prox <- data.frame(condition = "FLO-ET", compound_id = cps, disease_id = "D1", z_score = -1,
+                     species = 9606, string_version = "12.0", score_threshold = 700,
+                     network_type = "full", stringsAsFactors = FALSE)
+  syn <- data.frame(condition = "FLO-ET", disease_id = "D1", compound_a = cps[1], compound_b = cps[2],
+                    synergy_score = 0.5, cheng_class = "P2",
+                    species = 9606, string_version = "12.0", score_threshold = 400,
+                    network_type = "full", stringsAsFactors = FALSE)
+  patliRResults(proj, "network_proximity") <- prox
+  patliRResults(proj, "network_synergy") <- syn
+  expect_error(
+    rank_candidates(proj, condition = "FLO-ET", disease = "D1", criteria = c("adme", "centrality", "proximity", "synergy")),
+    "different STRING interactomes"
+  )
+
+  ## matching provenance: no error
+  syn$score_threshold <- 700
+  patliRResults(proj, "network_synergy") <- syn
+  expect_no_error(
+    rank_candidates(proj, condition = "FLO-ET", disease = "D1", criteria = c("adme", "centrality", "proximity", "synergy"))
+  )
+})
+
+test_that("rank_candidates() does not compare provenance columns neither table carries", {
+  ## An older (pre-network_type, or pre-provenance-columns entirely) pair of
+  ## tables has nothing to compare -- "unknown", not a mismatch, the same
+  ## graceful-degradation policy network_synergy()'s own guard uses.
+  proj <- .rank_test_setup()
+  cps <- .rank_flo_compounds(proj)
+  testthat::skip_if(length(cps) < 2, "fixture needs at least 2 compounds")
+  prox <- data.frame(condition = "FLO-ET", compound_id = cps, disease_id = "D1", z_score = -1, stringsAsFactors = FALSE)
+  syn <- data.frame(condition = "FLO-ET", disease_id = "D1", compound_a = cps[1], compound_b = cps[2],
+                    synergy_score = 0.5, cheng_class = "P2", stringsAsFactors = FALSE)
+  patliRResults(proj, "network_proximity") <- prox
+  patliRResults(proj, "network_synergy") <- syn
+  expect_no_error(
+    rank_candidates(proj, condition = "FLO-ET", disease = "D1", criteria = c("adme", "centrality", "proximity", "synergy"))
+  )
+})
+
 test_that("rank_candidates() module_robustness joins r_index via network_module_membership", {
   proj <- .rank_test_setup()
   cps <- .rank_flo_compounds(proj)
@@ -193,6 +280,31 @@ test_that("rank_candidates() rewards a compound that dominates on one criterion 
   proj <- rank_candidates(proj, condition = "FLO-ET", disease = "D1")
   rc <- patliRResults(proj, "rank_candidates")
   expect_equal(rc$pareto_front[rc$compound_id == best], 1L)
+})
+
+test_that("rank_candidates() combines conditions with different optional-criteria sets (codex audit regression)", {
+  ## rbind() (unlike a filling bind_rows()) errors on data.frames with
+  ## different column sets ("number of columns of arguments does not
+  ## match") -- two conditions auto-detecting a different subset of
+  ## optional criteria (one has network_hub_penalty results, the other does
+  ## not) used to crash the whole call instead of producing a combined
+  ## table with NA for the criterion the second condition never had.
+  proj <- .rank_test_setup()
+  conditions <- unique(patliRResults(proj, "network_edges")$condition)
+  testthat::skip_if(length(conditions) < 2, "fixture needs at least 2 conditions")
+  cond_a <- conditions[1]
+  edges_a <- patliRResults(proj, "network_edges")
+  edges_a <- edges_a[edges_a$condition == cond_a, ]
+  hp <- data.frame(condition = cond_a, uniprot_id = unique(edges_a$uniprot_id),
+                   score_adjusted = 0.5, stringsAsFactors = FALSE)
+  patliRResults(proj, "network_hub_penalty") <- hp
+
+  proj <- rank_candidates(proj)
+  rc <- patliRResults(proj, "rank_candidates")
+  expect_setequal(unique(rc$condition), conditions)
+  expect_true("crit_hub_penalty" %in% names(rc))
+  expect_false(any(is.na(rc$crit_hub_penalty[rc$condition == cond_a])))
+  expect_true(all(is.na(rc$crit_hub_penalty[rc$condition != cond_a])))
 })
 
 test_that("rank_candidates() rebuilding one condition does not touch the others", {

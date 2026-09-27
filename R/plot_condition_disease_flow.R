@@ -54,6 +54,10 @@ plot_condition_disease_flow <- function(proj, disease = NULL, aggregate = c("mea
   }
 
   z_col <- paste0(aggregate, "_z")
+  ## disease_label is display text only -- two distinct disease_ids sharing
+  ## a label would otherwise merge into a single alluvial stratum (axis2
+  ## groups by whatever value it is given), silently combining two different
+  ## diseases' flows into one node.
   dat$disease_label <- vapply(dat$disease_id, function(d) .plot_disease_label(proj, d, with_id = FALSE), character(1))
   ## flow thickness = strength of the effect (more negative z -> thicker); a z at or
   ## above 0 (no signal, or weaker than the null) still gets a thin, floored flow
@@ -68,17 +72,24 @@ plot_condition_disease_flow <- function(proj, disease = NULL, aggregate = c("mea
   dat$condition <- factor(dat$condition, levels = cond_order)
 
   if (is.null(height)) height <- max(4, 0.4 * length(cond_order) + 2)
-  disease_colors <- .plot_contrast_palette(length(unique(dat$disease_label)))
-  names(disease_colors) <- sort(unique(dat$disease_label))
+  disease_ids_present <- sort(unique(dat$disease_id))
+  disease_colors <- .plot_contrast_palette(length(disease_ids_present))
+  names(disease_colors) <- disease_ids_present
+  disease_id_labels <- stats::setNames(dat$disease_label, dat$disease_id)
+  disease_id_labels <- disease_id_labels[!duplicated(names(disease_id_labels))]
+  ## the stratum text is drawn for BOTH axes (condition names as well as
+  ## disease ids) -- a condition maps to itself, a disease_id to its label
+  stratum_labels <- c(stats::setNames(as.character(cond_order), as.character(cond_order)), disease_id_labels)
 
-  p <- ggplot2::ggplot(dat, ggplot2::aes(axis1 = .data$condition, axis2 = .data$disease_label, y = .data$weight)) +
-    ggalluvial::geom_alluvium(ggplot2::aes(fill = .data$disease_label), width = 1 / 5, alpha = 0.75) +
+  p <- ggplot2::ggplot(dat, ggplot2::aes(axis1 = .data$condition, axis2 = .data$disease_id, y = .data$weight)) +
+    ggalluvial::geom_alluvium(ggplot2::aes(fill = .data$disease_id), width = 1 / 5, alpha = 0.75) +
     ggalluvial::geom_stratum(width = 1 / 5, fill = "grey92", colour = "grey40") +
     ggplot2::geom_text(stat = ggalluvial::StatStratum,
-                       ggplot2::aes(label = ggplot2::after_stat(.plot_truncate(as.character(stratum), 22))),
-                       size = 2.9) +
+                       ggplot2::aes(label = ggplot2::after_stat(
+                         .plot_truncate(unname(stratum_labels[as.character(stratum)]), 22)
+                       )), size = 2.9) +
     ggplot2::scale_x_discrete(limits = c("condition", "disease"), expand = ggplot2::expansion(add = 0.3)) +
-    ggplot2::scale_fill_manual(values = disease_colors, name = "Disease") +
+    ggplot2::scale_fill_manual(values = disease_colors, name = "Disease", labels = disease_id_labels) +
     ggplot2::labs(
       title = "Which disease does each extract line up with best?",
       subtitle = .plot_wrap(paste0(

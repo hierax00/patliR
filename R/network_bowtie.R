@@ -207,9 +207,18 @@ network_bowtie <- function(proj, condition = NULL, species = 9606, version = "12
 
   result <- do.call(rbind, rows)
   rownames(result) <- NULL
-  bowtie_touched <- unique(edges_all[edges_all$condition %in% conditions, c("condition", "compound_id", "uniprot_id"), drop = FALSE])
+  ## Replace the WHOLE selected condition scope, not just the edges still
+  ## present: touched_keys built from the current network_edges (as before)
+  ## would miss an edge that disappeared since the last run (e.g. a compound
+  ## removed, or a target no longer predicted) -- that edge is absent from
+  ## both `result` and the old touched_keys, so its stale bow-tie annotation
+  ## would survive forever, a mix of the current network and an obsolete
+  ## one. Matching on `condition` alone (every `conditions` requested, even
+  ## one that ends up with zero edges and .empty_network_bowtie_row())
+  ## guarantees a full recompute wipes everything old for that condition.
+  bowtie_touched <- data.frame(condition = conditions, stringsAsFactors = FALSE)
   result <- .network_upsert(
-    proj, "network_bowtie", result, c("condition", "compound_id", "uniprot_id"),
+    proj, "network_bowtie", result, "condition",
     touched_keys = bowtie_touched
   )
   summary_result <- .network_upsert(

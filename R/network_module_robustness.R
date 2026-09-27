@@ -236,6 +236,17 @@ network_module_robustness <- function(proj, condition = NULL,
   }
 
   conditions <- .network_resolve_conditions(proj, condition)
+  ## snapshot the caller's RNG state *before* touching it -- if `seed = NULL`,
+  ## sample.int() below draws from (and advances) this same stream to pick a
+  ## seed, and unlike the internal .with_seed(seed) calls further down (each
+  ## already isolated around the one, now-resolved, numeric `seed`), nothing
+  ## previously restored the caller's state after *this* draw (codex audit,
+  ## 2026-09-27)
+  old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
+  on.exit({
+    if (!is.null(old_seed)) assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    else if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv)
+  }, add = TRUE)
   if (is.null(seed)) seed <- sample.int(.Machine$integer.max, 1)
   stopifnot(is.numeric(seed), length(seed) == 1)
   seed <- as.integer(seed)

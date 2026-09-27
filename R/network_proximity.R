@@ -153,9 +153,14 @@ NULL
 #'   (columns `condition`, `compound_id`, `disease_id`,
 #'   `disease_gene_source`, `draw` (integer, `1..n_random`), `d_random`
 #'   (double, the resampled "closest" distance for that draw, `NA` when
-#'   that draw's resampled pair had no finite path) -- `n_random` rows per
-#'   compound that received a row in `network_proximity`), also written to
-#'   `results/network_proximity_null.csv`.
+#'   that draw's resampled pair had no finite path), and the same
+#'   `species`/`string_version`/`score_threshold`/`network_type`/`seed_used`
+#'   as the `network_proximity` row this null belongs to -- since a
+#'   `store_null = FALSE` rerun leaves these draws untouched,
+#'   [plot_proximity(view = "null")][plot_proximity()] needs them to detect
+#'   a main row that has since been recomputed differently -- `n_random`
+#'   rows per compound that received a row in `network_proximity`), also
+#'   written to `results/network_proximity_null.csv`.
 #'
 #' @examples
 #' \dontrun{
@@ -244,9 +249,18 @@ network_proximity <- function(proj, condition = NULL, disease,
     ))
   }
 
+  ## snapshot the caller's RNG state *before* touching it -- if `seed = NULL`,
+  ## sample.int() below draws from (and advances) this same stream to pick
+  ## used_seed, so capturing old_seed any later (e.g. inside .with_seed(),
+  ## after used_seed was already generated) would restore a state one draw
+  ## past the caller's real starting point (codex audit, 2026-09-27)
+  old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
   used_seed <- if (is.null(seed)) sample.int(.Machine$integer.max, 1) else as.integer(seed)
-  restore_rng <- .with_seed(used_seed)
-  on.exit(restore_rng(), add = TRUE)
+  set.seed(used_seed)
+  on.exit({
+    if (!is.null(old_seed)) assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    else if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv)
+  }, add = TRUE)
 
   string_db <- .network_stringdb(proj, species, version, score_threshold, network_type)
 
@@ -382,6 +396,15 @@ network_proximity <- function(proj, condition = NULL, disease,
           disease_gene_source = disease_genes,
           draw = seq_len(n_random),
           d_random = ifelse(is.finite(d_random_raw), d_random_raw, NA_real_),
+          ## same provenance as the main network_proximity row this null
+          ## belongs to -- store_null = FALSE deliberately leaves a previous
+          ## run's draws untouched (see the docs above), so a later
+          ## plot_proximity(view = "null") joining the CURRENT main row
+          ## against these draws needs a way to tell they came from the
+          ## same run, not an old one at a different interactome/seed.
+          species = as.numeric(species), string_version = as.character(version),
+          score_threshold = as.numeric(score_threshold), network_type = as.character(network_type),
+          seed_used = used_seed,
           stringsAsFactors = FALSE
         )
       }
@@ -740,6 +763,8 @@ network_proximity <- function(proj, condition = NULL, disease,
     condition = character(0), compound_id = character(0), disease_id = character(0),
     disease_gene_source = character(0),
     draw = integer(0), d_random = double(0),
+    species = double(0), string_version = character(0), score_threshold = double(0),
+    network_type = character(0), seed_used = integer(0),
     stringsAsFactors = FALSE
   )
 }

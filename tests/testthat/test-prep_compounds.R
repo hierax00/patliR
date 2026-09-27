@@ -84,6 +84,28 @@ test_that("prep_compounds() requires the identifier column to exist", {
   )
 })
 
+test_that("prep_compounds(id_col = ) actually reads the named column (codex audit regression)", {
+  ## Before the fix, id_col was validated for presence and then ignored --
+  ## pubchem_id/smiles were always read from the literal "PubChemCID"/
+  ## "SMILES" column names, so a table using a nonstandard column name for
+  ## the identifier silently produced all-NA identity for every row.
+  proj <- .test_project()
+  data_cid <- data.frame(Name = "Ethanol", CID = "702", SMILES = "CCO", stringsAsFactors = FALSE)
+  proj <- prep_compounds(proj, data_cid, identifier = "pubchem", id_col = "CID")
+  cmp <- compounds(proj)
+  expect_equal(nrow(cmp), 1)
+  expect_equal(cmp$pubchem_id, "702")
+
+  proj2 <- .test_project()
+  data_struct <- data.frame(Name = "Ethanol", PubChemCID = "702", structure = "CCO", stringsAsFactors = FALSE)
+  proj2 <- prep_compounds(proj2, data_struct, identifier = "smiles", id_col = "structure")
+  cmp2 <- compounds(proj2)
+  expect_equal(nrow(cmp2), 1)
+  expect_false(is.na(cmp2$canonical_smiles))
+  ## the conventional PubChemCID column is still picked up as the secondary field
+  expect_equal(cmp2$pubchem_id, "702")
+})
+
 test_that("prep_compounds() fetches a missing SMILES via PubChemCID even when identifier = 'smiles'", {
   ## Regression: the PubChem fetch used to only trigger when
   ## identifier == "pubchem". A Scenario B table keyed by SMILES
@@ -111,4 +133,30 @@ test_that("prep_compounds() fetches a missing SMILES via PubChemCID even when id
   expect_equal(nrow(cmp), 1)
   expect_equal(cmp$source, "pubchem_fetch")
   expect_false(is.na(cmp$canonical_smiles))
+})
+
+test_that("prep_compounds() never reissues a removed compound's id (codex audit regression)", {
+  ## Before the fix, .next_compound_ids() derived the next id purely from
+  ## compounds(proj)$id -- so removing a compound (e.g. adme_filter()'s
+  ## hard_cutoff, simulated here directly) and then adding a new one reissued
+  ## the removed compound's id, silently attaching any leftover downstream
+  ## result rows (adme_local, targets_imported, ...) still keyed by that old
+  ## id to the unrelated new molecule.
+  proj <- .test_project()
+  proj <- prep_compounds(proj, .test_compound_list()[1:2, ], identifier = "pubchem")
+  expect_equal(compounds(proj)$id, c("C0001", "C0002"))
+
+  ## simulate a hard_cutoff-style removal of C0002
+  compounds(proj) <- compounds(proj)[compounds(proj)$id == "C0001", , drop = FALSE]
+  expect_equal(compounds(proj)$id, "C0001")
+
+  proj <- prep_compounds(proj, .test_compound_list()[3, , drop = FALSE], identifier = "pubchem")
+  new_id <- compounds(proj)$id[compounds(proj)$name == .test_compound_list()$Name[3]]
+  expect_equal(new_id, "C0003") # not C0002
+
+  ## the high-water mark survives a save/reload round trip
+  proj2 <- patliR_load(projectDir(proj))
+  proj2 <- prep_compounds(proj2, .test_compound_list()[4, , drop = FALSE], identifier = "pubchem")
+  newer_id <- compounds(proj2)$id[compounds(proj2)$name == .test_compound_list()$Name[4]]
+  expect_equal(newer_id, "C0004")
 })

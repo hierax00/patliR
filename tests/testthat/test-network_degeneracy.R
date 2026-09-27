@@ -241,6 +241,30 @@ test_that("network_degeneracy(annotation = 'direct') is seed-reproducible (spec 
   expect_equal(r1$functional_similarity, r2$functional_similarity)
 })
 
+test_that("network_degeneracy(seed = NULL) does not leak RNG state (codex audit regression)", {
+  ## The seed=42 test above never exercises the auto-generation branch
+  ## (sample.int() is only called when seed = NULL) -- before the fix,
+  ## .with_seed() snapshotted the caller's RNG state one draw AFTER that
+  ## auto-generated seed had already been picked, so restoring it left the
+  ## caller's stream advanced by exactly one step.
+  testthat::skip_if_not_installed("clusterProfiler")
+  testthat::skip_if_not_installed("org.Hs.eg.db")
+  testthat::skip_if_not_installed("GOSemSim")
+  skip_on_cran()
+
+  set.seed(123)
+  seed_before <- get(".Random.seed", envir = .GlobalEnv)
+  .ndeg(.network_stats_test_setup(), condition = "FLO-ET", n_random = 16, seed = NULL)
+  seed_after <- get(".Random.seed", envir = .GlobalEnv)
+  expect_identical(seed_before, seed_after)
+
+  ## also: no .Random.seed at all beforehand -> none left behind afterward
+  had_seed <- exists(".Random.seed", envir = .GlobalEnv)
+  if (had_seed) rm(".Random.seed", envir = .GlobalEnv)
+  .ndeg(.network_stats_test_setup(), condition = "FLO-ET", n_random = 16, seed = NULL)
+  expect_false(exists(".Random.seed", envir = .GlobalEnv))
+})
+
 test_that("network_degeneracy(annotation = 'jaccard') reproduces the enriched-pathway Jaccard (regression, spec test 1)", {
   testthat::skip_if_not_installed("clusterProfiler")
   testthat::skip_if_not_installed("org.Hs.eg.db")

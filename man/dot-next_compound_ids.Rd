@@ -4,12 +4,19 @@
 \alias{.next_compound_ids}
 \title{Next block of sequential internal compound ids, continuing from existing}
 \usage{
-.next_compound_ids(existing_ids, n)
+.next_compound_ids(existing_ids, n, min_start = 1L)
 }
 \arguments{
 \item{existing_ids}{Character vector of already-used ids, e.g. \code{"C0007"}.}
 
 \item{n}{How many new ids to generate.}
+
+\item{min_start}{Integer, default \code{1L}: the block starts at
+\verb{max(min_start, 1 + the highest number in existing_ids)}. Callers pass
+the project's persisted id high-water mark here (see
+\code{.compound_id_registry_max()}) so a ever-issued id is not reused for a
+different molecule just because the compound that had it was removed
+from \code{compounds(proj)}.}
 }
 \value{
 Character vector of length \code{n}, e.g. \code{c("C0008", "C0009")}.

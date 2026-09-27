@@ -65,6 +65,37 @@ test_that("plot_proximity(view = \"null\") happy path with store_null = TRUE dat
   expect_s3_class(p, "ggplot")
 })
 
+test_that("plot_proximity(view = \"null\") aborts when the stored null draws are from a different network_proximity() run (codex audit regression)", {
+  ## store_null = FALSE (the default) leaves a previous run's draws
+  ## untouched when a condition/disease is recomputed at a different seed/
+  ## interactome -- the join used to have no way to detect that, joining a
+  ## fresh d_observed/z_score against a stale null histogram.
+  testthat::skip_if_not_installed("ggplot2")
+  proj <- .network_stats_test_setup()
+  proj <- .proximity_null_fixture(proj, n_compounds = 3)
+
+  ## stamp matching provenance on the null draws first (a real store_null =
+  ## TRUE run would always do this) ...
+  null <- patliRResults(proj, "network_proximity_null")
+  null$species <- 9606; null$string_version <- "12.0"
+  null$score_threshold <- 400; null$network_type <- "full"; null$seed_used <- 1L
+  patliRResults(proj, "network_proximity_null") <- null
+  prox <- patliRResults(proj, "network_proximity")
+  prox$network_type <- "full"
+  patliRResults(proj, "network_proximity") <- prox
+  expect_no_error(plot_proximity(proj, condition = "FLO-ET", view = "null", save = FALSE))
+
+  ## ... then simulate a rerun of the MAIN table only (a new seed), leaving
+  ## the null draws exactly as they were -- store_null = FALSE's own
+  ## documented behaviour
+  prox$seed_used <- 2L
+  patliRResults(proj, "network_proximity") <- prox
+  expect_error(
+    plot_proximity(proj, condition = "FLO-ET", view = "null", save = FALSE),
+    "different .*network_proximity.* runs|seed_used"
+  )
+})
+
 test_that("plot_proximity(view = \"null\") aborts with a clear message when store_null was not set", {
   testthat::skip_if_not_installed("ggplot2")
   proj <- .network_stats_test_setup()

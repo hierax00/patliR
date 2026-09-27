@@ -121,3 +121,23 @@ test_that("plot_disease_map_flow() errors clearly when no target in scope has an
   patliRResults(proj, "targets_disease") <- NULL
   expect_error(.dmf_plot(proj, conditions = c("A", "B"), save = FALSE), "No target-disease association")
 })
+
+test_that("plot_disease_map_flow() handles an association table with NO scores at all (codex audit regression)", {
+  ## Formula aggregate() defaults to na.omit, dropping every row before
+  ## grouping -- if EVERY association_score in scope is NA (a real case: a
+  ## purely GO-sourced disease/target association, which carries no score),
+  ## the tie-break aggregate() used to error outright ("no rows to
+  ## aggregate") rather than reach its own all(is.na(x)) -Inf branch.
+  testthat::skip_if_not_installed("ggalluvial")
+  proj <- .dmf_project()
+  prof <- patliRResults(proj, "targets_disease_profile"); prof$association_score <- NA_real_
+  patliRResults(proj, "targets_disease_profile") <- prof
+  dg <- patliRResults(proj, "disease_genes"); dg$association_score <- NA_real_
+  patliRResults(proj, "disease_genes") <- dg
+  td <- patliRResults(proj, "targets_disease"); td$association_score <- NA_real_
+  patliRResults(proj, "targets_disease") <- td
+
+  p <- .dmf_plot(proj, conditions = c("A", "B"), save = FALSE)
+  tab <- attr(p, "table")
+  expect_gt(nrow(tab), 0)
+})

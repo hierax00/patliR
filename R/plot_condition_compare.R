@@ -61,6 +61,10 @@ plot_condition_compare <- function(proj, disease = NULL, aggregate = c("mean", "
   dat$condition <- factor(dat$condition, levels = rev(ord))       # ... drawn at the top
   dat$ymin <- dat[[z_col]] - ifelse(is.na(dat$sd_z), 0, dat$sd_z)
   dat$ymax <- dat[[z_col]] + ifelse(is.na(dat$sd_z), 0, dat$sd_z)
+  ## disease_label is display text only -- two distinct disease_ids can
+  ## share a label (e.g. two imported custom modules named the same thing),
+  ## and grouping/colouring by the label rather than the id would silently
+  ## fuse them into one dodge position and one legend entry.
   dat$disease_label <- vapply(dat$disease_id, function(d) .plot_disease_label(proj, d, with_id = FALSE), character(1))
   disease_label <- paste(unique(dat$disease_label), collapse = " / ")
 
@@ -68,14 +72,16 @@ plot_condition_compare <- function(proj, disease = NULL, aggregate = c("mean", "
   dodge <- if (multi) ggplot2::position_dodge(width = 0.5) else ggplot2::position_identity()
 
   p <- ggplot2::ggplot(dat, ggplot2::aes(y = .data$condition, x = .data[[z_col]],
-                                         colour = .data$disease_label, group = .data$disease_label)) +
+                                         colour = .data$disease_id, group = .data$disease_id)) +
     ggplot2::geom_vline(xintercept = 0, linetype = "dashed", colour = "grey60") +
     ggplot2::geom_errorbarh(ggplot2::aes(xmin = .data$ymin, xmax = .data$ymax), height = 0.15,
                             position = dodge, show.legend = FALSE) +
     ggplot2::geom_point(ggplot2::aes(size = .data$n_compounds_present), position = dodge) +
     ggplot2::scale_size_continuous(name = "Compounds\npresent", range = c(2, 6))
   if (multi) {
-    p <- p + ggplot2::scale_colour_brewer(palette = "Set1", name = "Disease")
+    disease_id_labels <- stats::setNames(dat$disease_label, dat$disease_id)
+    disease_id_labels <- disease_id_labels[!duplicated(names(disease_id_labels))]
+    p <- p + ggplot2::scale_colour_brewer(palette = "Set1", name = "Disease", labels = disease_id_labels)
   } else {
     p <- p + ggplot2::scale_colour_manual(values = "#2980b9", guide = "none") +
       ggplot2::geom_text(ggplot2::aes(label = sprintf("n=%d", .data$n_compounds_present)),

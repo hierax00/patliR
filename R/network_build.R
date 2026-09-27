@@ -482,7 +482,15 @@ network_build <- function(proj, condition = NULL,
     ## proceed, with one summary line. A column *removal* or a *type
     ## conflict* on a shared column still aborts -- those are not something
     ## this function can silently reconcile.
-    if (length(only_old) > 0 || length(type_conflict) > 0) {
+    ## A column only in `kept` is only a real removal if some SURVIVING row
+    ## actually carries it -- if every existing row was touched (kept has 0
+    ## rows), there is nothing to lose by dropping that column name, just a
+    ## schema that shrank because an optional output (e.g.
+    ## permutation_test/rdkit_qc) was turned off. Without this guard, a full
+    ## replace of every existing row -- the common case for a rerun with an
+    ## optional column disabled -- aborted every time, even though it is
+    ## exactly the "just rebuild it" case this function otherwise supports.
+    if ((length(only_old) > 0 && nrow(kept) > 0) || length(type_conflict) > 0) {
       cli::cli_abort(c(
         "{.fn .network_upsert}: the new {.val {name}} rows and the existing table are not reconcilable.",
         if (length(only_old) > 0) c("i" = "Only in the existing table (column removed): {.val {only_old}}") else NULL,

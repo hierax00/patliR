@@ -284,6 +284,32 @@ plot_proximity <- function(proj, condition = NULL, disease = NULL,
     ))
   }
 
+  ## store_null = FALSE (the default) deliberately leaves a previous run's
+  ## draws in network_proximity_null untouched when a condition/disease is
+  ## recomputed (a different seed, interactome, or STRING threshold) -- so
+  ## the join above, on (condition, disease_id, compound_id) alone, could
+  ## otherwise pair a FRESH d_observed/z_score against an OLD null
+  ## distribution without either table's own contents flagging it.
+  prov_cols <- intersect(c("species", "string_version", "score_threshold", "network_type", "seed_used"),
+                        intersect(names(main_scope), names(dat_null)))
+  if (length(prov_cols) > 0) {
+    null_key <- paste(dat_null$condition, dat_null$disease_id, dat_null$compound_id, sep = "\r")
+    null_first <- dat_null[!duplicated(null_key), , drop = FALSE]
+    null_first_key <- null_key[!duplicated(null_key)]
+    m <- match(paste(main_scope$condition, main_scope$disease_id, main_scope$compound_id, sep = "\r"), null_first_key)
+    stale <- Filter(function(col) {
+      mv <- main_scope[[col]]; nv <- null_first[[col]][m]
+      any(!is.na(mv) & !is.na(nv) & as.character(mv) != as.character(nv))
+    }, prov_cols)
+    if (length(stale) > 0) {
+      cli::cli_abort(c(
+        "Some compound(s)' {.val network_proximity} row and its stored {.val network_proximity_null} draws disagree on {.val {stale}} -- they came from different {.fn network_proximity} runs.",
+        "i" = "{.code store_null = FALSE} (the default) leaves a previous run's draws untouched when a condition/disease is recomputed.",
+        "i" = "Re-run {.fn network_proximity} with {.code store_null = TRUE} to refresh the stored draws for this condition/disease."
+      ))
+    }
+  }
+
   ## top_n cap, ranked by |z_score| descending -- a grid of 30+ histograms
   ## is illegible (spec 3.7).
   main_scope <- main_scope[order(-abs(main_scope$z_score)), , drop = FALSE]

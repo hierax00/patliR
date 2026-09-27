@@ -50,8 +50,8 @@ This is the foundation the rest of the \verb{network_*} family builds on.
 }
 \section{Why \code{target_source = "imported"} is the default}{
 
-\code{targets_consensus()} and \code{targets_bipartite()} are not implemented yet
-(see \code{ROADMAP.md}), so \code{"imported"} (from
+\code{targets_consensus()} and \code{targets_bipartite()} are not implemented yet,
+so \code{"imported"} (from
 \code{\link[=targets_import]{targets_import()}}/\code{\link[=targets_import_batch]{targets_import_batch()}}) is the only source that
 exists; the other two raise a clear "not implemented yet" error if
 requested.

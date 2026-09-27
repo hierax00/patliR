@@ -80,7 +80,7 @@ test_that("network_condition_compare() re-run wipes a target that no longer qual
   expect_false("t2" %in% tg$uniprot_id[tg$condition == "A"]) # not a stale leftover row
 })
 
-test_that("network_condition_compare() aborts when a later call's proximity provenance differs from a condition already stored for the same disease (codex audit regression)", {
+test_that("network_condition_compare() aborts when a later call's proximity provenance differs from a condition already stored for the same disease (regression)", {
   ## The pre-existing check above only guards conditions passed to the SAME
   ## call -- a single-condition call is trivially self-consistent, so a
   ## second call comparing just "B" (recomputed at a different STRING
@@ -248,7 +248,7 @@ test_that("network_condition_compare(permutation_test = TRUE) does not perturb t
   expect_equal(before, after)
 })
 
-test_that("network_condition_compare(permutation_test = TRUE) handles a singleton pooled z correctly (codex audit regression)", {
+test_that("network_condition_compare(permutation_test = TRUE) handles a singleton pooled z correctly (regression)", {
   ## base R's sample(x, n) treats a length-1 NUMERIC x as "sample from 1:x"
   ## (?sample's documented surprise), not "draw n values from the vector x".
   ## With a single-compound pool (zc of length 1), the old
@@ -280,7 +280,7 @@ test_that("network_condition_compare(permutation_test = TRUE) handles a singleto
   expect_equal(cmp$perm_p_value, 1)
 })
 
-test_that("network_condition_compare() rerun with permutation_test = FALSE after TRUE does not abort (codex audit regression)", {
+test_that("network_condition_compare() rerun with permutation_test = FALSE after TRUE does not abort (regression)", {
   ## .network_upsert() used to abort on column removal even when every
   ## existing row for the touched keys was about to be replaced -- so
   ## turning permutation_test off again after a TRUE run crashed instead of
@@ -316,7 +316,7 @@ test_that("plot_condition_disease_flow() requires at least two diseases", {
   expect_error(plot_condition_disease_flow(proj, save = FALSE), "at least two diseases")
 })
 
-test_that("plot_condition_compare()/plot_condition_disease_flow() keep two diseases with the same display label distinct (codex audit regression)", {
+test_that("plot_condition_compare()/plot_condition_disease_flow() keep two diseases with the same display label distinct (regression)", {
   ## Grouping/colouring/faceting by disease_label (display text) instead of
   ## disease_id used to fuse two different diseases that happen to share a
   ## name -- one dodge position / colour in plot_condition_compare(), one

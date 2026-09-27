@@ -2,10 +2,9 @@
 NULL
 
 ## v1, deliberately plain: a self-contained HTML file built with base R
-## string concatenation, no rmarkdown/pandoc. Two reasons, not one: (1) this
-## dev environment has no pandoc (confirmed via
-## rmarkdown::pandoc_available() before writing this), so an Rmd-based
-## report could not even be rendered/tested here; (2) DESIGN.md's own
+## string concatenation, no rmarkdown/pandoc. Two reasons, not one: (1) pandoc is
+## not always available (rmarkdown::pandoc_available()), and a report that
+## silently fails to render without it defeats the point of a log; (2) DESIGN.md's own
 ## "minimal Suggests" philosophy already prefers hand-rolling a simple
 ## rendering over a heavier dependency when the geometry (here: a handful
 ## of HTML tables) does not need one. Every section auto-includes when its

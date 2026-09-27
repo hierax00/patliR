@@ -175,7 +175,7 @@ test_that("network_module_robustness() does not leak RNG state -- leiden, bipart
   }
 })
 
-test_that("network_module_robustness(seed = NULL) does not leak RNG state (codex audit regression)", {
+test_that("network_module_robustness(seed = NULL) does not leak RNG state (regression)", {
   ## seed = 42 above never exercises the auto-generation branch (`if
   ## (is.null(seed)) seed <- sample.int(...)`) -- before the fix, that draw
   ## permanently advanced the caller's RNG stream (or created a

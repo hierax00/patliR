@@ -301,7 +301,7 @@ it — Bioconductor packages (install with `BiocManager::install()`) for
 ```r
 library(patliR)
 
-proj <- patliR_project("chilcuague")
+proj <- patliR_project("my_extract")
 compounds_in <- read.csv("compounds.csv")          # name, CAS, PubChemCID, SMILES
 
 proj <- prep_compounds(proj, compounds_in, identifier = "smiles")
@@ -320,24 +320,21 @@ report$summary                                      # one row per compound with 
 ```r
 keep <- c("C0001", "C0004", "C0009", "C0021")       # your picks from the triage
 
-proj <- prep_as_condition(proj, condition = "Chilcuague", compound_ids = keep)
+proj <- prep_as_condition(proj, condition = "Extract", compound_ids = keep)
 proj <- targets_import_batch(proj, "targets_superpred/", platform = "superpred")
 proj <- network_build(proj)
-proj <- network_enrich(proj, condition = "Chilcuague", db = "go")
-proj <- network_centrality(proj, condition = "Chilcuague")
-proj <- network_module_robustness(proj, condition = "Chilcuague", seed = 42)
+proj <- network_enrich(proj, condition = "Extract", db = "go")
+proj <- network_centrality(proj, condition = "Extract")
+proj <- network_module_robustness(proj, condition = "Extract", seed = 42)
 
-plot_network_layers(proj, condition = "Chilcuague")  # figures go to <project>/plots/
+plot_network_layers(proj, condition = "Extract")     # figures go to <project>/plots/
 plot_chemical_space(proj, dims = 3, color_by = "family", engine = "plotly")
 
 ## close the loop: one ranked table + one report, combining everything above
-proj <- rank_candidates(proj, condition = "Chilcuague", export = "sdf")
-plot_rank(proj, condition = "Chilcuague", view = "pareto")
-proj <- report_generate(proj, condition = "Chilcuague")  # → reports/report_Chilcuague.html
+proj <- rank_candidates(proj, condition = "Extract", export = "sdf")
+plot_rank(proj, condition = "Extract", view = "pareto")
+proj <- report_generate(proj, condition = "Extract")     # → reports/report_Extract.html
 ```
-
-A worked end-to-end script against a real dataset lives in
-[`chilcuague-analysis/`](https://github.com/hierax00/chilcuague-analysis).
 
 ## Function families
 
@@ -363,8 +360,8 @@ A worked end-to-end script against a real dataset lives in
 Everything is documented on its own help page.
 [`METHODS.md`](METHODS.md) explains, in plain language, what each function
 actually computes and the theory behind it. For the cross-cutting design
-decisions see [`DESIGN.md`](DESIGN.md); for what is designed but not yet
-built see [`ROADMAP.md`](ROADMAP.md).
+decisions see [`DESIGN.md`](DESIGN.md). A runnable, offline end-to-end
+example is in the vignette: `vignette("patliR-intro", package = "patliR")`.
 
 ## Command reference
 

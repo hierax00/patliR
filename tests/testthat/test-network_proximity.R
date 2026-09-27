@@ -185,7 +185,7 @@ test_that("network_proximity(network_type = 'physical') records network_type and
   )
 })
 
-test_that("network_proximity(seed = NULL) does not leak RNG state (codex audit regression, STRINGdb mocked)", {
+test_that("network_proximity(seed = NULL) does not leak RNG state (regression, STRINGdb mocked)", {
   ## Before the fix, .with_seed(used_seed) snapshotted the caller's RNG
   ## state AFTER sample.int() had already drawn used_seed from it (used_seed
   ## was generated in a separate statement, not lazily inside .with_seed()'s

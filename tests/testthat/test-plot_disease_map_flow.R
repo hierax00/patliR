@@ -122,7 +122,7 @@ test_that("plot_disease_map_flow() errors clearly when no target in scope has an
   expect_error(.dmf_plot(proj, conditions = c("A", "B"), save = FALSE), "No target-disease association")
 })
 
-test_that("plot_disease_map_flow() handles an association table with NO scores at all (codex audit regression)", {
+test_that("plot_disease_map_flow() handles an association table with NO scores at all (regression)", {
   ## Formula aggregate() defaults to na.omit, dropping every row before
   ## grouping -- if EVERY association_score in scope is NA (a real case: a
   ## purely GO-sourced disease/target association, which carries no score),

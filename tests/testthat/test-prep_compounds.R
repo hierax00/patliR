@@ -84,7 +84,7 @@ test_that("prep_compounds() requires the identifier column to exist", {
   )
 })
 
-test_that("prep_compounds(id_col = ) actually reads the named column (codex audit regression)", {
+test_that("prep_compounds(id_col = ) actually reads the named column (regression)", {
   ## Before the fix, id_col was validated for presence and then ignored --
   ## pubchem_id/smiles were always read from the literal "PubChemCID"/
   ## "SMILES" column names, so a table using a nonstandard column name for
@@ -110,7 +110,7 @@ test_that("prep_compounds() fetches a missing SMILES via PubChemCID even when id
   ## Regression: the PubChem fetch used to only trigger when
   ## identifier == "pubchem". A Scenario B table keyed by SMILES
   ## (identifier = "smiles") that also carries a PubChemCID for some rows
-  ## (real case: real_data/compound_list_Chilcuague.csv) never got its
+  ## (e.g. a list whose CIDs came from a separate CAS -> CID lookup) never got its
   ## missing SMILES fetched -- rows were silently dropped as
   ## "smiles_not_resolved" even though the CID needed to fetch them was
   ## right there. Fetchability should only depend on having a PubChemCID,
@@ -135,7 +135,7 @@ test_that("prep_compounds() fetches a missing SMILES via PubChemCID even when id
   expect_false(is.na(cmp$canonical_smiles))
 })
 
-test_that("prep_compounds() never reissues a removed compound's id (codex audit regression)", {
+test_that("prep_compounds() never reissues a removed compound's id (regression)", {
   ## Before the fix, .next_compound_ids() derived the next id purely from
   ## compounds(proj)$id -- so removing a compound (e.g. adme_filter()'s
   ## hard_cutoff, simulated here directly) and then adding a new one reissued

@@ -144,7 +144,7 @@ tox_import <- function(proj, path, platform = c("admetlab", "swissadme", "other"
 #' @param compound_ids Character vector of `compounds(proj)$id`, or `NULL`
 #'   (default) for every compound currently in [compounds()].
 #' @param out_file Character scalar, base path to write to (e.g.
-#'   `"chilcuague_tox_smiles"`), or `NULL` (default) to only return the
+#'   `"extract_tox_smiles"`), or `NULL` (default) to only return the
 #'   result. When given, writes `<out_file>.txt` (the plain SMILES list)
 #'   and `<out_file>_map.csv` (columns `row_order`, `compound_id`, `name`,
 #'   `smiles`).

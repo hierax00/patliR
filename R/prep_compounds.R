@@ -114,8 +114,8 @@ prep_compounds <- function(proj, data,
   ## fetched (CID -> SMILES via PubChem) -- this used to be gated on
   ## `identifier == "pubchem"`, which meant a Scenario B table keyed by
   ## SMILES (identifier = "smiles") that *also* carries a PubChemCID column
-  ## for some rows (e.g. real_data/compound_list_Chilcuague.csv, populated
-  ## by a CAS -> CID resolution script run before prep_compounds()) never
+  ## for some rows (e.g. CIDs filled in by a CAS -> CID lookup run before
+  ## prep_compounds()) never
   ## got its missing SMILES fetched at all -- rows were silently dropped
   ## ("smiles_not_resolved") even though the CID needed to fetch them was
   ## right there, which then cascaded into targets_import_batch() reporting

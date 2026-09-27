@@ -127,7 +127,7 @@ adme_import <- function(proj, path, platform = c("swissadme", "admetlab", "other
 #' @param compound_ids Character vector of `compounds(proj)$id`, or `NULL`
 #'   (default) for every compound currently in [compounds()].
 #' @param out_file Character scalar, base path to write to (e.g.
-#'   `"chilcuague_smiles"`), or `NULL` (default) to only return the result
+#'   `"extract_smiles"`), or `NULL` (default) to only return the result
 #'   without writing anything. When given, writes `<out_file>.txt` (the
 #'   plain SMILES list, ready to paste) and `<out_file>_map.csv` (columns
 #'   `row_order`, `compound_id`, `name`, `smiles` -- `row_order` matches

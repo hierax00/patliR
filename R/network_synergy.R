@@ -1,7 +1,6 @@
 #' @include AllGenerics.R internal.R network_build.R network_proximity.R
 NULL
 
-## Interim design until rank_candidates() ships (see ROADMAP.md).
 ## `pairs = "rank_top"` ranks candidates by network_proximity()'s z_score
 ## before pairing (avoids the combinatorial blow-up); `pairs = "all"` skips
 ## ranking and scores every pair, for small conditions.
@@ -186,8 +185,9 @@ NULL
 #'
 #' @section `pairs = "rank_top"` vs. `pairs = "all"`:
 #' `"rank_top"` (default) ranks compounds by their [network_proximity()]
-#' `z_score` and only forms pairs among the top `top_n` -- an **interim**
-#' stand-in for the not-yet-implemented `rank_candidates()`. `"all"` scores
+#' `z_score` and only forms pairs among the top `top_n` -- a cheap
+#' pre-filter that avoids scoring every pair in large conditions (for the
+#' full multi-criteria ranking see [rank_candidates()]). `"all"` scores
 #' every compound pair; pairs involving a compound with no
 #' [network_proximity()] score get `NA` in the proximity-derived columns,
 #' not a fabricated score.

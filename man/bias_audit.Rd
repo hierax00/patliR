@@ -70,7 +70,7 @@ the two are not on the same scale).
 \section{What this does not do yet}{
 
 \code{categories}/categorical enrichment against a disease-term background is
-not implemented -- see \code{ROADMAP.md}. Passing a non-\code{NULL} \code{categories}
+not implemented. Passing a non-\code{NULL} \code{categories}
 raises an informative error rather than pretending to succeed.
 }
 

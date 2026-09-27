@@ -240,8 +240,7 @@ network_module_robustness <- function(proj, condition = NULL,
   ## sample.int() below draws from (and advances) this same stream to pick a
   ## seed, and unlike the internal .with_seed(seed) calls further down (each
   ## already isolated around the one, now-resolved, numeric `seed`), nothing
-  ## previously restored the caller's state after *this* draw (codex audit,
-  ## 2026-09-27)
+  ## previously restored the caller's state after *this* draw
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
   on.exit({
     if (!is.null(old_seed)) assign(".Random.seed", old_seed, envir = .GlobalEnv)

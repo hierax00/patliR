@@ -3,8 +3,8 @@ NULL
 
 ## Loops over whatever patliRResults() currently holds rather than a fixed
 ## per-family summary, so it stays correct as new result types are added.
-## A raw data dump, not a curated narrative (that is report_generate()'s
-## job -- see ROADMAP.md).
+## A raw data dump, not a curated narrative (that is
+## report_generate()'s job).
 
 #' Export a project's full state as plain text, for an LLM to read
 #'

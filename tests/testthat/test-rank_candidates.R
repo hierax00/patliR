@@ -53,7 +53,7 @@ test_that("rank_candidates() aborts if criteria= drops a mandatory criterion", {
   expect_error(rank_candidates(proj, condition = "FLO-ET", criteria = "centrality"), "mandatory")
 })
 
-test_that("rank_candidates() roll_up = 'weighted_mean' tolerates an NA edge weight (codex audit regression)", {
+test_that("rank_candidates() roll_up = 'weighted_mean' tolerates an NA edge weight (regression)", {
   ## network_build() explicitly permits an edge with no weight at all (e.g.
   ## min_score = NULL keeps every edge regardless of import-probability
   ## confidence). Before the fix, .rank_rollup_target_to_compound() only
@@ -75,7 +75,7 @@ test_that("rank_candidates() roll_up = 'weighted_mean' tolerates an NA edge weig
   expect_no_error(rank_candidates(proj, condition = "FLO-ET", roll_up = "weighted_mean"))
 })
 
-test_that("rank_candidates() ADME criterion tolerates every rule's pass being NA for a compound (codex audit regression)", {
+test_that("rank_candidates() ADME criterion tolerates every rule's pass being NA for a compound (regression)", {
   ## Formula aggregate() defaults to na.omit, dropping every row before
   ## grouping -- if EVERY compound's `pass` came out NA (e.g. every
   ## descriptor failed to compute), aggregate() used to error outright
@@ -199,7 +199,7 @@ test_that("rank_candidates() synergy criterion takes the best (max) partner scor
   expect_true(all(is.na(rc$crit_synergy_best[!rc$compound_id %in% c(a, b, d)])))
 })
 
-test_that("rank_candidates() aborts when proximity and synergy were computed on different STRING interactomes (codex audit regression)", {
+test_that("rank_candidates() aborts when proximity and synergy were computed on different STRING interactomes (regression)", {
   ## Both criteria key off (condition, disease_id) alone, so recomputing
   ## proximity at a new score_threshold/network_type without rerunning
   ## synergy used to combine them silently -- network_synergy() only guards
@@ -282,7 +282,7 @@ test_that("rank_candidates() rewards a compound that dominates on one criterion 
   expect_equal(rc$pareto_front[rc$compound_id == best], 1L)
 })
 
-test_that("rank_candidates() combines conditions with different optional-criteria sets (codex audit regression)", {
+test_that("rank_candidates() combines conditions with different optional-criteria sets (regression)", {
   ## rbind() (unlike a filling bind_rows()) errors on data.frames with
   ## different column sets ("number of columns of arguments does not
   ## match") -- two conditions auto-detecting a different subset of

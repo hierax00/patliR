@@ -116,7 +116,7 @@ default \code{annotation = "direct"} mode actually computes.
 \code{degeneracy_score >= min_degeneracy}, an arbitrary threshold on an
 unbounded, non-significance-tested scalar. \code{p_adjusted} is \code{NA} for
 every row when \code{network_degeneracy()} was run with
-\code{annotation \%in\% c("enriched", "jaccard")} (piece 14 -- no permutation
+\code{annotation \%in\% c("enriched", "jaccard")} (no permutation
 null exists for those modes); if every pair in scope has \code{p_adjusted = NA}, \code{filter = "p_adjusted"} (including the default) transparently
 falls back to \code{filter = "score"} and \code{cli_inform}s why.
 }

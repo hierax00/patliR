@@ -64,7 +64,7 @@ known compound are logged (\code{"targets_import_unmatched"}) and excluded.
 \description{
 Imports a CSV exported from a target-prediction platform
 (SwissTargetPrediction, SuperPred, ...). \code{patliR} does not run its own
-target-prediction model (see \code{ROADMAP.md}) -- you run the platform
+target-prediction model -- you run the platform
 yourself, download its export, and this function reconciles it against
 \code{\link[=compounds]{compounds()}}.
 

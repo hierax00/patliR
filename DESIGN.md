@@ -120,7 +120,7 @@ graph, not for any masking reason. `dbscan` (for `clustering =
   has already assembled.
 - Molecular dynamics.
 - A docking engine or 3D viewer of its own. `dock_prepare()` / `dock_parse()`
-  were considered and dropped (2026-09-03, see `ROADMAP.md`): docking prep is
+  were considered and dropped: docking prep is
   already standardised by mature external tools (Meeko/AutoDockTools,
   OpenBabel), so reimplementing that step would just be worse-maintained
   duplication. `rank_candidates(export = "sdf"/"smi")` is the package's only

@@ -20,8 +20,8 @@ NULL
 #' This is the foundation the rest of the `network_*` family builds on.
 #'
 #' @section Why `target_source = "imported"` is the default:
-#' `targets_consensus()` and `targets_bipartite()` are not implemented yet
-#' (see `ROADMAP.md`), so `"imported"` (from
+#' `targets_consensus()` and `targets_bipartite()` are not implemented yet,
+#' so `"imported"` (from
 #' [targets_import()]/[targets_import_batch()]) is the only source that
 #' exists; the other two raise a clear "not implemented yet" error if
 #' requested.
@@ -92,7 +92,7 @@ network_build <- function(proj, condition = NULL,
   if (target_source != "imported") {
     cli::cli_abort(c(
       "{.val {target_source}} is not implemented yet in this version of patliR.",
-      "i" = "Only {.val imported} (from {.fn targets_import}/{.fn targets_import_batch}) is available until {.code targets_{target_source}()} ships -- see {.file ROADMAP.md}."
+      "i" = "Only {.val imported} (from {.fn targets_import}/{.fn targets_import_batch}) is available."
     ))
   }
   if (!is.null(min_score) && (!is.numeric(min_score) || length(min_score) != 1 || min_score < 0 || min_score > 1)) {

@@ -251,7 +251,7 @@
 #' `"CC[C@H](C)Cl"` / `"CC[C@@@@H](C)Cl"`. This key still does not
 #' distinguish isotopes, salts, or protonation states -- those are a
 #' separate, still-open question of what "same molecule" should mean for
-#' deduplication (see `DESIGN.md`/`ROADMAP.md`); this fix only restores
+#' deduplication (see `DESIGN.md`); this only restores
 #' the two stereo descriptors CDK is capable of writing.
 #'
 #' Also keeps the *real* rcdk/rJava error message instead of collapsing

@@ -14,7 +14,7 @@ adme_export_smiles(proj, compound_ids = NULL, out_file = NULL)
 (default) for every compound currently in \code{\link[=compounds]{compounds()}}.}
 
 \item{out_file}{Character scalar, base path to write to (e.g.
-\code{"chilcuague_smiles"}), or \code{NULL} (default) to only return the result
+\code{"extract_smiles"}), or \code{NULL} (default) to only return the result
 without writing anything. When given, writes \verb{<out_file>.txt} (the
 plain SMILES list, ready to paste) and \verb{<out_file>_map.csv} (columns
 \code{row_order}, \code{compound_id}, \code{name}, \code{smiles} -- \code{row_order} matches

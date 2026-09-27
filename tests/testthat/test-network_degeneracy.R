@@ -241,7 +241,7 @@ test_that("network_degeneracy(annotation = 'direct') is seed-reproducible (spec 
   expect_equal(r1$functional_similarity, r2$functional_similarity)
 })
 
-test_that("network_degeneracy(seed = NULL) does not leak RNG state (codex audit regression)", {
+test_that("network_degeneracy(seed = NULL) does not leak RNG state (regression)", {
   ## The seed=42 test above never exercises the auto-generation branch
   ## (sample.int() is only called when seed = NULL) -- before the fix,
   ## .with_seed() snapshotted the caller's RNG state one draw AFTER that

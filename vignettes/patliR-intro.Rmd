@@ -172,6 +172,5 @@ notice yourself.
 - `DESIGN.md` -- the package's cross-cutting design decisions (why an
   immutable project object, why CSV as the source of truth, when a
   `Suggests` dependency is added vs. hand-rolled).
-- `ROADMAP.md` -- what is designed but not yet built.
 - Every function's own help page (`?rank_candidates`, `?network_proximity`,
   ...) documents its exact arguments, return schema, and references.

@@ -1,4 +1,4 @@
-# patliR -- Shiny wizard (ROADMAP.md, 2.6 `launch_app()`)
+# patliR -- Shiny wizard (`launch_app()`)
 #
 # This app is a thin orchestration layer: every action button below calls an
 # existing, already-tested patliR function (prep_*/refdb_*/adme_*/tox_*/

@@ -65,7 +65,7 @@ test_that("plot_proximity(view = \"null\") happy path with store_null = TRUE dat
   expect_s3_class(p, "ggplot")
 })
 
-test_that("plot_proximity(view = \"null\") aborts when the stored null draws are from a different network_proximity() run (codex audit regression)", {
+test_that("plot_proximity(view = \"null\") aborts when the stored null draws are from a different network_proximity() run (regression)", {
   ## store_null = FALSE (the default) leaves a previous run's draws
   ## untouched when a condition/disease is recomputed at a different seed/
   ## interactome -- the join used to have no way to detect that, joining a

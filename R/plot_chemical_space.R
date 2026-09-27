@@ -7,7 +7,7 @@ NULL
 ## per family: chull() in 2D; a translucent 3D alpha-hull mesh (plotly) or
 ## a 3-panel PC-pair matrix (static) in 3D. Overlaying target/protein
 ## shapes on the same space is not attempted -- proteins have no logP/TPSA,
-## so a joint embedding is a separate design question (see ROADMAP.md).
+## so a joint embedding is a separate design question.
 
 #' Chemical space plot: 2D projection of compounds, colored by family
 #'

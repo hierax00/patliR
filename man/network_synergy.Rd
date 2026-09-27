@@ -276,8 +276,9 @@ clearly if \code{\link[=network_proximity]{network_proximity()}} has not been ru
 \section{\code{pairs = "rank_top"} vs. \code{pairs = "all"}}{
 
 \code{"rank_top"} (default) ranks compounds by their \code{\link[=network_proximity]{network_proximity()}}
-\code{z_score} and only forms pairs among the top \code{top_n} -- an \strong{interim}
-stand-in for the not-yet-implemented \code{rank_candidates()}. \code{"all"} scores
+\code{z_score} and only forms pairs among the top \code{top_n} -- a cheap
+pre-filter that avoids scoring every pair in large conditions (for the
+full multi-criteria ranking see \code{\link[=rank_candidates]{rank_candidates()}}). \code{"all"} scores
 every compound pair; pairs involving a compound with no
 \code{\link[=network_proximity]{network_proximity()}} score get \code{NA} in the proximity-derived columns,
 not a fabricated score.

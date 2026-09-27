@@ -6,7 +6,7 @@ NULL
 ## Categorical enrichment against a disease-category background is not
 ## implemented -- it needs a confirmed target -> MeSH/Disease-Ontology
 ## source, and this package never guesses an external API. Requesting it
-## raises a clear "not implemented yet" error. See ROADMAP.md.
+## raises a clear "not implemented yet" error.
 
 #' Audit database bias -- MAD-based "promiscuous" compound/target outlier
 #' flag
@@ -43,7 +43,7 @@ NULL
 #'
 #' @section What this does not do yet:
 #' `categories`/categorical enrichment against a disease-term background is
-#' not implemented -- see `ROADMAP.md`. Passing a non-`NULL` `categories`
+#' not implemented. Passing a non-`NULL` `categories`
 #' raises an informative error rather than pretending to succeed.
 #'
 #' @inheritParams compounds
@@ -85,7 +85,7 @@ bias_audit <- function(proj, check_homogeneity = TRUE, mad_threshold = 2.5, cate
   if (!is.null(categories)) {
     cli::cli_abort(c(
       "Categorical enrichment ({.arg categories}) is not implemented yet in this version of patliR.",
-      "i" = "See {.file ROADMAP.md} -- it needs a confirmed MeSH/DO category source before coding it for real.",
+      "i" = "It needs a confirmed MeSH/Disease-Ontology category source.",
       "i" = "{.fn bias_audit} with the default {.code categories = NULL} runs the homogeneity/outlier check only."
     ))
   }

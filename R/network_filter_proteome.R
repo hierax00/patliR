@@ -5,7 +5,6 @@ NULL
 ## new graph substrate. Wiring the filtered result into the rest of
 ## network_* (centrality, robustness, ...) would need a new scope axis
 ## alongside "condition" in .network_resolve_conditions()/.network_graph().
-## See ROADMAP.md.
 
 #' Filter a project's compound-target network to a proteome of interest
 #'

@@ -44,8 +44,8 @@ the whole-reference-database level.
 Because the score peaks at \code{p = 1/e}, a moderately promiscuous target
 can outrank a highly selective one -- the name "penalty" oversells what
 a non-monotone weight does. Treat \code{score_adjusted} as "intermediate-
-specificity emphasis", not a clean selectivity ranking. Whether this is
-the wanted behaviour is flagged for revision (see \code{ROADMAP.md}).
+specificity emphasis", not a clean selectivity ranking. See
+\code{METHODS.md} for the formula.
 }
 
 \examples{

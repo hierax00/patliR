@@ -2,8 +2,7 @@
 NULL
 
 ## Adds KEGG's directed pathway topology (activation/inhibition/binding/...
-## relations between genes WITHIN a pathway) to the network -- the piece
-## ROADMAP.md flagged as deferred. network_pathview() only ever renders
+## relations between genes WITHIN a pathway) to the network. network_pathview() only ever renders
 ## KEGG's own pre-made pathway images (pathview::pathview()); nothing in
 ## patliR before this file parsed KGML relations itself.
 ##

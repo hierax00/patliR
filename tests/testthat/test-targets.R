@@ -103,7 +103,7 @@ test_that("targets_import() resolves a decorated column name and parses a percen
 })
 
 test_that("targets_import_batch() excludes a file with the wrong columns instead of losing the whole batch", {
-  ## Regression: a real SuperPred export for Chilcuague (Targets17100.csv)
+  ## Regression: a real SuperPred export
   ## had no "Probability" column at all (only "Target Name", "ChEMBL-ID",
   ## "UniProt ID", "PDB Visualization", "TTD ID", "Min Activity", "Assay
   ## type") -- targets_import() correctly aborts on it, but that used to

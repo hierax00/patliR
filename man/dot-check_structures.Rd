@@ -33,7 +33,7 @@ canonicalize to \code{"ClC(C)CC"} without \code{Stereo}; with it, to
 \code{"CC[C@H](C)Cl"} / \code{"CC[C@@H](C)Cl"}. This key still does not
 distinguish isotopes, salts, or protonation states -- those are a
 separate, still-open question of what "same molecule" should mean for
-deduplication (see \code{DESIGN.md}/\code{ROADMAP.md}); this fix only restores
+deduplication (see \code{DESIGN.md}); this only restores
 the two stereo descriptors CDK is capable of writing.
 
 Also keeps the \emph{real} rcdk/rJava error message instead of collapsing

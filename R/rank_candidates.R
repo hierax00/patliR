@@ -1,24 +1,22 @@
 #' @include AllGenerics.R internal.R network_build.R network_centrality.R network_hub_penalty.R network_proximity.R network_synergy.R network_module_robustness.R adme_filter.R
 NULL
 
-## Design: chilcuague-analysis/reviews/rank-candidates-design-spec.md (Milestone
-## B). Combines up to 6 per-compound criteria via Robust Rank Aggregation
+## Combines up to 6 per-compound criteria via Robust Rank Aggregation
 ## (RRA, Kolde et al. 2012) -- 2 mandatory (adme, centrality), 4 optional
 ## and auto-detected from patliRResults(proj) (hub_penalty, proximity,
 ## synergy, module_robustness). RRA over a weighted linear sum of z-scored
 ## criteria because a criterion with a broken/skewed scale (e.g.
 ## betweenness_norm sitting at 0 for most nodes) cannot silently dominate --
 ## ranks are compared, not raw magnitudes. RobustRankAggreg::aggregateRanks()
-## (CRAN, still current as of this writing) rather than hand-rolled: its
-## null model is a closed-form beta-distribution order-statistic correction,
+## (CRAN) rather than hand-rolled: its null model is a closed-form beta-distribution order-statistic correction,
 ## not geometry -- the same "depend for algorithms" argument DESIGN.md
-## already makes for `bipartite`'s Barber's Q_B optimisation (piece 13).
+## already makes for `bipartite`'s Barber's Q_B optimisation.
 ## Supply normalised ranks directly via `rmat`: rows are compounds and
 ## columns are criteria, with average ranks for ties and missing values
 ## imputed to relative rank 1. No ordered-list conversion is needed.
 ## Toxicity and bias_reweighted were both considered as criteria and
-## deliberately dropped (user's call, 2026-09-13) -- not offered even as an
-## opt-in override in this version.
+## deliberately left out of the aggregate (structural alerts are flags for
+## expert review, never a verdict -- see DESIGN.md).
 
 #' Rank candidate compounds by Robust Rank Aggregation over network/ADME
 #' criteria

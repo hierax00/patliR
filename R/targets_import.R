@@ -6,7 +6,7 @@ NULL
 #' @description
 #' Imports a CSV exported from a target-prediction platform
 #' (SwissTargetPrediction, SuperPred, ...). `patliR` does not run its own
-#' target-prediction model (see `ROADMAP.md`) -- you run the platform
+#' target-prediction model -- you run the platform
 #' yourself, download its export, and this function reconciles it against
 #' [compounds()].
 #'
@@ -165,8 +165,7 @@ targets_import <- function(proj, path, platform = c("swisstargetprediction", "su
 #' @section One bad file never loses the rest of the batch:
 #' Real exports are not always uniform -- a platform can change its export
 #' columns between compounds/sessions (e.g. a file with only `"PDB
-#' Visualization"`/`"TTD ID"` and no `"Probability"` column at all, seen
-#' against real Chilcuague data). [targets_import()] itself still aborts
+#' Visualization"`/`"TTD ID"` and no `"Probability"` column at all). [targets_import()] itself still aborts
 #' loudly on a single direct call (a bad file is a real problem to
 #' surface immediately when you only import one), but here each file goes
 #' through its own `tryCatch()` -- same per-item pattern already used by

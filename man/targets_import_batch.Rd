@@ -69,8 +69,7 @@ returns everything unified into \code{proj}'s single \code{targets_imported} tab
 \section{One bad file never loses the rest of the batch}{
 
 Real exports are not always uniform -- a platform can change its export
-columns between compounds/sessions (e.g. a file with only \code{"PDB Visualization"}/\code{"TTD ID"} and no \code{"Probability"} column at all, seen
-against real Chilcuague data). \code{\link[=targets_import]{targets_import()}} itself still aborts
+columns between compounds/sessions (e.g. a file with only \code{"PDB Visualization"}/\code{"TTD ID"} and no \code{"Probability"} column at all). \code{\link[=targets_import]{targets_import()}} itself still aborts
 loudly on a single direct call (a bad file is a real problem to
 surface immediately when you only import one), but here each file goes
 through its own \code{tryCatch()} -- same per-item pattern already used by

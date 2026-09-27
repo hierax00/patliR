@@ -253,7 +253,7 @@ network_proximity <- function(proj, condition = NULL, disease,
   ## sample.int() below draws from (and advances) this same stream to pick
   ## used_seed, so capturing old_seed any later (e.g. inside .with_seed(),
   ## after used_seed was already generated) would restore a state one draw
-  ## past the caller's real starting point (codex audit, 2026-09-27)
+  ## past the caller's real starting point
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
   used_seed <- if (is.null(seed)) sample.int(.Machine$integer.max, 1) else as.integer(seed)
   set.seed(used_seed)

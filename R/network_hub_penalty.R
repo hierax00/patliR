@@ -27,8 +27,8 @@ NULL
 #' Because the score peaks at `p = 1/e`, a moderately promiscuous target
 #' can outrank a highly selective one -- the name "penalty" oversells what
 #' a non-monotone weight does. Treat `score_adjusted` as "intermediate-
-#' specificity emphasis", not a clean selectivity ranking. Whether this is
-#' the wanted behaviour is flagged for revision (see `ROADMAP.md`).
+#' specificity emphasis", not a clean selectivity ranking. See
+#' `METHODS.md` for the formula.
 #'
 #' @inheritParams network_build
 #'

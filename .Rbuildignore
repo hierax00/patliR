@@ -9,8 +9,6 @@
 ^check_out\.txt$
 ^.*\.Rcheck$
 ^DESIGN\.md$
-^ROADMAP\.md$
 ^METHODS\.md$
-^AUDIT\.md$
 ^codemeta\.json$
 ^tests/testthat/Rplots\.pdf$

@@ -148,7 +148,7 @@ test_that("network_bowtie() warns on a degenerate (tiny) core", {
   )
 })
 
-test_that("network_bowtie() rerun drops a stale row for an edge removed from the network (codex audit regression)", {
+test_that("network_bowtie() rerun drops a stale row for an edge removed from the network (regression)", {
   ## Before the fix, touched_keys was built from the CURRENT network_edges,
   ## so an edge no longer present (compound removed, or a target no longer
   ## predicted) was absent from both the freshly computed result and

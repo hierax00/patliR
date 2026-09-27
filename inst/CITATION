@@ -15,8 +15,3 @@ bibentry(
     ". https://github.com/hierax00/patliR"
   )
 )
-
-citFooter(
-  "This is a software-only citation -- no accompanying paper has been",
-  "published yet. Check back for an updated CITATION once one is."
-)

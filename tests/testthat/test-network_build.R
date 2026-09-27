@@ -173,7 +173,7 @@ test_that(".network_upsert() fails loudly, not with R's generic rbind message, o
   )
 })
 
-test_that(".network_upsert() does not abort on column removal when every existing row for that key is replaced (codex audit regression)", {
+test_that(".network_upsert() does not abort on column removal when every existing row for that key is replaced (regression)", {
   ## Before the fix, `only_old` was computed purely from column NAMES,
   ## so it still fired even when `kept` (the existing rows NOT being
   ## replaced) had zero rows -- meaning a full rerun of a condition with an

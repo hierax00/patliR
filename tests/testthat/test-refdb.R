@@ -231,7 +231,7 @@ test_that("refdb_build() writes both CSVs, the new schema, and a refdb_build log
 })
 
 test_that("refdb_build() attaches each compound's own ChEMBL identity even when a reordered rerun falls back to a cached batch", {
-  ## Regression for a real bug (codex audit, 2026-09-27): identity used to be
+  ## Regression: identity used to be
   ## rejoined by row POSITION (`identity$row == i`), but the batch cache key
   ## is order-independent (a hash of the sorted, deduplicated CID/SMILES
   ## set) -- so a second call with the same two compounds reordered, that

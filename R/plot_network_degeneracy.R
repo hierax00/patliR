@@ -32,7 +32,7 @@ NULL
 #' `degeneracy_score >= min_degeneracy`, an arbitrary threshold on an
 #' unbounded, non-significance-tested scalar. `p_adjusted` is `NA` for
 #' every row when `network_degeneracy()` was run with
-#' `annotation %in% c("enriched", "jaccard")` (piece 14 -- no permutation
+#' `annotation %in% c("enriched", "jaccard")` (no permutation
 #' null exists for those modes); if every pair in scope has `p_adjusted =
 #' NA`, `filter = "p_adjusted"` (including the default) transparently
 #' falls back to `filter = "score"` and `cli_inform`s why.

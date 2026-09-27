@@ -43,7 +43,7 @@ test_that("plot_network_degeneracy() default filter = 'p_adjusted' falls back to
   proj <- .network_stats_test_setup()
   ct <- unique(patliRResults(proj, "network_edges")[patliRResults(proj, "network_edges")$condition == "FLO-ET", "compound_id"])
   testthat::skip_if(length(ct) < 2, "need at least 2 compounds in this fixture's FLO-ET condition")
-  ## annotation = "jaccard"-shaped row: p_adjusted/z_score all NA, as piece 14 leaves them
+  ## annotation = "jaccard"-shaped row: p_adjusted/z_score all NA, as those annotation modes leave them
   fake_deg <- data.frame(
     condition = "FLO-ET", compound_a = ct[1], compound_b = ct[2],
     n_targets_a = 3L, n_targets_b = 3L, n_pathways_a = 2L, n_pathways_b = 2L,

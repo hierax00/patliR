@@ -129,6 +129,7 @@ Collate:
     'plot_condition_trend.R'
     'plot_network_layers.R'
     'plot_disease_map.R'
+    'plot_disease_map_flow.R'
     'targets_disease.R'
     'plot_disease_network.R'
     'plot_enrichment.R'

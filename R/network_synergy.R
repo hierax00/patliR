@@ -226,7 +226,7 @@ NULL
 #'   `cheng_class` (FDR-gated), `cheng_class_sign` (sign-only, the paper's
 #'   rule), `complementary_exposure`, `joint_closeness`, `synergy_score`,
 #'   `separation_method`, `alpha`, `singleton_policy`, `pairs_mode`,
-#'   `species`, `string_version`, `score_threshold`,
+#'   `species`, `string_version`, `score_threshold`, `network_type`,
 #'   `disease_gene_source`), also written to
 #'   `results/network_synergy.csv`.
 #'
@@ -265,13 +265,14 @@ network_synergy <- function(proj, condition = NULL, disease,
                              pairs = c("rank_top", "all"), top_n = 10,
                              separation = c("network", "jaccard"),
                              alpha = 0.05, species = 9606, version = "12.0",
-                             score_threshold = 400,
+                             score_threshold = 400, network_type = c("full", "physical"),
                              disease_gene_source = c("disease_genes", "targets_disease"),
                              singleton = c("na", "zero")) {
   stopifnot(is(proj, "PatliRProject"))
   stopifnot(is.character(disease), length(disease) == 1, nzchar(disease))
   pairs <- match.arg(pairs)
   separation <- match.arg(separation)
+  network_type <- match.arg(network_type)
   disease_gene_source <- match.arg(disease_gene_source)
   singleton <- match.arg(singleton)
   stopifnot(is.numeric(top_n), length(top_n) == 1, top_n >= 2)
@@ -336,8 +337,8 @@ network_synergy <- function(proj, condition = NULL, disease,
   g <- NULL
   g_names <- character(0)
   if (separation == "network") {
-    string_db <- .network_stringdb(proj, species, version, score_threshold)
-    lcc <- .network_string_lcc(proj, species, version, score_threshold, string_db = string_db)
+    string_db <- .network_stringdb(proj, species, version, score_threshold, network_type)
+    lcc <- .network_string_lcc(proj, species, version, score_threshold, network_type, string_db = string_db)
     g <- lcc$graph
     g_names <- igraph::V(g)$name
   }
@@ -362,18 +363,23 @@ network_synergy <- function(proj, condition = NULL, disease,
       if (all(c("species", "string_version", "score_threshold") %in% names(prox))) {
         ps <- unique(prox$species); pv <- unique(as.character(prox$string_version))
         pt <- unique(prox$score_threshold)
+        ## a pre-network_type network_proximity table has no such column at
+        ## all -- treated as "unknown", not compared, same spirit as the
+        ## provenance-columns-absent branch just below for the other three
+        pn <- if ("network_type" %in% names(prox)) unique(as.character(prox$network_type)) else as.character(network_type)
         ## `string_version` is character by contract on both sides
         ## (`.patliR_results_colclasses` pins it through the CSV round-trip),
         ## so a direct string compare is exact; `species` / `score_threshold`
         ## are genuine numbers.
         mism <- !isTRUE(all.equal(as.numeric(ps), as.numeric(species))) ||
           !identical(pv, as.character(version)) ||
-          !isTRUE(all.equal(as.numeric(pt), as.numeric(score_threshold)))
-        if (length(ps) > 1 || length(pv) > 1 || length(pt) > 1 || mism) {
+          !isTRUE(all.equal(as.numeric(pt), as.numeric(score_threshold))) ||
+          !identical(pn, as.character(network_type))
+        if (length(ps) > 1 || length(pv) > 1 || length(pt) > 1 || length(pn) > 1 || mism) {
           cli::cli_abort(c(
             "{.fn network_synergy}: the {.val network_proximity} rows for condition {.val {cond}} were computed on a different STRING interactome than this call.",
-            "i" = "network_proximity: species {.val {ps}}, version {.val {pv}}, score_threshold {.val {pt}}.",
-            "i" = "network_synergy: species {.val {species}}, version {.val {version}}, score_threshold {.val {score_threshold}}.",
+            "i" = "network_proximity: species {.val {ps}}, version {.val {pv}}, score_threshold {.val {pt}}, network_type {.val {pn}}.",
+            "i" = "network_synergy: species {.val {species}}, version {.val {version}}, score_threshold {.val {score_threshold}}, network_type {.val {network_type}}.",
             "i" = "Re-run {.fn network_proximity} with matching arguments, or match them here."
           ))
         }
@@ -576,7 +582,7 @@ network_synergy <- function(proj, condition = NULL, disease,
         separation_method = separation, alpha = alpha, singleton_policy = singleton,
         pairs_mode = pairs,
         species = as.numeric(species), string_version = as.character(version),
-        score_threshold = as.numeric(score_threshold),
+        score_threshold = as.numeric(score_threshold), network_type = as.character(network_type),
         disease_gene_source = effective_dgs,
         stringsAsFactors = FALSE
       )
@@ -776,6 +782,7 @@ network_synergy <- function(proj, condition = NULL, disease,
     separation_method = character(0), alpha = double(0), singleton_policy = character(0),
     pairs_mode = character(0),
     species = double(0), string_version = character(0), score_threshold = double(0),
+    network_type = character(0),
     disease_gene_source = character(0),
     stringsAsFactors = FALSE
   )

@@ -4,9 +4,20 @@
 \alias{.network_string_lcc}
 \title{STRING interactome largest connected component, with its degree bins}
 \usage{
-.network_string_lcc(proj, species, version, score_threshold, string_db = NULL)
+.network_string_lcc(
+  proj,
+  species,
+  version,
+  score_threshold,
+  network_type = "full",
+  string_db = NULL
+)
 }
 \arguments{
+\item{network_type}{\code{"full"} (default) or \code{"physical"}, passed to
+\code{STRINGdb$new()} on a cache miss -- see \code{\link[=network_proximity]{network_proximity()}}'s own
+\code{network_type} for what the two mean.}
+
 \item{string_db}{Optional pre-constructed \code{STRINGdb} instance (avoids a
 second \code{STRINGdb$new()} when the caller already built one); only used
 on a cache miss.}
@@ -31,12 +42,17 @@ downward or make \code{min()} warn.
 }
 \details{
 Only the graph is cached, under
-\verb{cacheDir(proj)/stringdb/lcc_<species>_<version>_<threshold>.rds}. The
-degree, the degree bins and the per-node bin index are recomputed from
-it on every load -- a future \code{min_per_bin} parameter would otherwise be
-served a stale cached binning. Like \code{.network_stringdb()}'s downloaded
-flat files, this \code{.rds} is \strong{safe to delete}: STRING's own flat files
-under the same directory are the real cache, and deleting the \code{.rds}
-just triggers one recompute of the component decomposition.
+\verb{cacheDir(proj)/stringdb/lcc_<species>_<version>_<threshold>.rds} for the
+default \code{network_type = "full"} (unchanged from before \code{network_type}
+existed, so old caches keep working), or with a \verb{_<network_type>} suffix
+otherwise -- a "physical" LCC and a "full" LCC at the same
+species/version/threshold are different graphs and must not share a
+cache entry. The degree, the degree bins and the per-node bin index are
+recomputed from it on every load -- a future \code{min_per_bin} parameter
+would otherwise be served a stale cached binning. Like
+\code{.network_stringdb()}'s downloaded flat files, this \code{.rds} is \strong{safe to
+delete}: STRING's own flat files under the same directory are the real
+cache, and deleting the \code{.rds} just triggers one recompute of the
+component decomposition.
 }
 \keyword{internal}

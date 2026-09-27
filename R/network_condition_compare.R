@@ -26,6 +26,26 @@ NULL
 #'   compounds present in a condition.
 #' @param target_summary `TRUE` (default): also store a per-condition,
 #'   per-target contribution table (see Value).
+#' @param permutation_test `FALSE` (default). A compound's proximity z-score
+#'   does not depend on which condition it is grouped under (same targets,
+#'   same disease module, same interactome) -- so a condition's `mean_z`/
+#'   `median_z` is just the mean/median of the fixed per-compound scores of
+#'   the compounds present in it, and asking "is this condition's aggregate
+#'   unusual" is a question about that subset, not a fresh hypothesis test.
+#'   When `TRUE`, each compound's z is first averaged over every row it
+#'   contributes across `conditions` (collapsing the Monte Carlo noise
+#'   [network_proximity()] adds on each rerun of the same compound), then
+#'   each condition's observed mean/median is compared to `n_perm` random
+#'   subsets of the same size drawn without replacement from that pooled,
+#'   per-compound distribution -- an empirical two-sided p-value, adjusted
+#'   across `conditions` with Benjamini-Hochberg. This is deliberately a
+#'   descriptive add-on, not a filter: see Value.
+#' @param n_perm Number of permutation draws when `permutation_test = TRUE`
+#'   (default `10000`). Ignored otherwise.
+#' @param seed `NULL` (default) or a single integer, for the permutation
+#'   draws when `permutation_test = TRUE`. Logged either way (an
+#'   auto-generated seed if `NULL`) and restored afterwards, like
+#'   [network_proximity()]'s own `seed`. Ignored otherwise.
 #' @param ... Passed to [network_proximity()] for any pair not yet computed
 #'   (`score_threshold`, `n_random`, `seed`, `disease_genes`, ...).
 #'
@@ -37,7 +57,14 @@ NULL
 #'   (of those, how many did -- this is what feeds `mean_z`/`median_z`/`sd_z`/`best_z`),
 #'   `best_z` (most negative, i.e. closest single compound), `n_disease_genes_hit`,
 #'   `n_disease_genes_total`, `disease_gene_coverage` (hit / total). Sorted
-#'   with the most negative (closest-to-disease) `aggregate` z first.
+#'   with the most negative (closest-to-disease) `aggregate` z first. When
+#'   `permutation_test = TRUE`, also gains `perm_null_mean`, `perm_null_sd`,
+#'   `perm_p_value`, `perm_p_adjusted`, `perm_n_draws`, `perm_seed_used` --
+#'   read these as "how surprising is this condition's subset of compounds",
+#'   never as a per-compound significance claim, and note that a condition
+#'   compared here with `conditions = NULL` or a small `conditions` vector
+#'   only borrows a pool from those conditions, not from every condition
+#'   that ever existed for this disease.
 #'   When `target_summary = TRUE`, also sets `patliRResults(proj,
 #'   "network_condition_targets")`: one row per `(condition, disease_id,
 #'   uniprot_id)` hit by that condition's compounds and also a disease gene,
@@ -51,7 +78,9 @@ NULL
 #' @export
 network_condition_compare <- function(proj, conditions = NULL, disease,
                                        aggregate = c("mean", "median"),
-                                       target_summary = TRUE, ...) {
+                                       target_summary = TRUE,
+                                       permutation_test = FALSE, n_perm = 10000,
+                                       seed = NULL, ...) {
   stopifnot(is(proj, "PatliRProject"))
   aggregate <- match.arg(aggregate)
   stopifnot(is.character(disease), length(disease) == 1, nzchar(disease))
@@ -76,7 +105,7 @@ network_condition_compare <- function(proj, conditions = NULL, disease,
   ## mixing e.g. score_threshold = 400 for one condition and 700 (from a stale
   ## or differently-parameterised run) for another would rank them on
   ## different, incomparable null models without any visible warning
-  provenance_cols <- c("disease_gene_source", "score_threshold", "species", "string_version")
+  provenance_cols <- c("disease_gene_source", "score_threshold", "species", "string_version", "network_type")
   provenance_cols <- intersect(provenance_cols, names(prox))
   inconsistent <- Filter(function(col) length(unique(prox[[col]])) > 1, provenance_cols)
   if (length(inconsistent) > 0) {
@@ -113,6 +142,14 @@ network_condition_compare <- function(proj, conditions = NULL, disease,
     )
   })
   result <- do.call(rbind, rows)
+
+  if (permutation_test) {
+    stopifnot(is.numeric(n_perm), length(n_perm) == 1, is.finite(n_perm), n_perm >= 1)
+    perm <- .condition_permutation_test(prox, edges_all, conditions,
+                                        aggregate = aggregate, n_perm = as.integer(n_perm), seed = seed)
+    result <- merge(result, perm, by = "condition", all.x = TRUE, sort = FALSE)
+  }
+
   sort_col <- if (aggregate == "mean") result$mean_z else result$median_z
   result <- result[order(sort_col), , drop = FALSE]
   rownames(result) <- NULL
@@ -177,6 +214,55 @@ network_condition_compare <- function(proj, conditions = NULL, disease,
   out <- out[order(out$uniprot_id, -out$association_score, na.last = TRUE), , drop = FALSE]
   out <- out[!duplicated(out$uniprot_id), , drop = FALSE]
   rownames(out) <- NULL
+  out
+}
+
+#' Subset-permutation test: is a condition's aggregate z unusual relative to
+#' a same-size random subset of the pooled per-compound z?
+#' @param prox `network_proximity` rows already filtered to `conditions` and
+#'   the disease being compared (as built by [network_condition_compare()]).
+#' @param edges_all `network_edges` (all conditions -- filtered here per
+#'   `cond`, matching how [network_condition_compare()] itself computes
+#'   `n_compounds_present`).
+#' @return `data.frame(condition, perm_null_mean, perm_null_sd,
+#'   perm_p_value, perm_p_adjusted, perm_n_draws, perm_seed_used)`.
+#' @keywords internal
+.condition_permutation_test <- function(prox, edges_all, conditions, aggregate, n_perm, seed) {
+  stat_fn <- if (aggregate == "mean") mean else stats::median
+  finite <- prox[is.finite(prox$z_score), , drop = FALSE]
+  ## one z per compound: averages away the Monte Carlo noise network_proximity()
+  ## adds each time the same physical compound is scored in a different condition
+  zc <- tapply(finite$z_score, finite$compound_id, mean)
+
+  ## snapshot the caller's RNG state *before* touching it -- if `seed = NULL`,
+  ## sample.int() below draws from (and advances) this same stream to pick
+  ## used_seed, so capturing old_seed any later would restore a state one
+  ## draw past the caller's real starting point
+  old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
+  used_seed <- if (is.null(seed)) sample.int(.Machine$integer.max, 1) else as.integer(seed)
+  set.seed(used_seed)
+  on.exit({
+    if (!is.null(old_seed)) assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    else if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv)
+  }, add = TRUE)
+
+  rows <- lapply(conditions, function(cond) {
+    ids <- intersect(unique(edges_all$compound_id[edges_all$condition == cond]), names(zc))
+    if (length(ids) == 0 || length(zc) == 0) {
+      return(data.frame(condition = cond, perm_null_mean = NA_real_, perm_null_sd = NA_real_,
+                        perm_p_value = NA_real_, stringsAsFactors = FALSE))
+    }
+    obs <- stat_fn(zc[ids])
+    null <- replicate(n_perm, stat_fn(sample(zc, length(ids))))
+    lo <- (1 + sum(null <= obs)) / (1 + n_perm)
+    hi <- (1 + sum(null >= obs)) / (1 + n_perm)
+    data.frame(condition = cond, perm_null_mean = mean(null), perm_null_sd = stats::sd(null),
+              perm_p_value = min(1, 2 * min(lo, hi)), stringsAsFactors = FALSE)
+  })
+  out <- do.call(rbind, rows)
+  out$perm_p_adjusted <- stats::p.adjust(out$perm_p_value, "BH")
+  out$perm_n_draws <- n_perm
+  out$perm_seed_used <- used_seed
   out
 }
 

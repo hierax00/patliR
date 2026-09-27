@@ -188,6 +188,45 @@ test_that("plot_condition_disease_flow() draws every condition and disease, weig
   expect_no_error(ggplot2::ggplot_build(p))
 })
 
+test_that("network_condition_compare(permutation_test = TRUE) is reproducible with a fixed seed and BH-adjusts across conditions", {
+  proj <- .ccmp_fixture()
+  proj <- network_condition_compare(proj, disease = "D1", permutation_test = TRUE, n_perm = 500, seed = 1)
+  cmp <- patliRResults(proj, "network_condition_compare")
+
+  expect_true(all(c("perm_null_mean", "perm_null_sd", "perm_p_value", "perm_p_adjusted",
+                    "perm_n_draws", "perm_seed_used") %in% names(cmp)))
+  expect_equal(cmp$perm_n_draws, c(500L, 500L))
+  expect_equal(cmp$perm_seed_used, c(1L, 1L))
+  expect_equal(cmp$perm_p_adjusted, stats::p.adjust(cmp$perm_p_value, "BH"))
+  ## same seed -> identical draws -> identical p-values
+  proj2 <- .ccmp_fixture()
+  proj2 <- network_condition_compare(proj2, disease = "D1", permutation_test = TRUE, n_perm = 500, seed = 1)
+  expect_equal(patliRResults(proj2, "network_condition_compare")$perm_p_value, cmp$perm_p_value)
+})
+
+test_that("network_condition_compare(permutation_test = TRUE) does not perturb the caller's RNG state", {
+  proj <- .ccmp_fixture()
+  set.seed(99)
+  before <- runif(1)
+  set.seed(99)
+  proj <- network_condition_compare(proj, disease = "D1", permutation_test = TRUE, n_perm = 200)
+  after <- runif(1)
+  expect_equal(before, after)
+})
+
+test_that("network_condition_compare() rejects a non-positive n_perm", {
+  proj <- .ccmp_fixture()
+  expect_error(network_condition_compare(proj, disease = "D1", permutation_test = TRUE, n_perm = 0),
+              "n_perm")
+})
+
+test_that("network_condition_compare(permutation_test = TRUE) leaves perm_* absent (not error) when default", {
+  proj <- .ccmp_fixture()
+  proj <- network_condition_compare(proj, disease = "D1")
+  cmp <- patliRResults(proj, "network_condition_compare")
+  expect_false(any(grepl("^perm_", names(cmp))))
+})
+
 test_that("plot_condition_disease_flow() requires at least two diseases", {
   testthat::skip_if_not_installed("ggplot2")
   testthat::skip_if_not_installed("ggalluvial")

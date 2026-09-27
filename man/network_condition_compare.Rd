@@ -10,6 +10,9 @@ network_condition_compare(
   disease,
   aggregate = c("mean", "median"),
   target_summary = TRUE,
+  permutation_test = FALSE,
+  n_perm = 10000,
+  seed = NULL,
   ...
 )
 }
@@ -29,6 +32,29 @@ compounds present in a condition.}
 \item{target_summary}{\code{TRUE} (default): also store a per-condition,
 per-target contribution table (see Value).}
 
+\item{permutation_test}{\code{FALSE} (default). A compound's proximity z-score
+does not depend on which condition it is grouped under (same targets,
+same disease module, same interactome) -- so a condition's \code{mean_z}/
+\code{median_z} is just the mean/median of the fixed per-compound scores of
+the compounds present in it, and asking "is this condition's aggregate
+unusual" is a question about that subset, not a fresh hypothesis test.
+When \code{TRUE}, each compound's z is first averaged over every row it
+contributes across \code{conditions} (collapsing the Monte Carlo noise
+\code{\link[=network_proximity]{network_proximity()}} adds on each rerun of the same compound), then
+each condition's observed mean/median is compared to \code{n_perm} random
+subsets of the same size drawn without replacement from that pooled,
+per-compound distribution -- an empirical two-sided p-value, adjusted
+across \code{conditions} with Benjamini-Hochberg. This is deliberately a
+descriptive add-on, not a filter: see Value.}
+
+\item{n_perm}{Number of permutation draws when \code{permutation_test = TRUE}
+(default \code{10000}). Ignored otherwise.}
+
+\item{seed}{\code{NULL} (default) or a single integer, for the permutation
+draws when \code{permutation_test = TRUE}. Logged either way (an
+auto-generated seed if \code{NULL}) and restored afterwards, like
+\code{\link[=network_proximity]{network_proximity()}}'s own \code{seed}. Ignored otherwise.}
+
 \item{...}{Passed to \code{\link[=network_proximity]{network_proximity()}} for any pair not yet computed
 (\code{score_threshold}, \code{n_random}, \code{seed}, \code{disease_genes}, ...).}
 }
@@ -40,7 +66,14 @@ whether or not each one's z-score came out finite), \code{n_compounds_finite}
 (of those, how many did -- this is what feeds \code{mean_z}/\code{median_z}/\code{sd_z}/\code{best_z}),
 \code{best_z} (most negative, i.e. closest single compound), \code{n_disease_genes_hit},
 \code{n_disease_genes_total}, \code{disease_gene_coverage} (hit / total). Sorted
-with the most negative (closest-to-disease) \code{aggregate} z first.
+with the most negative (closest-to-disease) \code{aggregate} z first. When
+\code{permutation_test = TRUE}, also gains \code{perm_null_mean}, \code{perm_null_sd},
+\code{perm_p_value}, \code{perm_p_adjusted}, \code{perm_n_draws}, \code{perm_seed_used} --
+read these as "how surprising is this condition's subset of compounds",
+never as a per-compound significance claim, and note that a condition
+compared here with \code{conditions = NULL} or a small \code{conditions} vector
+only borrows a pool from those conditions, not from every condition
+that ever existed for this disease.
 When \code{target_summary = TRUE}, also sets \code{patliRResults(proj, "network_condition_targets")}: one row per \verb{(condition, disease_id, uniprot_id)} hit by that condition's compounds and also a disease gene,
 with \code{n_compounds} (how many of the condition's compounds hit it),
 \code{gene_symbol}, \code{association_score}, and, when available,

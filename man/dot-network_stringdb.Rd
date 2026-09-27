@@ -7,7 +7,13 @@
 -- deleting \code{cacheDir(proj)/stringdb} just triggers a redownload, same
 "safe to delete" cache principle as \code{.network_cache_path()}).}
 \usage{
-.network_stringdb(proj, species, version, score_threshold)
+.network_stringdb(
+  proj,
+  species,
+  version,
+  score_threshold,
+  network_type = "full"
+)
 }
 \value{
 A \code{STRINGdb} reference-class instance.

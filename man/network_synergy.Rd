@@ -15,6 +15,7 @@ network_synergy(
   species = 9606,
   version = "12.0",
   score_threshold = 400,
+  network_type = c("full", "physical"),
   disease_gene_source = c("disease_genes", "targets_disease"),
   singleton = c("na", "zero")
 )
@@ -54,6 +55,19 @@ Default \code{"12.0"}.}
 \code{STRINGdb$new()}. Default \code{400} (STRINGdb's own default -- "medium
 confidence").}
 
+\item{network_type}{\code{"full"} (default) or \code{"physical"}, passed to
+\code{STRINGdb$new()}. \code{"full"} is STRING's combined network (physical
+binding plus co-expression, text-mining, curated pathway membership
+and every other evidence channel); \code{"physical"} restricts the graph to
+direct physical/binding interactions only -- a stricter, smaller,
+generally sparser interactome. Comparing \code{z_score}/\code{p_empirical}
+between the two is a sensitivity check on how much the proximity
+signal depends on STRING's non-physical evidence, the same spirit as
+varying \code{score_threshold} -- not a claim that one is "correct".
+Recorded in the \code{network_type} column so \code{\link[=network_condition_compare]{network_condition_compare()}}
+and \code{\link[=network_synergy]{network_synergy()}} can detect a mismatch instead of silently
+comparing two different interactomes.}
+
 \item{disease_gene_source}{Which \code{\link[=network_proximity]{network_proximity()}} rows to consume:
 \code{"disease_genes"} (default, the independent gene set) or the legacy,
 circular \code{"targets_disease"} (a warning is emitted -- the Cheng
@@ -77,7 +91,7 @@ The updated \code{proj}, with a \code{network_synergy} entry in
 \code{cheng_class} (FDR-gated), \code{cheng_class_sign} (sign-only, the paper's
 rule), \code{complementary_exposure}, \code{joint_closeness}, \code{synergy_score},
 \code{separation_method}, \code{alpha}, \code{singleton_policy}, \code{pairs_mode},
-\code{species}, \code{string_version}, \code{score_threshold},
+\code{species}, \code{string_version}, \code{score_threshold}, \code{network_type},
 \code{disease_gene_source}), also written to
 \code{results/network_synergy.csv}.
 }

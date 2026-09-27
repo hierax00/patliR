@@ -104,6 +104,18 @@ NULL
 #'   (0-1000) for an interaction to be loaded into the graph, passed to
 #'   `STRINGdb$new()`. Default `400` (STRINGdb's own default -- "medium
 #'   confidence").
+#' @param network_type `"full"` (default) or `"physical"`, passed to
+#'   `STRINGdb$new()`. `"full"` is STRING's combined network (physical
+#'   binding plus co-expression, text-mining, curated pathway membership
+#'   and every other evidence channel); `"physical"` restricts the graph to
+#'   direct physical/binding interactions only -- a stricter, smaller,
+#'   generally sparser interactome. Comparing `z_score`/`p_empirical`
+#'   between the two is a sensitivity check on how much the proximity
+#'   signal depends on STRING's non-physical evidence, the same spirit as
+#'   varying `score_threshold` -- not a claim that one is "correct".
+#'   Recorded in the `network_type` column so [network_condition_compare()]
+#'   and [network_synergy()] can detect a mismatch instead of silently
+#'   comparing two different interactomes.
 #' @param n_random Number of degree-preserving random resamplings used to
 #'   compute the null distribution for the z-score. Default `1000`.
 #' @param seed `NULL` (default) or a single integer, for the random
@@ -129,7 +141,8 @@ NULL
 #'   overlap driving `d_observed` toward 0 is always visible -- it equals
 #'   `n_targets_mapped` exactly when `d_observed == 0`, i.e. `S ⊆ T`),
 #'   `d_observed`, `d_random_mean`, `d_random_sd`, `z_score`, `p_empirical`,
-#'   `n_random`, `seed_used`, `species`, `string_version`, `score_threshold`
+#'   `n_random`, `seed_used`, `species`, `string_version`, `score_threshold`,
+#'   `network_type`
 #'   (the STRING interactome this run used -- recorded so [network_synergy()]
 #'   can refuse to combine a `z` from one interactome with an `s_AB` from
 #'   another), `n_tests_in_family` (the Benjamini-Hochberg family size for
@@ -174,13 +187,15 @@ NULL
 network_proximity <- function(proj, condition = NULL, disease,
                                disease_genes = c("disease_genes", "targets_disease"),
                                species = 9606, version = "12.0",
-                               score_threshold = 400, n_random = 1000,
+                               score_threshold = 400, network_type = c("full", "physical"),
+                               n_random = 1000,
                                seed = NULL, store_null = FALSE) {
   stopifnot(is(proj, "PatliRProject"))
   stopifnot(is.character(disease), length(disease) == 1, nzchar(disease))
   stopifnot(is.numeric(n_random), length(n_random) == 1, n_random >= 1)
   stopifnot(is.logical(store_null), length(store_null) == 1, !is.na(store_null))
   disease_genes <- match.arg(disease_genes)
+  network_type <- match.arg(network_type)
   if (!requireNamespace("STRINGdb", quietly = TRUE)) {
     cli::cli_abort(c(
       "{.fn network_proximity} needs {.pkg STRINGdb}, not installed.",
@@ -233,7 +248,7 @@ network_proximity <- function(proj, condition = NULL, disease,
   restore_rng <- .with_seed(used_seed)
   on.exit(restore_rng(), add = TRUE)
 
-  string_db <- .network_stringdb(proj, species, version, score_threshold)
+  string_db <- .network_stringdb(proj, species, version, score_threshold, network_type)
 
   ## Guney et al. (2016) and Menche et al. (2015) both work on the
   ## interactome's largest connected component -- a target outside it has
@@ -241,7 +256,7 @@ network_proximity <- function(proj, condition = NULL, disease,
   ## silently dropped (biasing d_observed downward) or make min() warn.
   ## Extracted into .network_string_lcc() so network_synergy() gets a
   ## byte-identical graph -- s_AB and z must be on the same interactome.
-  lcc <- .network_string_lcc(proj, species, version, score_threshold, string_db = string_db)
+  lcc <- .network_string_lcc(proj, species, version, score_threshold, network_type, string_db = string_db)
   g <- lcc$graph
   degree_all <- lcc$degree
   bins <- lcc$bins
@@ -396,7 +411,7 @@ network_proximity <- function(proj, condition = NULL, disease,
         z_score = z_score, p_empirical = p_empirical, n_random = length(d_random),
         seed_used = used_seed,
         species = as.numeric(species), string_version = as.character(version),
-        score_threshold = as.numeric(score_threshold),
+        score_threshold = as.numeric(score_threshold), network_type = as.character(network_type),
         n_tests_in_family = NA_integer_, p_adjusted = NA_real_,
         stringsAsFactors = FALSE
       )
@@ -473,12 +488,17 @@ network_proximity <- function(proj, condition = NULL, disease,
 #' "safe to delete" cache principle as `.network_cache_path()`).
 #' @return A `STRINGdb` reference-class instance.
 #' @keywords internal
-.network_stringdb <- function(proj, species, version, score_threshold) {
+.network_stringdb <- function(proj, species, version, score_threshold, network_type = "full") {
   dir <- file.path(cacheDir(proj), "stringdb")
   if (!dir.exists(dir)) dir.create(dir, recursive = TRUE)
   STRINGdb <- get("STRINGdb", envir = asNamespace("STRINGdb"))
+  ## network_type = "physical" downloads a distinctly-named STRING flat file
+  ## (protein.physical.links.v<version> vs protein.links.v<version>), so
+  ## sharing input_directory across both is safe -- STRINGdb's own
+  ## downloadAbsentFile() never confuses the two.
   STRINGdb$new(version = version, species = species,
-               score_threshold = score_threshold, input_directory = dir)
+               score_threshold = score_threshold, input_directory = dir,
+               network_type = network_type)
 }
 
 #' Contiguous-value bins over a numeric node property -- the pool each
@@ -706,6 +726,7 @@ network_proximity <- function(proj, condition = NULL, disease,
     z_score = double(0), p_empirical = double(0), n_random = integer(0),
     seed_used = integer(0),
     species = double(0), string_version = character(0), score_threshold = double(0),
+    network_type = character(0),
     n_tests_in_family = integer(0), p_adjusted = double(0),
     stringsAsFactors = FALSE
   )
@@ -739,14 +760,22 @@ network_proximity <- function(proj, condition = NULL, disease,
 #'
 #' @details
 #' Only the graph is cached, under
-#' `cacheDir(proj)/stringdb/lcc_<species>_<version>_<threshold>.rds`. The
-#' degree, the degree bins and the per-node bin index are recomputed from
-#' it on every load -- a future `min_per_bin` parameter would otherwise be
-#' served a stale cached binning. Like `.network_stringdb()`'s downloaded
-#' flat files, this `.rds` is **safe to delete**: STRING's own flat files
-#' under the same directory are the real cache, and deleting the `.rds`
-#' just triggers one recompute of the component decomposition.
+#' `cacheDir(proj)/stringdb/lcc_<species>_<version>_<threshold>.rds` for the
+#' default `network_type = "full"` (unchanged from before `network_type`
+#' existed, so old caches keep working), or with a `_<network_type>` suffix
+#' otherwise -- a "physical" LCC and a "full" LCC at the same
+#' species/version/threshold are different graphs and must not share a
+#' cache entry. The degree, the degree bins and the per-node bin index are
+#' recomputed from it on every load -- a future `min_per_bin` parameter
+#' would otherwise be served a stale cached binning. Like
+#' `.network_stringdb()`'s downloaded flat files, this `.rds` is **safe to
+#' delete**: STRING's own flat files under the same directory are the real
+#' cache, and deleting the `.rds` just triggers one recompute of the
+#' component decomposition.
 #'
+#' @param network_type `"full"` (default) or `"physical"`, passed to
+#'   `STRINGdb$new()` on a cache miss -- see [network_proximity()]'s own
+#'   `network_type` for what the two mean.
 #' @param string_db Optional pre-constructed `STRINGdb` instance (avoids a
 #'   second `STRINGdb$new()` when the caller already built one); only used
 #'   on a cache miss.
@@ -755,15 +784,17 @@ network_proximity <- function(proj, condition = NULL, disease,
 #'   node-index vectors from [.network_value_bins()], `bin_of_node` the
 #'   bin index of every node aligned to `names(degree)`.
 #' @keywords internal
-.network_string_lcc <- function(proj, species, version, score_threshold, string_db = NULL) {
+.network_string_lcc <- function(proj, species, version, score_threshold,
+                                network_type = "full", string_db = NULL) {
   dir <- file.path(cacheDir(proj), "stringdb")
   if (!dir.exists(dir)) dir.create(dir, recursive = TRUE)
-  cache_rds <- file.path(dir, paste0("lcc_", species, "_", version, "_", score_threshold, ".rds"))
+  suffix <- if (identical(network_type, "full")) "" else paste0("_", network_type)
+  cache_rds <- file.path(dir, paste0("lcc_", species, "_", version, "_", score_threshold, suffix, ".rds"))
 
   if (file.exists(cache_rds)) {
     g <- readRDS(cache_rds)
   } else {
-    if (is.null(string_db)) string_db <- .network_stringdb(proj, species, version, score_threshold)
+    if (is.null(string_db)) string_db <- .network_stringdb(proj, species, version, score_threshold, network_type)
     g0 <- string_db$get_graph()
     comp <- igraph::components(g0)
     lcc_id <- which.max(comp$csize)

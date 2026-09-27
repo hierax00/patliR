@@ -12,6 +12,7 @@ network_proximity(
   species = 9606,
   version = "12.0",
   score_threshold = 400,
+  network_type = c("full", "physical"),
   n_random = 1000,
   seed = NULL,
   store_null = FALSE
@@ -52,6 +53,19 @@ Default \code{"12.0"}.}
 \code{STRINGdb$new()}. Default \code{400} (STRINGdb's own default -- "medium
 confidence").}
 
+\item{network_type}{\code{"full"} (default) or \code{"physical"}, passed to
+\code{STRINGdb$new()}. \code{"full"} is STRING's combined network (physical
+binding plus co-expression, text-mining, curated pathway membership
+and every other evidence channel); \code{"physical"} restricts the graph to
+direct physical/binding interactions only -- a stricter, smaller,
+generally sparser interactome. Comparing \code{z_score}/\code{p_empirical}
+between the two is a sensitivity check on how much the proximity
+signal depends on STRING's non-physical evidence, the same spirit as
+varying \code{score_threshold} -- not a claim that one is "correct".
+Recorded in the \code{network_type} column so \code{\link[=network_condition_compare]{network_condition_compare()}}
+and \code{\link[=network_synergy]{network_synergy()}} can detect a mismatch instead of silently
+comparing two different interactomes.}
+
 \item{n_random}{Number of degree-preserving random resamplings used to
 compute the null distribution for the z-score. Default \code{1000}.}
 
@@ -80,7 +94,8 @@ The updated \code{proj}, with a \code{network_proximity} entry in
 overlap driving \code{d_observed} toward 0 is always visible -- it equals
 \code{n_targets_mapped} exactly when \code{d_observed == 0}, i.e. \verb{S ⊆ T}),
 \code{d_observed}, \code{d_random_mean}, \code{d_random_sd}, \code{z_score}, \code{p_empirical},
-\code{n_random}, \code{seed_used}, \code{species}, \code{string_version}, \code{score_threshold}
+\code{n_random}, \code{seed_used}, \code{species}, \code{string_version}, \code{score_threshold},
+\code{network_type}
 (the STRING interactome this run used -- recorded so \code{\link[=network_synergy]{network_synergy()}}
 can refuse to combine a \code{z} from one interactome with an \code{s_AB} from
 another), \code{n_tests_in_family} (the Benjamini-Hochberg family size for

@@ -8,7 +8,7 @@
                                 z = NULL, source = "disease_genes", n_random = 1000L,
                                 n_tests_in_family = NULL, p_adjusted = NULL,
                                 species = 9606, string_version = "12.0",
-                                score_threshold = 400) {
+                                score_threshold = 400, network_type = "full") {
   n <- length(compounds)
   if (is.null(z)) z <- seq(-3, 2, length.out = n)
   if (is.null(p_adjusted)) p_adjusted <- ifelse(z < 0, 0.001, 0.5)
@@ -21,6 +21,7 @@
     z_score = z, p_empirical = 0.001, n_random = as.integer(n_random),
     seed_used = 1L,
     species = species, string_version = string_version, score_threshold = score_threshold,
+    network_type = network_type,
     n_tests_in_family = as.integer(n_tests_in_family), p_adjusted = p_adjusted,
     stringsAsFactors = FALSE
   )
@@ -602,6 +603,55 @@ test_that("network mode: aborts on a species / version / score_threshold mismatc
     network_synergy(proj, condition = "SYN", disease = "SOME_DISEASE",
                     separation = "network", pairs = "all", score_threshold = 400),
     "different STRING interactome"
+  )
+})
+
+test_that("network mode: aborts on a network_type mismatch with the proximity rows", {
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  proj <- .synergy_add_condition(proj, "SYN", list(A = c("PA1", "PA2"), B = c("PB1", "PB2")))
+  patliRResults(proj, "network_proximity") <- .synergy_fake_prox(
+    c("A", "B"), condition = "SYN", z = c(-2, -2), network_type = "physical"
+  )
+  mock <- .synergy_mock_string(c("PA1", "PA2", "PB1", "PB2"))
+  .synergy_use_mock(mock)
+  expect_error(
+    network_synergy(proj, condition = "SYN", disease = "SOME_DISEASE",
+                    separation = "network", pairs = "all", network_type = "full"),
+    "different STRING interactome"
+  )
+})
+
+test_that("network_synergy() records network_type and does not error when it matches the proximity rows", {
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  proj <- .synergy_add_condition(proj, "SYN", list(A = c("PA1", "PA2"), B = c("PB1", "PB2")))
+  patliRResults(proj, "network_proximity") <- .synergy_fake_prox(
+    c("A", "B"), condition = "SYN", z = c(-2, -2), network_type = "physical"
+  )
+  mock <- .synergy_mock_string(c("PA1", "PA2", "PB1", "PB2"))
+  .synergy_use_mock(mock)
+  proj <- network_synergy(proj, condition = "SYN", disease = "SOME_DISEASE",
+                          separation = "network", pairs = "all", network_type = "physical")
+  res <- patliRResults(proj, "network_synergy")
+  expect_true(all(res$network_type == "physical"))
+})
+
+test_that("network_synergy() does not error on a network_type mismatch when the proximity rows predate that column", {
+  ## backward compatibility: an older network_proximity table has no
+  ## network_type column at all -- treated as unknown, not compared,
+  ## exactly like the pre-existing species/version/score_threshold branch.
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  prox <- .synergy_fake_prox(.synergy_flo_compounds(proj))
+  prox$network_type <- NULL
+  patliRResults(proj, "network_proximity") <- prox
+  mock <- .synergy_mock_string(unique(patliRResults(proj, "network_edges")$uniprot_id[
+    patliRResults(proj, "network_edges")$condition == "FLO-ET"]))
+  .synergy_use_mock(mock)
+  expect_no_error(
+    network_synergy(proj, condition = "FLO-ET", disease = "SOME_DISEASE",
+                    separation = "network", pairs = "all", network_type = "physical")
   )
 })
 

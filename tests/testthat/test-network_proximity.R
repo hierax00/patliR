@@ -98,6 +98,7 @@ test_that("network_proximity schema carries p_adjusted whether or not any row is
     d_observed = 1, d_random_mean = 2, d_random_sd = 1,
     z_score = -1, p_empirical = 0.1, n_random = 10L, seed_used = 1L,
     species = 9606, string_version = "12.0", score_threshold = 400,
+    network_type = "full",
     n_tests_in_family = NA_integer_, p_adjusted = NA_real_,   # how network_proximity() builds the row
     stringsAsFactors = FALSE
   )
@@ -153,6 +154,35 @@ test_that("network_proximity(): a disease_genes set disjoint from targets_import
   expect_gt(nrow(res), 0)
   expect_true(all(res$n_overlap == 0))
   expect_true(all(res$disease_gene_source == "disease_genes"))
+})
+
+test_that("network_proximity(network_type = 'physical') records network_type and rejects an invalid value", {
+  testthat::skip_if_not_installed("STRINGdb")
+  proj <- .network_stats_test_setup()
+  cond <- "FLO-ET"
+  edges <- patliRResults(proj, "network_edges")
+  cmp_uni <- unique(edges$uniprot_id[edges$condition == cond])
+  disease_uni <- paste0("DIS", seq_len(6))
+
+  proj <- disease_genes_import(
+    proj, data.frame(uniprot_id = disease_uni),
+    disease_id = "D_TEST", disease_name = "synthetic", source = "synthetic"
+  )
+  fake <- .fake_string_db(c(cmp_uni, disease_uni))
+  testthat::local_mocked_bindings(.network_stringdb = function(...) fake, .package = "patliR")
+
+  proj2 <- network_proximity(proj, condition = cond, disease = "D_TEST",
+                             n_random = 12, seed = 1) # default: "full"
+  expect_true(all(patliRResults(proj2, "network_proximity")$network_type == "full"))
+
+  proj3 <- network_proximity(proj, condition = cond, disease = "D_TEST",
+                             n_random = 12, seed = 1, network_type = "physical")
+  expect_true(all(patliRResults(proj3, "network_proximity")$network_type == "physical"))
+
+  expect_error(
+    network_proximity(proj, condition = cond, disease = "D_TEST", network_type = "nope"),
+    "arg"
+  )
 })
 
 test_that("network_proximity(): d_observed == 0 exactly when S is a subset of T, surfaced in n_overlap (STRINGdb mocked)", {
@@ -237,6 +267,25 @@ test_that("network_proximity(disease_genes = \"targets_disease\") warns 'circula
   res <- patliRResults(proj, "network_proximity")
   expect_gt(nrow(res), 0)
   expect_true(all(res$disease_gene_source == "targets_disease"))
+})
+
+test_that(".network_string_lcc() caches 'full' and 'physical' under different keys (no cross-network_type collision)", {
+  proj <- .network_stats_test_setup()
+  g_full <- igraph::make_ring(6)
+  igraph::V(g_full)$name <- paste0("s", seq_len(6))
+  g_phys <- igraph::make_ring(4)
+  igraph::V(g_phys)$name <- paste0("p", seq_len(4))
+
+  lcc_full <- patliR:::.network_string_lcc(proj, 9606, "12.0", 400, "full",
+                                           string_db = list(get_graph = function() g_full))
+  lcc_phys <- patliR:::.network_string_lcc(proj, 9606, "12.0", 400, "physical",
+                                           string_db = list(get_graph = function() g_phys))
+  expect_equal(igraph::vcount(lcc_full$graph), 6L)
+  expect_equal(igraph::vcount(lcc_phys$graph), 4L) # not silently reused from the "full" cache entry
+
+  dir <- file.path(cacheDir(proj), "stringdb")
+  expect_true(file.exists(file.path(dir, "lcc_9606_12.0_400.rds")))
+  expect_true(file.exists(file.path(dir, "lcc_9606_12.0_400_physical.rds")))
 })
 
 test_that("network_proximity() z_score is unchanged after the .network_string_lcc() extraction (behaviour-identical refactor)", {

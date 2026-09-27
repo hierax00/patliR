@@ -208,7 +208,7 @@ network_bowtie <- function(proj, condition = NULL, species = 9606, version = "12
   result <- do.call(rbind, rows)
   rownames(result) <- NULL
   ## Replace the WHOLE selected condition scope, not just the edges still
-  ## present: touched_keys built from the current network_edges (as before)
+  ## present: touched_keys built from the current network_edges alone
   ## would miss an edge that disappeared since the last run (e.g. a compound
   ## removed, or a target no longer predicted) -- that edge is absent from
   ## both `result` and the old touched_keys, so its stale bow-tie annotation
@@ -305,9 +305,8 @@ network_bowtie <- function(proj, condition = NULL, species = 9606, version = "12
 #' needed to build this graph.
 #'
 #' @param score_threshold `NULL` (default) applies no confidence filter --
-#'   every directed row becomes an edge, the historical behaviour every
-#'   existing caller (`plot_target_chord()`, which does its own separate
-#'   score-based arc filtering afterwards) still relies on. A number filters
+#'   every directed row becomes an edge (what `plot_target_chord()` uses,
+#'   since it applies its own score-based arc filtering afterwards). A number filters
 #'   to `score >= score_threshold` first ([network_bowtie()] passes its
 #'   `actions_score_threshold` here).
 #' @return `list(graph = <directed igraph>)`.
@@ -396,15 +395,12 @@ network_bowtie <- function(proj, condition = NULL, species = 9606, version = "12
   aliases
 }
 
-## Second real bug found on the first live run (2026-07-23, after fixing the
-## v12.0/v11.0 URL issue above): STRING's `is_directional`/`a_is_acting`
-## columns are encoded as the strings "t"/"f" (confirmed against
-## biostars.org/p/9588100 and STRING's own column documentation), not
-## numeric 0/1 -- `actions$is_directional == 1` therefore matched nothing
-## (a character "t" is never `== 1`) and silently produced an empty graph
-## (0 nodes/edges) instead of erroring, because
-## `igraph::graph_from_data_frame()` on a zero-row edge list is not itself
-## an error. Handled tolerantly here (covers "t"/"f", "true"/"false", "1"/
+## STRING's `is_directional`/`a_is_acting` columns are encoded as the
+## strings "t"/"f" (see biostars.org/p/9588100 and STRING's own column
+## documentation), not numeric 0/1 -- a plain `== 1` test matches nothing
+## and silently yields an empty graph, since
+## `igraph::graph_from_data_frame()` on a zero-row edge list is not an
+## error. Handled tolerantly here (covers "t"/"f", "true"/"false", "1"/
 ## "0", and native logical/numeric, case-insensitively) since STRING's own
 ## docs are not fully consistent about which encoding a given release uses.
 #' @keywords internal

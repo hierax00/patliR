@@ -150,18 +150,10 @@ proteome -- every protein any compound in the project could plausibly
 have been assigned as a target, not every protein in the genome -- so
 the test asks the sharper question "is this term hit more than you'd
 expect from \emph{this predictor's} output," not "...from a random gene."
-\code{universe = "genome"} is kept as an explicit, opt-in escape hatch back to
-the old whole-genome/whole-pathway-database behaviour, for comparison or
-for callers who have a specific reason to want it.
-
-\strong{This is a breaking change for existing projects.} Before this
-argument existed, every call implicitly ran with today's \code{"genome"}
-behaviour. Re-running \code{network_enrich()} under the new \code{"project"}
-default changes every p-value it reports, and therefore every downstream
-result that consumes \code{network_enrichment} --
-\link[=network_degeneracy]{network_degeneracy(annotation = "enriched")} /
-\code{annotation = "jaccard"}, \code{\link[=network_motifs]{network_motifs()}}'s pathway layer, and
-\code{\link[=plot_network_layers]{plot_network_layers()}}/\code{\link[=plot_enrichment]{plot_enrichment()}}. See \code{NEWS.md}.
+\code{universe = "genome"} is kept as an explicit, opt-in to the
+whole-genome/whole-pathway-database background, for comparison with
+tools that use it. The choice changes every p-value, and therefore every
+downstream result that consumes \code{network_enrichment}.
 }
 
 \examples{

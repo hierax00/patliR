@@ -26,17 +26,10 @@ NULL
 #' exists; the other two raise a clear "not implemented yet" error if
 #' requested.
 #'
-#' @section `disease_association_score` was removed (breaking change):
-#' Earlier versions attached a `disease_association_score` column to every
-#' edge, joined from [targets_disease_filter()]'s output via
-#' `match(paste(compound_id, uniprot_id), paste(compound_id, target_id))`.
-#' That `match()` only ever returns the *first* hit -- once
-#' `targets_disease_filter()` had accumulated more than one disease (exactly
-#' the case [network_proximity()]/[network_synergy()] rely on),
-#' `network_edges` silently carried an arbitrary one of them with no
-#' `disease_id` column recording which. There is no fix that keeps a single
-#' scalar column meaningful, so the column is gone: join
-#' `patliRResults(proj, "targets_disease")` yourself on
+#' @section Disease associations are not stored on the edges:
+#' A target can be associated with several diseases, so a single
+#' per-edge disease score would be ambiguous. Join
+#' `patliRResults(proj, "targets_disease")` on
 #' `(compound_id, target_id, disease_id)` if you need it.
 #'
 #' @inheritParams compounds
@@ -420,8 +413,7 @@ network_build <- function(proj, condition = NULL,
 #'   whatever `new_rows` holds -- **including zero rows**, so a rerun that
 #'   now produces nothing for a condition correctly removes that
 #'   condition's stale rows instead of silently keeping them. When `NULL`,
-#'   the touched slots are derived from `new_rows` itself (the historical
-#'   behaviour, kept for callers not yet migrated): a zero-row `new_rows`
+#'   the touched slots are derived from `new_rows` itself: a zero-row `new_rows`
 #'   then touches nothing and the previous table is returned unchanged.
 #' @return `new_rows` with any previously-existing, non-overlapping rows of
 #'   `patliRResults(proj, name)` prepended.

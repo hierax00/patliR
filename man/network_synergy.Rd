@@ -77,7 +77,7 @@ classification would inherit the Phase-1 circularity).}
 classes (\code{cheng_class}, \code{cheng_class_sign}, \code{complementary_exposure})
 do for a pair in which either compound has fewer than 2 STRING-mapped
 targets: \code{"na"} leaves them \code{NA}; \code{"zero"} computes them from the
-\code{d_AA = 0} convention (the pre-audit behaviour). See the Singletons
+\code{d_AA = 0} convention. See the Singletons
 section. Ignored when \code{separation = "jaccard"}.}
 }
 \value{
@@ -164,7 +164,7 @@ reference \code{separation.py} returns \code{nan} instead.
 Therefore, by default (\code{singleton = "na"}), the separation-based classes
 \code{cheng_class}, \code{cheng_class_sign} and \code{complementary_exposure} are \code{NA}
 whenever \code{singleton_a} or \code{singleton_b} is \code{TRUE}. \code{singleton = "zero"}
-restores the old convention (classes computed from the \code{d_AA = 0}
+uses the alternative convention (classes computed from the \code{d_AA = 0}
 separation); the flags are kept either way, the choice is recorded in
 \code{singleton_policy}, and \code{\link[=plot_synergy]{plot_synergy()}} never counts a singleton pair
 as \code{P2}. \code{synergy_score} is \code{NA} for a singleton-flagged pair under both
@@ -232,9 +232,8 @@ Keeps the cheap set-overlap proxy for users without \code{STRINGdb}.
 \code{cheng_class_sign} / \code{complementary_exposure} / \code{singleton_a} /
 \code{singleton_b} are all \code{NA}, \code{separation_method = "jaccard"} records it,
 and \code{synergy_score} is gated on \code{both_proximal} rather than
-\code{complementary_exposure}. (Earlier versions defined \code{both_proximal} as
-the raw-sign quantity now called \code{both_negative_z}; Jaccard-mode
-\code{synergy_score} is now FDR-gated like the network mode.)
+\code{complementary_exposure} (FDR-gated like the network mode; the
+sign-only version is \code{both_negative_z}).
 \code{target_jaccard} / \code{complementarity} are
 computed on the \strong{raw UniProt} target sets in \emph{both} modes (never the
 STRING-mapped subset), so they are comparable across modes;

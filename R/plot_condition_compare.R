@@ -74,8 +74,8 @@ plot_condition_compare <- function(proj, disease = NULL, aggregate = c("mean", "
   p <- ggplot2::ggplot(dat, ggplot2::aes(y = .data$condition, x = .data[[z_col]],
                                          colour = .data$disease_id, group = .data$disease_id)) +
     ggplot2::geom_vline(xintercept = 0, linetype = "dashed", colour = "grey60") +
-    ggplot2::geom_errorbarh(ggplot2::aes(xmin = .data$ymin, xmax = .data$ymax), height = 0.15,
-                            position = dodge, show.legend = FALSE) +
+    ggplot2::geom_errorbar(ggplot2::aes(xmin = .data$ymin, xmax = .data$ymax), width = 0.15,
+                           orientation = "y", position = dodge, show.legend = FALSE) +
     ggplot2::geom_point(ggplot2::aes(size = .data$n_compounds_present), position = dodge) +
     ggplot2::scale_size_continuous(name = "Compounds\npresent", range = c(2, 6))
   if (multi) {

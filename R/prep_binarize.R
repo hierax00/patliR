@@ -121,9 +121,8 @@ prep_binarize <- function(proj, data, id_col = "Name",
         avg <- vals[, 1]
       }
       ## Majority rule across already-binary replicates (>= half present),
-      ## same "average then threshold" shape as the non-binary branch below
-      ## -- a single replicate column used to silently swallow the others
-      ## here before this fix.
+      ## same "average then threshold" shape as the non-binary branch below,
+      ## so every replicate column counts.
       bin <- ifelse(avg >= 0.5, 1L, 0L)
       if (!is.null(min_replicates)) bin <- ifelse(rowSums(vals > 0, na.rm = TRUE) >= min_replicates, 1L, 0L)
       used_q1 <- NA_real_

@@ -342,10 +342,9 @@ network_proximity <- function(proj, condition = NULL, disease,
     }
 
     ## Pass 1 -- resolve every compound's S and draw its n_random
-    ## degree-matched S' sets, in the same compound-then-draw order the
-    ## draws were always taken in (nothing else in this loop touches the
-    ## RNG), so a given seed yields exactly the same random sets as the
-    ## historical one-draw-then-one-distances() loop.
+    ## degree-matched S' sets, in compound-then-draw order (nothing
+    ## else in this loop touches the RNG), so a given seed always yields the
+    ## same random sets.
     source_by_cp <- vector("list", length(compounds))
     s_rand_by_cp <- vector("list", length(compounds))
     for (i in seq_along(compounds)) {
@@ -786,8 +785,7 @@ network_proximity <- function(proj, condition = NULL, disease,
 #' @details
 #' Only the graph is cached, under
 #' `cacheDir(proj)/stringdb/lcc_<species>_<version>_<threshold>.rds` for the
-#' default `network_type = "full"` (unchanged from before `network_type`
-#' existed, so old caches keep working), or with a `_<network_type>` suffix
+#' default `network_type = "full"`, or with a `_<network_type>` suffix
 #' otherwise -- a "physical" LCC and a "full" LCC at the same
 #' species/version/threshold are different graphs and must not share a
 #' cache entry. The degree, the degree bins and the per-node bin index are

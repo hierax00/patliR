@@ -24,7 +24,6 @@ component has fewer than \code{min_component_size} nodes}
 Dispatches to one of three per-component backends (\code{"leiden"},
 \code{"bipartite"}, \code{"hdbscan"}). The stochastic clustering step is wrapped in
 \code{.with_seed(seed)} here -- independently of the per-module
-\code{.with_seed(seed)} inside \code{.network_percolate()}, so \code{clustering = "hdbscan"} (which uses no RNG) still reproduces its historical output
-bit-for-bit.
+\code{.with_seed(seed)} inside \code{.network_percolate()}, so \code{clustering = "hdbscan"} (which uses no RNG) is reproducible bit-for-bit.
 }
 \keyword{internal}

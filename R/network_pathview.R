@@ -88,9 +88,7 @@ NULL
 #' expected KEGG data are both real, observed failure modes that raise no R
 #' `error` condition. `ok` is therefore `!inherits(res, "error") &&
 #' file.exists(<expected PNG path>)`, not merely the first half -- a run
-#' that "succeeds" without writing anything gets `ok = FALSE` here, where an
-#' earlier version reported `ok = TRUE` with a `path` pointing at a file
-#' that was never created.
+#' that "succeeds" without writing anything gets `ok = FALSE`.
 #'
 #' @section Gene scores assume `targets_import()`'s `[0, 1]` convention:
 #' `gene_score = "max_weight"`/`"mean_weight"` are hard-clamped to `pathview`'s

@@ -57,18 +57,11 @@ exists; the other two raise a clear "not implemented yet" error if
 requested.
 }
 
-\section{\code{disease_association_score} was removed (breaking change)}{
+\section{Disease associations are not stored on the edges}{
 
-Earlier versions attached a \code{disease_association_score} column to every
-edge, joined from \code{\link[=targets_disease_filter]{targets_disease_filter()}}'s output via
-\code{match(paste(compound_id, uniprot_id), paste(compound_id, target_id))}.
-That \code{match()} only ever returns the \emph{first} hit -- once
-\code{targets_disease_filter()} had accumulated more than one disease (exactly
-the case \code{\link[=network_proximity]{network_proximity()}}/\code{\link[=network_synergy]{network_synergy()}} rely on),
-\code{network_edges} silently carried an arbitrary one of them with no
-\code{disease_id} column recording which. There is no fix that keeps a single
-scalar column meaningful, so the column is gone: join
-\code{patliRResults(proj, "targets_disease")} yourself on
+A target can be associated with several diseases, so a single
+per-edge disease score would be ambiguous. Join
+\code{patliRResults(proj, "targets_disease")} on
 \verb{(compound_id, target_id, disease_id)} if you need it.
 }
 

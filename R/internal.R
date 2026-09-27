@@ -132,7 +132,7 @@
 #' evaluate, not shown literally. `.fetch_external()` (below) embeds
 #' `conditionMessage()` from whatever error the external call raised --
 #' text `patliR` does not control, e.g. a raw JSON fragment echoed back by
-#' a failed API parse. A message containing `{`/`}` (real case: NPClassifier
+#' a failed API parse. A message containing `{`/`}` (e.g. NPClassifier
 #' returning `"class_results": [...`) makes cli try to `parse()` that
 #' fragment as R code and throw a confusing meta-error that fully masks
 #' the real one. Doubling braces (`{` -> `{{`, `}` -> `}}`) is glue's own

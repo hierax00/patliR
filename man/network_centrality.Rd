@@ -70,13 +70,11 @@ The graph is \strong{undirected}, so Kleinberg's hub and authority scores
 coincide and both equal the principal (Perron) eigenvector of the
 adjacency matrix -- i.e. \code{hub_score} is eigenvector centrality, not a
 directional "hub vs. authority" distinction (that only exists on a
-directed graph). It is kept under the name \code{hub_score} for continuity
-with earlier versions. Implementation note: \code{hub_score} is
+directed graph). Implementation note: \code{hub_score} is
 \code{igraph::eigen_centrality(g, weights = NA)$vector} (scaled to \code{max = 1}).
-Earlier versions used \code{igraph::hits_scores(g, weights = NA)$hub}, which
-on a two-mode graph has a \strong{degenerate} top eigenspace -- ARPACK then
-returns an RNG-seeded arbitrary vector from it, so the column was not
-reproducible across runs. The Perron eigenvector is unique on each
+\code{igraph::hits_scores()} is deliberately not used: on a two-mode graph its
+top eigenspace is \strong{degenerate}, so ARPACK returns an RNG-seeded
+arbitrary vector from it that is not reproducible across runs. The Perron eigenvector is unique on each
 connected component, so \code{eigen_centrality()} is deterministic.
 
 On a \strong{disconnected} graph the principal eigenvector of the whole

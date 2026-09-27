@@ -45,7 +45,7 @@ Suggests:
     rmarkdown,
     webchem,
     httr2 (>= 1.1.0),
-    ggplot2,
+    ggplot2 (>= 3.5.0),
     ggiraph,
     clusterProfiler,
     ReactomePA,

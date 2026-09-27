@@ -108,13 +108,8 @@ targets_import <- function(proj, path, platform = c("swisstargetprediction", "su
   cmp <- compounds(proj)
   ## .targets_match_compound() already returns one compound_id per row of
   ## `raw` (rep()'d internally for id_from = "filename", matched row-by-row
-  ## for id_from = "column") -- it must NOT be rep()'d again here. An
-  ## earlier version of this line did `rep(compound_id, n)` on top of that
-  ## already-full-length vector; since data.frame() silently recycles a
-  ## column whose length evenly divides the frame's row count, that bug
-  ## never errored -- it just produced n^2 rows (every real row repeated n
-  ## times) for every single import, undetected because no existing test
-  ## asserted an exact row count.
+  ## for id_from = "column") -- it must NOT be rep()'d again here (data.frame() would silently
+  ## recycle it into n^2 rows).
   compound_id <- .targets_match_compound(path, raw, cmp, id_from, compound_col)
 
   n <- nrow(raw)

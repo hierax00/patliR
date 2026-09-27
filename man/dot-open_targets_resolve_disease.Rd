@@ -9,8 +9,8 @@
 \value{
 A character scalar (the resolved EFO ID), or throws if nothing
 matches either path. The error message always includes \emph{both} failure
-reasons when the ID-shaped fast path was attempted -- see the note
-below on why swallowing the first one to a bare \code{NULL} was itself a bug.
+reasons when the ID-shaped fast path was attempted, so the real cause
+of a failed direct lookup is never hidden behind the generic "no match".
 }
 \description{
 \code{mapIds()} (used by \code{\link[=.open_targets_map_id]{.open_targets_map_id()}}) is a \emph{full-text} search over
@@ -27,25 +27,11 @@ call, rather than routed through \code{mapIds()}.
 wrong, but because \code{EFO_0000537} is \strong{obsolete} (retired in EFO 3.88.0,
 replaced by \code{MONDO_0005044}; some catalogs still link the old ID, Open
 Targets does not).
-An earlier version of this function swallowed that \code{NULL}/failure into a
-bare fallback and only ever surfaced \code{mapIds()}'s generic "no match"
-error, hiding the real cause -- fixed to report both failure reasons (see
-below). Practically: prefer free text (always resolves to the \emph{current}
-term via \code{mapIds()}) over a hand-typed ontology ID unless you know it is
+Both failure reasons are reported (see below). Practically: prefer free
+text (always resolves to the \emph{current} term via \code{mapIds()}) over a hand-typed ontology ID unless you know it is
 still current. If the ID-shaped fast path finds nothing, this still
 falls back to \code{mapIds()} rather than failing outright, in case the
 string was coincidentally ID-shaped free text.
-}
-
-\section{Diagnostic history}{
-
-An earlier version of this function caught the direct-lookup failure with
-\code{tryCatch(..., error = function(e) NULL)} and silently fell through to
-\code{mapIds()} -- so when \emph{both} paths failed, the only error the caller ever
-saw was \code{mapIds()}'s generic "no disease matched", with the real reason
-the direct lookup failed thrown away. That is exactly the kind of
-silently-swallowed failure \code{patliR} otherwise takes care to avoid (see
-\code{.fetch_external()}) -- fixed here to keep and report both messages.
 }
 
 \keyword{internal}

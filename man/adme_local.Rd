@@ -100,14 +100,12 @@ original atom-count criterion does), 40 <= molar refractivity (AMR)
 logP <= 5.88, TPSA <= 131.6.
 \item \strong{Oprea property ranges} (\code{oprea_pass}) -- Oprea (2000), \emph{J.
 Comput. Aided Mol. Des.} 14, 251-264: 0 <= HBD <= 2, 2 <= HBA <= 9
-(\code{hbd_lipinski}/\code{hba_lipinski}, as for Ro5 above -- Oprea's own HBA
-range is exactly where CDK's undercount used to flip real compounds,
-e.g. ether/furan-rich lignans reading HBA=2 under CDK's rules and
-6-7 by Lipinski's own N+O count), 2 <= rotatable bonds <= 8, 1 <= ring
+(\code{hbd_lipinski}/\code{hba_lipinski}, as for Ro5 above -- Oprea's HBA
+range is sensitive to CDK's acceptor undercount, e.g. ether/furan-rich
+lignans read HBA=2 under CDK's rules and 6-7 by Lipinski's N+O count), 2 <= rotatable bonds <= 8, 1 <= ring
 count <= 4 (inclusive ranges; the paper reports them as the ranges
 holding ~70\% of the \emph{drug-like} compounds it surveyed, not as a
-stricter lead-likeness rule -- an earlier version used narrower,
-exclusive limits). See \code{adme_filter(rules = "oprea")}.
+stricter lead-likeness rule). See \code{adme_filter(rules = "oprea")}.
 }
 \strong{Descriptor conventions.} \code{mw} is the average molecular weight (natural
 isotopic abundance, \code{rcdk::get.natural.mass()}), not the monoisotopic mass.
@@ -178,10 +176,7 @@ screen, not a delivery-route decision.
 \code{fraction_csp3_approx} is CDK's \code{FractionalCSP3Descriptor} (sp3 carbons /
 all carbons, from perceived hybridization) and \code{aromatic_proportion_approx}
 is CDK's aromatic-atom count (after aromaticity perception) divided by the
-heavy-atom count, so neither depends on how the SMILES was written (the
-\verb{_approx} suffix is kept for column-name stability; an earlier version
-used a SMILES-string regex heuristic that mistook C=C and C=O carbons for
-sp3). \code{logs_esol} is
+heavy-atom count, so neither depends on how the SMILES was written. \code{logs_esol} is
 the published Delaney (2004) ESOL equation applied to \code{logp} (CDK XLogP,
 not the predictor the original coefficients were fitted with), \code{mw},
 \code{rotatable_bonds}, and \code{aromatic_proportion_approx}. \code{n_rings_approx}

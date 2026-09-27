@@ -53,7 +53,7 @@ only works when the scope's graph is genuinely two-layer
 (compound-target only, the default \code{layers}) -- \code{cli_abort}s naming
 the extra layer(s) otherwise.}
 
-\item{colour_by}{One of \code{"layer"} (default -- the historical behaviour:
+\item{colour_by}{One of \code{"layer"} (default:
 compound/target/pathway/disease, \code{.network_layers_layer_colors()}),
 \code{"module"} (joins \code{\link[=network_module_robustness]{network_module_robustness()}}'s per-node
 \code{network_module_membership} table by \verb{(condition, node_id)}, coloured
@@ -89,8 +89,7 @@ value(s) (e.g. \code{"kegg"} alone) before \code{max_pathways} even applies, or
 \code{NULL} (default) for every \code{db} combined. Also restricts the terms of
 \code{view = "pathway"}.}
 
-\item{min_target_degree}{Integer >= 1, default \code{1} (every target, the
-historical behaviour). Drops targets hit by fewer than this many
+\item{min_target_degree}{Integer >= 1, default \code{1} (every target). Drops targets hit by fewer than this many
 distinct compounds -- \code{2} keeps only the targets shared between
 compounds, which removes the degree-1 "dandelion" leaves that make a
 condition with a few hundred singleton targets unreadable. See the
@@ -226,7 +225,7 @@ edges, most targets shared by several compounds) cannot be drawn as a
 readable force-directed graph. \code{view} picks one of five figures, each
 answering one question:
 \itemize{
-\item \code{"network"} -- the historical force-directed (or \code{layout = "bipartite"}) drawing of every node; \code{layout}, \code{colour_by}, \code{layers}
+\item \code{"network"} -- the force-directed (or \code{layout = "bipartite"}) drawing of every node; \code{layout}, \code{colour_by}, \code{layers}
 and \code{max_pathways} apply. Best for small graphs or one module /
 compound (\code{module_id}, \code{compound_ids}).
 \item \code{"compound"} -- compound-centric summary. Compounds sit on a ring,
@@ -307,7 +306,8 @@ plot_network_layers(proj, condition = "FLO-ET", view = "bipartite", save = FALSE
 # proj <- network_module_robustness(proj, condition = "FLO-ET")
 # plot_network_layers(proj, condition = "FLO-ET", view = "module", save = FALSE)
 # proj <- network_enrich(proj, condition = "FLO-ET", db = "kegg")
-# plot_network_layers(proj, condition = "FLO-ET", view = "pathway", pathway_db = "kegg", save = FALSE)
+# plot_network_layers(proj, condition = "FLO-ET", view = "pathway",
+#                     pathway_db = "kegg", save = FALSE)
 
 ## Colour by module (needs network_module_robustness() first):
 # proj <- network_module_robustness(proj, condition = "FLO-ET")

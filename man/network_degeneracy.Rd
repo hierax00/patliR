@@ -29,7 +29,7 @@ untouched in \code{patliRResults(proj, "network_edges")}.}
 \item{annotation}{How \code{functional_similarity} is computed: \code{"direct"}
 (default, GO semantic similarity on the targets' own annotations, no
 \code{network_enrich()}), \code{"enriched"} (GO semantic similarity on the
-enriched-term sets), or \code{"jaccard"} (historical enriched-pathway
+enriched-term sets), or \code{"jaccard"} (enriched-pathway
 Jaccard).}
 
 \item{ont}{GO ontology for \code{"direct"} / \code{"enriched"}: \code{"BP"} (default --
@@ -96,8 +96,8 @@ annotations. No enrichment involved.
 \emph{enriched} GO-term sets (from \code{\link[=network_enrich]{network_enrich()}}, reconstructed via
 \code{.network_target_pathway_edges()}, internal). Carries the
 circularity described below.
-\item \code{"jaccard"} -- the historical unweighted Jaccard of the two
-compounds' enriched-pathway sets (no GOSemSim). Regression path.
+\item \code{"jaccard"} -- unweighted Jaccard of the two compounds'
+enriched-pathway sets (no GOSemSim).
 }
 \item \code{degeneracy_score = functional_similarity * (1 - target_jaccard)}:
 high only when two compounds are functionally similar

@@ -43,8 +43,7 @@ downward or make \code{min()} warn.
 \details{
 Only the graph is cached, under
 \verb{cacheDir(proj)/stringdb/lcc_<species>_<version>_<threshold>.rds} for the
-default \code{network_type = "full"} (unchanged from before \code{network_type}
-existed, so old caches keep working), or with a \verb{_<network_type>} suffix
+default \code{network_type = "full"}, or with a \verb{_<network_type>} suffix
 otherwise -- a "physical" LCC and a "full" LCC at the same
 species/version/threshold are different graphs and must not share a
 cache entry. The degree, the degree bins and the per-node bin index are

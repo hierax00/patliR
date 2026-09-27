@@ -19,7 +19,7 @@ an automatic switch, or \code{NULL}.
 \code{"auto"} becomes \code{"compound"} (the compound-centric summary) when the
 graph is a plain compound-target graph with more than \code{auto_max_nodes}
 nodes and the caller did not ask for a specific force \code{layout};
-otherwise \code{"network"} (the historical force-directed figure). Any other
+otherwise \code{"network"} (the force-directed figure). Any other
 \code{view} is returned unchanged.
 }
 \keyword{internal}

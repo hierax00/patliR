@@ -88,7 +88,7 @@ NULL
 #' edges, most targets shared by several compounds) cannot be drawn as a
 #' readable force-directed graph. `view` picks one of five figures, each
 #' answering one question:
-#' * `"network"` -- the historical force-directed (or `layout =
+#' * `"network"` -- the force-directed (or `layout =
 #'   "bipartite"`) drawing of every node; `layout`, `colour_by`, `layers`
 #'   and `max_pathways` apply. Best for small graphs or one module /
 #'   compound (`module_id`, `compound_ids`).
@@ -155,7 +155,7 @@ NULL
 #'   only works when the scope's graph is genuinely two-layer
 #'   (compound-target only, the default `layers`) -- `cli_abort`s naming
 #'   the extra layer(s) otherwise.
-#' @param colour_by One of `"layer"` (default -- the historical behaviour:
+#' @param colour_by One of `"layer"` (default:
 #'   compound/target/pathway/disease, `.network_layers_layer_colors()`),
 #'   `"module"` (joins [network_module_robustness()]'s per-node
 #'   `network_module_membership` table by `(condition, node_id)`, coloured
@@ -188,8 +188,7 @@ NULL
 #'   value(s) (e.g. `"kegg"` alone) before `max_pathways` even applies, or
 #'   `NULL` (default) for every `db` combined. Also restricts the terms of
 #'   `view = "pathway"`.
-#' @param min_target_degree Integer >= 1, default `1` (every target, the
-#'   historical behaviour). Drops targets hit by fewer than this many
+#' @param min_target_degree Integer >= 1, default `1` (every target). Drops targets hit by fewer than this many
 #'   distinct compounds -- `2` keeps only the targets shared between
 #'   compounds, which removes the degree-1 "dandelion" leaves that make a
 #'   condition with a few hundred singleton targets unreadable. See the
@@ -262,7 +261,8 @@ NULL
 #' # proj <- network_module_robustness(proj, condition = "FLO-ET")
 #' # plot_network_layers(proj, condition = "FLO-ET", view = "module", save = FALSE)
 #' # proj <- network_enrich(proj, condition = "FLO-ET", db = "kegg")
-#' # plot_network_layers(proj, condition = "FLO-ET", view = "pathway", pathway_db = "kegg", save = FALSE)
+#' # plot_network_layers(proj, condition = "FLO-ET", view = "pathway",
+#' #                     pathway_db = "kegg", save = FALSE)
 #'
 #' ## Colour by module (needs network_module_robustness() first):
 #' # proj <- network_module_robustness(proj, condition = "FLO-ET")
@@ -428,7 +428,7 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
 #' `"auto"` becomes `"compound"` (the compound-centric summary) when the
 #' graph is a plain compound-target graph with more than `auto_max_nodes`
 #' nodes and the caller did not ask for a specific force `layout`;
-#' otherwise `"network"` (the historical force-directed figure). Any other
+#' otherwise `"network"` (the force-directed figure). Any other
 #' `view` is returned unchanged.
 #' @return `list(view, note)` -- `note` is the subtitle sentence explaining
 #'   an automatic switch, or `NULL`.
@@ -631,7 +631,7 @@ plot_network_layers <- function(proj, condition = NULL, engine = c("static", "gg
 
 #' Compute a layout + labels/colors/sizes for `plot_network_layers()`
 #'
-#' @param colour_by `"layer"` (default, historical behaviour), `"module"`,
+#' @param colour_by `"layer"` (default), `"module"`,
 #'   or `"node_type"` -- see [plot_network_layers()]'s own `colour_by` docs.
 #' @return `list(nodes = data.frame(name, layer, label, x, y, degree,
 #'   is_hub, colour_group), edges = data.frame(x, y, xend, yend, edge_kind,

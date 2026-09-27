@@ -9,9 +9,8 @@ filtered on the actions file's own per-interaction \code{score}}
 }
 \arguments{
 \item{score_threshold}{\code{NULL} (default) applies no confidence filter --
-every directed row becomes an edge, the historical behaviour every
-existing caller (\code{plot_target_chord()}, which does its own separate
-score-based arc filtering afterwards) still relies on. A number filters
+every directed row becomes an edge (what \code{plot_target_chord()} uses,
+since it applies its own score-based arc filtering afterwards). A number filters
 to \code{score >= score_threshold} first (\code{\link[=network_bowtie]{network_bowtie()}} passes its
 \code{actions_score_threshold} here).}
 }

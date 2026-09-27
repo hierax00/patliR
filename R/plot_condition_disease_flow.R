@@ -64,7 +64,7 @@ plot_condition_disease_flow <- function(proj, disease = NULL, aggregate = c("mea
   ## rather than vanishing or breaking the alluvial's positive-weight requirement
   dat$weight <- pmax(-dat[[z_col]], 0.05)
   ## TRUE for the disease each condition lines up with most strongly (its most negative z)
-  dat$best_for_condition <- ave(dat[[z_col]], dat$condition, FUN = function(z) z == min(z)) == 1
+  dat$best_for_condition <- stats::ave(dat[[z_col]], dat$condition, FUN = function(z) z == min(z)) == 1
 
   ## conditions ordered by their strongest (most negative) z across the diseases drawn
   cond_rank <- stats::aggregate(dat[[z_col]], by = list(condition = dat$condition), FUN = min)

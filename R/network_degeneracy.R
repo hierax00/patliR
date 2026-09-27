@@ -34,8 +34,8 @@ NULL
 #'     *enriched* GO-term sets (from [network_enrich()], reconstructed via
 #'     `.network_target_pathway_edges()`, internal). Carries the
 #'     circularity described below.
-#'   - `"jaccard"` -- the historical unweighted Jaccard of the two
-#'     compounds' enriched-pathway sets (no GOSemSim). Regression path.
+#'   - `"jaccard"` -- unweighted Jaccard of the two compounds'
+#'     enriched-pathway sets (no GOSemSim).
 #' - `degeneracy_score = functional_similarity * (1 - target_jaccard)`:
 #'   high only when two compounds are functionally similar
 #'   (`functional_similarity` near 1) *despite* being structurally distinct
@@ -116,7 +116,7 @@ NULL
 #' @param annotation How `functional_similarity` is computed: `"direct"`
 #'   (default, GO semantic similarity on the targets' own annotations, no
 #'   `network_enrich()`), `"enriched"` (GO semantic similarity on the
-#'   enriched-term sets), or `"jaccard"` (historical enriched-pathway
+#'   enriched-term sets), or `"jaccard"` (enriched-pathway
 #'   Jaccard).
 #' @param ont GO ontology for `"direct"` / `"enriched"`: `"BP"` (default --
 #'   process-level convergence, the concept degeneracy requires), `"MF"`

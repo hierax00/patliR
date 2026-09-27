@@ -28,7 +28,7 @@ NULL
 #' `filter = "p_adjusted"` (default) draws every pair with a non-`NA`
 #' `p_adjusted < alpha` -- the significance test [network_degeneracy()]'s
 #' default `annotation = "direct"` mode actually computes.
-#' `filter = "score"` reproduces the historical behaviour: every pair with
+#' `filter = "score"` draws every pair with
 #' `degeneracy_score >= min_degeneracy`, an arbitrary threshold on an
 #' unbounded, non-significance-tested scalar. `p_adjusted` is `NA` for
 #' every row when `network_degeneracy()` was run with

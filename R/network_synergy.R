@@ -86,7 +86,7 @@ NULL
 #' Therefore, by default (`singleton = "na"`), the separation-based classes
 #' `cheng_class`, `cheng_class_sign` and `complementary_exposure` are `NA`
 #' whenever `singleton_a` or `singleton_b` is `TRUE`. `singleton = "zero"`
-#' restores the old convention (classes computed from the `d_AA = 0`
+#' uses the alternative convention (classes computed from the `d_AA = 0`
 #' separation); the flags are kept either way, the choice is recorded in
 #' `singleton_policy`, and [plot_synergy()] never counts a singleton pair
 #' as `P2`. `synergy_score` is `NA` for a singleton-flagged pair under both
@@ -147,9 +147,8 @@ NULL
 #' `cheng_class_sign` / `complementary_exposure` / `singleton_a` /
 #' `singleton_b` are all `NA`, `separation_method = "jaccard"` records it,
 #' and `synergy_score` is gated on `both_proximal` rather than
-#' `complementary_exposure`. (Earlier versions defined `both_proximal` as
-#' the raw-sign quantity now called `both_negative_z`; Jaccard-mode
-#' `synergy_score` is now FDR-gated like the network mode.)
+#' `complementary_exposure` (FDR-gated like the network mode; the
+#' sign-only version is `both_negative_z`).
 #' `target_jaccard` / `complementarity` are
 #' computed on the **raw UniProt** target sets in *both* modes (never the
 #' STRING-mapped subset), so they are comparable across modes;
@@ -213,7 +212,7 @@ NULL
 #'   classes (`cheng_class`, `cheng_class_sign`, `complementary_exposure`)
 #'   do for a pair in which either compound has fewer than 2 STRING-mapped
 #'   targets: `"na"` leaves them `NA`; `"zero"` computes them from the
-#'   `d_AA = 0` convention (the pre-audit behaviour). See the Singletons
+#'   `d_AA = 0` convention. See the Singletons
 #'   section. Ignored when `separation = "jaccard"`.
 #'
 #' @return The updated `proj`, with a `network_synergy` entry in

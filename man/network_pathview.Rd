@@ -116,9 +116,7 @@ writing a file -- a pathway with no mappable nodes, or a KGML/PNG
 download that silently returns an HTML error page instead of the
 expected KEGG data are both real, observed failure modes that raise no R
 \code{error} condition. \code{ok} is therefore \verb{!inherits(res, "error") && file.exists(<expected PNG path>)}, not merely the first half -- a run
-that "succeeds" without writing anything gets \code{ok = FALSE} here, where an
-earlier version reported \code{ok = TRUE} with a \code{path} pointing at a file
-that was never created.
+that "succeeds" without writing anything gets \code{ok = FALSE}.
 }
 
 \section{Gene scores assume \code{targets_import()}'s \verb{[0, 1]} convention}{

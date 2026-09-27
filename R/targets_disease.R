@@ -550,28 +550,16 @@ targets_disease_profile <- function(proj, disease = NULL, top_n_diseases = 5,
 #' wrong, but because `EFO_0000537` is **obsolete** (retired in EFO 3.88.0,
 #' replaced by `MONDO_0005044`; some catalogs still link the old ID, Open
 #' Targets does not).
-#' An earlier version of this function swallowed that `NULL`/failure into a
-#' bare fallback and only ever surfaced `mapIds()`'s generic "no match"
-#' error, hiding the real cause -- fixed to report both failure reasons (see
-#' below). Practically: prefer free text (always resolves to the *current*
-#' term via `mapIds()`) over a hand-typed ontology ID unless you know it is
+#' Both failure reasons are reported (see below). Practically: prefer free
+#' text (always resolves to the *current* term via `mapIds()`) over a hand-typed ontology ID unless you know it is
 #' still current. If the ID-shaped fast path finds nothing, this still
 #' falls back to `mapIds()` rather than failing outright, in case the
 #' string was coincidentally ID-shaped free text.
 #'
 #' @return A character scalar (the resolved EFO ID), or throws if nothing
 #'   matches either path. The error message always includes *both* failure
-#'   reasons when the ID-shaped fast path was attempted -- see the note
-#'   below on why swallowing the first one to a bare `NULL` was itself a bug.
-#'
-#' @section Diagnostic history:
-#' An earlier version of this function caught the direct-lookup failure with
-#' `tryCatch(..., error = function(e) NULL)` and silently fell through to
-#' `mapIds()` -- so when *both* paths failed, the only error the caller ever
-#' saw was `mapIds()`'s generic "no disease matched", with the real reason
-#' the direct lookup failed thrown away. That is exactly the kind of
-#' silently-swallowed failure `patliR` otherwise takes care to avoid (see
-#' `.fetch_external()`) -- fixed here to keep and report both messages.
+#'   reasons when the ID-shaped fast path was attempted, so the real cause
+#'   of a failed direct lookup is never hidden behind the generic "no match".
 #' @keywords internal
 .open_targets_resolve_disease <- function(term) {
   direct_err <- NULL

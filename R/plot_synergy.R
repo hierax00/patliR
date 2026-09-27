@@ -102,9 +102,7 @@ NULL
 #'   present (faceted).
 #' @param top_n Integer, default `5`. Number of highest-`synergy_score`
 #'   `P2` (Complementary Exposure) pairs to label by compound name, per
-#'   panel. **Breaking change from patliR <= 0.1.x**: the old default was
-#'   `10`, chosen for the previous complementarity/joint_closeness scatter;
-#'   `5` keeps the new, much more selective `P2`-only label set legible.
+#'   panel; `5` keeps the `P2`-only label set legible.
 #'   A panel without `P2` pairs labels its `top_n` pairs nearest to `P2`.
 #' @param class_rule `"fdr"` (default) or `"sign"`: which classification
 #'   drives the shapes, the `P2` counts and the `P2` labels -- `cheng_class`

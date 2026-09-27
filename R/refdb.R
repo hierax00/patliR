@@ -63,8 +63,7 @@ refdb_build <- function(proj, sources = c("pubchem", "chembl"),
                          fetch_mode = c("warn_and_cache", "abort")) {
   stopifnot(is(proj, "PatliRProject"))
   ## "coconut" is a valid name for forward-compat but not implemented; it is
-  ## NOT in the default (a bare `refdb_build(proj)` used to abort because
-  ## match.arg(several.ok = TRUE) returned all of the default vector).
+  ## NOT in the default.
   sources <- match.arg(sources, choices = c("pubchem", "chembl", "coconut"), several.ok = TRUE)
   fetch_mode <- match.arg(fetch_mode)
 

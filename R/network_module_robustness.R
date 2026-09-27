@@ -99,9 +99,7 @@ NULL
 #'
 #' @inheritParams network_build
 #' @param clustering `"leiden"` (default), `"bipartite"`, or `"hdbscan"` --
-#'   see "Clustering backends" above. **The default changed from
-#'   `"hdbscan"` in patliR 0.2.0**; the module partitions, and therefore
-#'   every `r_index`, will differ from earlier versions.
+#'   see "Clustering backends" above.
 #' @param attack `"targeted"` (default), `"random"`, or `"both"` -- see
 #'   "Percolation attack" above.
 #' @param resolution Leiden resolution (Reichardt-Bornholdt gamma,
@@ -239,8 +237,8 @@ network_module_robustness <- function(proj, condition = NULL,
   ## snapshot the caller's RNG state *before* touching it -- if `seed = NULL`,
   ## sample.int() below draws from (and advances) this same stream to pick a
   ## seed, and unlike the internal .with_seed(seed) calls further down (each
-  ## already isolated around the one, now-resolved, numeric `seed`), nothing
-  ## previously restored the caller's state after *this* draw
+  ## already isolated around the one, now-resolved, numeric `seed`), this
+  ## snapshot is what restores the caller's state after *this* draw
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
   on.exit({
     if (!is.null(old_seed)) assign(".Random.seed", old_seed, envir = .GlobalEnv)
@@ -394,8 +392,7 @@ network_module_robustness <- function(proj, condition = NULL,
 #' `"bipartite"`, `"hdbscan"`). The stochastic clustering step is wrapped in
 #' `.with_seed(seed)` here -- independently of the per-module
 #' `.with_seed(seed)` inside `.network_percolate()`, so `clustering =
-#' "hdbscan"` (which uses no RNG) still reproduces its historical output
-#' bit-for-bit.
+#' "hdbscan"` (which uses no RNG) is reproducible bit-for-bit.
 #' @return `list(members = named list of character vectors of node names,
 #'   types = character vector same length/order as `members`,
 #'   log_message = character scalar, warn_message = character scalar or

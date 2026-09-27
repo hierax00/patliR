@@ -3,12 +3,12 @@
 \name{.gochord_filename}
 \alias{.gochord_filename}
 \title{File name of a \code{plot_gochord()} figure: the default (\code{"contrast"})
-palette keeps the historical name, the others get a suffix}
+palette keeps the plain name, the others get a suffix}
 \usage{
 .gochord_filename(cond, db, palette = "contrast")
 }
 \description{
 File name of a \code{plot_gochord()} figure: the default (\code{"contrast"})
-palette keeps the historical name, the others get a suffix
+palette keeps the plain name, the others get a suffix
 }
 \keyword{internal}

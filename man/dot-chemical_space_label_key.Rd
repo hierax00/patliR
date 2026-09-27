@@ -14,7 +14,7 @@
 )
 }
 \arguments{
-\item{adme}{Plotted rows (\code{compound_id}, \code{dim1}, \code{dim2}, \code{\link{dim3}},
+\item{adme}{Plotted rows (\code{compound_id}, \code{dim1}, \code{dim2}, optionally \code{dim3},
 \code{color_value}).}
 
 \item{cmp}{\code{compounds(proj)}.}

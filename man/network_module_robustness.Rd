@@ -27,9 +27,7 @@ condition. Rebuilding a subset leaves previously-built conditions
 untouched in \code{patliRResults(proj, "network_edges")}.}
 
 \item{clustering}{\code{"leiden"} (default), \code{"bipartite"}, or \code{"hdbscan"} --
-see "Clustering backends" above. \strong{The default changed from
-\code{"hdbscan"} in patliR 0.2.0}; the module partitions, and therefore
-every \code{r_index}, will differ from earlier versions.}
+see "Clustering backends" above.}
 
 \item{attack}{\code{"targeted"} (default), \code{"random"}, or \code{"both"} -- see
 "Percolation attack" above.}

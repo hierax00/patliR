@@ -1264,8 +1264,8 @@ plot_kegg_topology <- function(proj, condition = NULL, pathway_id = NULL, top_n_
 #' `phosphorylation`). The drawn effect is the first present in
 #' `inhibition > repression > activation > expression > indirect effect >
 #' modification > binding/association > other`, the mechanism the first in
-#' `phosphorylation > dephosphorylation > other modification > via compound
-#' > indirect > direct`; all subtypes are kept in `subtypes`, and the
+#' `phosphorylation > dephosphorylation > other modification >
+#' via compound > indirect > direct`; all subtypes are kept in `subtypes`, and the
 #' pathways the pair appears in in `pathways`. Self-relations are dropped.
 #' @return `data.frame(from, to, effect, mode, subtypes, relation_types,
 #'   pathways)`, in order of first appearance.

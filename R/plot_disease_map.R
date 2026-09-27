@@ -848,7 +848,7 @@ disease_map_classes <- function() {
     p <- p + ggplot2::geom_label(
       data = lab_t, ggplot2::aes(x = .data$lx, y = .data$y, label = .data$label),
       size = 2.35, colour = "grey10", fontface = "italic", hjust = 0, vjust = 0.5,
-      fill = grDevices::adjustcolor("white", alpha.f = 0.85), label.size = 0,
+      fill = grDevices::adjustcolor("white", alpha.f = 0.85), linewidth = 0,
       label.padding = ggplot2::unit(0.08, "lines"), label.r = ggplot2::unit(0.05, "lines"),
       show.legend = FALSE
     )

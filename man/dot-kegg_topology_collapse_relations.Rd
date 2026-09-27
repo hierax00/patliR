@@ -13,6 +13,7 @@
 A gene pair can carry several subtypes (e.g. \code{activation} +
 \code{phosphorylation}). The drawn effect is the first present in
 \verb{inhibition > repression > activation > expression > indirect effect > modification > binding/association > other}, the mechanism the first in
-`phosphorylation > dephosphorylation > other modification > via compoundindirect > direct; all subtypes are kept in subtypes, and the pathways the pair appears in in pathways`. Self-relations are dropped.
+\verb{phosphorylation > dephosphorylation > other modification > via compound > indirect > direct}; all subtypes are kept in \code{subtypes}, and the
+pathways the pair appears in in \code{pathways}. Self-relations are dropped.
 }
 \keyword{internal}

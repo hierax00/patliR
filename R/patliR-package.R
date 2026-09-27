@@ -36,3 +36,5 @@ NULL
 ## columns referenced by bare name inside with(out, ...) in adme_local()
 utils::globalVariables(c("logp", "mw", "rotatable_bonds", "aromatic_proportion_approx", "hbd", "hba",
                          "tpsa", "n_atoms", "amr", "n_rings_approx"))
+## computed variables of ggalluvial::stat_stratum(), read via ggplot2::after_stat()
+utils::globalVariables(c("stratum", "count"))

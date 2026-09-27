@@ -146,14 +146,13 @@ test_that("Oprea ranges are inclusive at their endpoints", {
 
 test_that("hba_lipinski/hbd_lipinski count every N/O atom and every N-H/O-H bond, unlike CDK's own hba/hbd", {
   ## hydroxylamine: 1 N (NH2) + 1 O (OH) -> Lipinski HBA = 2, HBD = 3 (2 N-H + 1 O-H);
-  ## CDK's own rules read this differently (regression target for the audited undercount)
+  ## CDK's own rules read this differently (CDK undercounts acceptors)
   d <- .adme_one("NO")
   expect_equal(d$hba_lipinski, 2L)
   expect_equal(d$hbd_lipinski, 3L)
 
   ## a furan ether oxygen: Lipinski counts it (HBA = 1), CDK's own HBondAcceptorCountDescriptor
-  ## does not count most ether/furan oxygens -- this is the exact discrepancy the audit found
-  ## on real network compounds (methylenedioxy/methoxy lignans)
+  ## does not count most ether/furan oxygens (e.g. in methylenedioxy/methoxy lignans)
   furan <- .adme_one("c1ccoc1")
   expect_equal(furan$hba_lipinski, 1L)
   expect_lt(furan$hba, furan$hba_lipinski)
@@ -162,7 +161,7 @@ test_that("hba_lipinski/hbd_lipinski count every N/O atom and every N-H/O-H bond
 test_that("ro5_pass/ro5_violations/oprea_pass use hba_lipinski/hbd_lipinski, not CDK's hba/hbd", {
   ## furan: CDK's own HBondAcceptorCountDescriptor does not count the aromatic ether
   ## oxygen as an acceptor (hba = 0), Lipinski's N+O count does (hba_lipinski = 1) --
-  ## the exact discrepancy the audit found on real network compounds' furan/ether oxygens
+  ## the same discrepancy that affects furan/ether-rich natural products
   d <- .adme_one("c1ccoc1")
   expect_lt(d$hba, d$hba_lipinski)
   expect_equal(d$ro5_violations, (d$mw > 500) + (d$logp > 5) + (d$hbd_lipinski > 5) + (d$hba_lipinski > 10))

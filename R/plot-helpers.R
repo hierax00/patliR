@@ -147,9 +147,9 @@ NULL
 #'
 #' @description
 #' When a `plot_*` log gains a key column (e.g. `subset`, `view`), logs
-#' written by an earlier version lack it and [.network_upsert()] could not
-#' index them. The column is added with the value the old behaviour
-#' corresponds to, so the default call still replaces its own old row.
+#' written before it existed lack it and [.network_upsert()] could not
+#' index them. The column is added with its default value, so the default
+#' call still replaces its own row.
 #' @return `proj`, possibly with the `name` results slot updated.
 #' @keywords internal
 .plot_log_backfill <- function(proj, name, col, value) {

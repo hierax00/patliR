@@ -11,7 +11,7 @@ NULL
 #' Metabotropic (G protein-coupled) receptors are a large share of the
 #' predicted targets for many plant extracts, and a single receptor's
 #' downstream effect depends on *which* G protein it couples to -- this is
-#' the piece [plot_ppi_network(highlight = "gpcr")] does not show (it marks
+#' the piece [plot_ppi_network()] with `highlight = "gpcr"` does not show (it marks
 #' GPCRs in the network, but not their coupling). This alluvial reads like
 #' a small metro map: which compounds (left) reach which GPCRs (middle),
 #' and which G-protein family (right, colour) each receptor signals

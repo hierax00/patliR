@@ -31,9 +31,7 @@ present (faceted).}
 
 \item{top_n}{Integer, default \code{5}. Number of highest-\code{synergy_score}
 \code{P2} (Complementary Exposure) pairs to label by compound name, per
-panel. \strong{Breaking change from patliR <= 0.1.x}: the old default was
-\code{10}, chosen for the previous complementarity/joint_closeness scatter;
-\code{5} keeps the new, much more selective \code{P2}-only label set legible.
+panel; \code{5} keeps the \code{P2}-only label set legible.
 A panel without \code{P2} pairs labels its \code{top_n} pairs nearest to \code{P2}.}
 
 \item{class_rule}{\code{"fdr"} (default) or \code{"sign"}: which classification

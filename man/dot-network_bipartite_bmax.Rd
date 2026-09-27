@@ -17,7 +17,7 @@ A single numeric \code{B_max}, or \code{NA_real_} if either mode is empty.
 }
 \description{
 \code{B_max} for the mode with \code{n_mode} nodes, given the opposite mode has
-\code{n_other} nodes. Cross-checked 2026-08-28 against
+\code{n_other} nodes. Cross-checked against
 \code{networkx.algorithms.bipartite.centrality.betweenness_centrality}
 (which attributes the maxima to Borgatti & Everett). NetworkX halves its
 raw scores before dividing by these maxima \emph{because} its base routine

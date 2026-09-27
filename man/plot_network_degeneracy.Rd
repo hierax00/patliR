@@ -39,7 +39,7 @@ restrict to.}
 \item{layout}{As in \code{\link[=plot_network_layers]{plot_network_layers()}}, plus \code{"circle"} --
 compounds only, on a circle; see the section above.}
 
-\item{colour_by}{One of \code{"layer"} (default -- the historical behaviour:
+\item{colour_by}{One of \code{"layer"} (default:
 compound/target/pathway/disease, \code{.network_layers_layer_colors()}),
 \code{"module"} (joins \code{\link[=network_module_robustness]{network_module_robustness()}}'s per-node
 \code{network_module_membership} table by \verb{(condition, node_id)}, coloured
@@ -112,7 +112,7 @@ fixed scale, see \code{\link[=network_degeneracy]{network_degeneracy()}}).
 \code{filter = "p_adjusted"} (default) draws every pair with a non-\code{NA}
 \code{p_adjusted < alpha} -- the significance test \code{\link[=network_degeneracy]{network_degeneracy()}}'s
 default \code{annotation = "direct"} mode actually computes.
-\code{filter = "score"} reproduces the historical behaviour: every pair with
+\code{filter = "score"} draws every pair with
 \code{degeneracy_score >= min_degeneracy}, an arbitrary threshold on an
 unbounded, non-significance-tested scalar. \code{p_adjusted} is \code{NA} for
 every row when \code{network_degeneracy()} was run with

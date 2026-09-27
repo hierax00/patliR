@@ -16,7 +16,7 @@ glue template -- any \code{{...}} inside it is parsed as an R expression to
 evaluate, not shown literally. \code{.fetch_external()} (below) embeds
 \code{conditionMessage()} from whatever error the external call raised --
 text \code{patliR} does not control, e.g. a raw JSON fragment echoed back by
-a failed API parse. A message containing \verb{\{}/\verb{\}} (real case: NPClassifier
+a failed API parse. A message containing \verb{\{}/\verb{\}} (e.g. NPClassifier
 returning \verb{"class_results": [...}) makes cli try to \code{parse()} that
 fragment as R code and throw a confusing meta-error that fully masks
 the real one. Doubling braces (\verb{\{} -> \verb{\{\{}, \verb{\}} -> \verb{\}\}}) is glue's own

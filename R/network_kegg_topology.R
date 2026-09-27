@@ -2,9 +2,9 @@
 NULL
 
 ## Adds KEGG's directed pathway topology (activation/inhibition/binding/...
-## relations between genes WITHIN a pathway) to the network. network_pathview() only ever renders
-## KEGG's own pre-made pathway images (pathview::pathview()); nothing in
-## patliR before this file parsed KGML relations itself.
+## relations between genes WITHIN a pathway) to the network. network_pathview() only renders
+## KEGG's own pre-made pathway images (pathview::pathview()); this file
+## parses the KGML relations themselves.
 ##
 ## Pattern follows network_bowtie()'s STRING precedent: fetch and parse the
 ## raw source file directly (KGML via KEGGREST::keggGet(id, "kgml")) rather
@@ -335,9 +335,8 @@ network_kegg_topology <- function(proj, condition = NULL, pathway_ids = NULL,
 
   ## A <relation> can carry more than one <subtype> (e.g. a PPrel with
   ## both "phosphorylation" and "activation" stacked) -- xml_find_first()
-  ## used to keep only the first and silently drop the rest. One output
-  ## row per subtype now (falling back to a single NA-subtype row when a
-  ## relation has none, same as before), cartesian-expanded against the
+  ## would keep only the first. One output row per subtype (a single
+  ## NA-subtype row when a relation has none), cartesian-expanded against the
   ## from/to gene sets exactly like the multi-gene-entry case already was.
   idx <- which(is_gene_pair)
   out <- do.call(rbind, lapply(idx, function(i) {

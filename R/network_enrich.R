@@ -59,18 +59,10 @@ NULL
 #' have been assigned as a target, not every protein in the genome -- so
 #' the test asks the sharper question "is this term hit more than you'd
 #' expect from *this predictor's* output," not "...from a random gene."
-#' `universe = "genome"` is kept as an explicit, opt-in escape hatch back to
-#' the old whole-genome/whole-pathway-database behaviour, for comparison or
-#' for callers who have a specific reason to want it.
-#'
-#' **This is a breaking change for existing projects.** Before this
-#' argument existed, every call implicitly ran with today's `"genome"`
-#' behaviour. Re-running `network_enrich()` under the new `"project"`
-#' default changes every p-value it reports, and therefore every downstream
-#' result that consumes `network_enrichment` --
-#' [network_degeneracy(annotation = "enriched")][network_degeneracy()] /
-#' `annotation = "jaccard"`, [network_motifs()]'s pathway layer, and
-#' [plot_network_layers()]/[plot_enrichment()]. See `NEWS.md`.
+#' `universe = "genome"` is kept as an explicit, opt-in to the
+#' whole-genome/whole-pathway-database background, for comparison with
+#' tools that use it. The choice changes every p-value, and therefore every
+#' downstream result that consumes `network_enrichment`.
 #'
 #' @inheritParams compounds
 #' @param condition Character vector of condition names (must already have

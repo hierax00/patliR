@@ -353,7 +353,7 @@ plot_chemical_space <- function(proj, condition = NULL, compound_ids = NULL,
 #' `color_by` value, `labeled` (selected for a text label) and the
 #' coordinates, sorted by `index`. `plot_label` holds the text actually
 #' drawn for `label`.
-#' @param adme Plotted rows (`compound_id`, `dim1`, `dim2`, [`dim3`],
+#' @param adme Plotted rows (`compound_id`, `dim1`, `dim2`, optionally `dim3`,
 #'   `color_value`).
 #' @param cmp `compounds(proj)`.
 #' @param label_top `NULL` (all) or the number of compounds farthest from

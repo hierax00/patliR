@@ -184,7 +184,7 @@ plot_gochord <- function(proj, condition = NULL, db = NULL, top_n_terms = 10, to
 }
 
 #' File name of a `plot_gochord()` figure: the default (`"contrast"`)
-#' palette keeps the historical name, the others get a suffix
+#' palette keeps the plain name, the others get a suffix
 #' @keywords internal
 .gochord_filename <- function(cond, db, palette = "contrast") {
   suffix <- switch(palette, contrast = "", grey = "_grey", default = "_rainbow", paste0("_", palette))

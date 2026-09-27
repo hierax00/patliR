@@ -406,7 +406,6 @@ rank_candidates <- function(proj, condition = NULL, disease = NULL,
   proj
 }
 
-#' @keywords internal
 #' Rank by RRA score, breaking ties with the mean per-criterion rank
 #'
 #' @param rra_score Numeric vector, lower = better.

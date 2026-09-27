@@ -31,13 +31,11 @@ NULL
 #' coincide and both equal the principal (Perron) eigenvector of the
 #' adjacency matrix -- i.e. `hub_score` is eigenvector centrality, not a
 #' directional "hub vs. authority" distinction (that only exists on a
-#' directed graph). It is kept under the name `hub_score` for continuity
-#' with earlier versions. Implementation note: `hub_score` is
+#' directed graph). Implementation note: `hub_score` is
 #' `igraph::eigen_centrality(g, weights = NA)$vector` (scaled to `max = 1`).
-#' Earlier versions used `igraph::hits_scores(g, weights = NA)$hub`, which
-#' on a two-mode graph has a **degenerate** top eigenspace -- ARPACK then
-#' returns an RNG-seeded arbitrary vector from it, so the column was not
-#' reproducible across runs. The Perron eigenvector is unique on each
+#' `igraph::hits_scores()` is deliberately not used: on a two-mode graph its
+#' top eigenspace is **degenerate**, so ARPACK returns an RNG-seeded
+#' arbitrary vector from it that is not reproducible across runs. The Perron eigenvector is unique on each
 #' connected component, so `eigen_centrality()` is deterministic.
 #'
 #' On a **disconnected** graph the principal eigenvector of the whole
@@ -272,7 +270,7 @@ network_centrality <- function(proj, condition = NULL,
 #'
 #' @description
 #' `B_max` for the mode with `n_mode` nodes, given the opposite mode has
-#' `n_other` nodes. Cross-checked 2026-08-28 against
+#' `n_other` nodes. Cross-checked against
 #' `networkx.algorithms.bipartite.centrality.betweenness_centrality`
 #' (which attributes the maxima to Borgatti & Everett). NetworkX halves its
 #' raw scores before dividing by these maxima *because* its base routine

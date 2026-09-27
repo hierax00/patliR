@@ -90,11 +90,9 @@ prep_compounds <- function(proj, data,
 
   n <- nrow(data)
   ## `id_col` names whichever column `identifier` designates -- read THAT
-  ## column for that field (it used to be validated for presence and then
-  ## ignored, always reading the literal "PubChemCID"/"SMILES" names instead,
-  ## so a table using e.g. id_col = "CID" silently produced all-NA
-  ## pubchem_id). The *other* field still falls back to its own conventional
-  ## column name when present, unchanged from before -- e.g. identifier =
+  ## column for that field (e.g. id_col = "CID"), not the literal
+  ## "PubChemCID"/"SMILES" names. The *other* field falls back to its own
+  ## conventional column name when present -- e.g. identifier =
   ## "smiles" with a nonstandard SMILES column name still picks up a
   ## same-table "PubChemCID" column for the missing-SMILES-fetch bridge.
   pubchem_id <- if (identifier == "pubchem") {
@@ -111,19 +109,10 @@ prep_compounds <- function(proj, data,
   source_tag <- rep("input", n)
 
   ## Resolve missing SMILES. Only rows that also have a PubChemCID can be
-  ## fetched (CID -> SMILES via PubChem) -- this used to be gated on
-  ## `identifier == "pubchem"`, which meant a Scenario B table keyed by
-  ## SMILES (identifier = "smiles") that *also* carries a PubChemCID column
-  ## for some rows (e.g. CIDs filled in by a CAS -> CID lookup run before
-  ## prep_compounds()) never
-  ## got its missing SMILES fetched at all -- rows were silently dropped
-  ## ("smiles_not_resolved") even though the CID needed to fetch them was
-  ## right there, which then cascaded into targets_import_batch() reporting
-  ## every one of those compounds' Targets<cid>.csv as unmatched. What
-  ## `identifier` actually changes is only the default `id_col` (see above)
-  ## and, implicitly, whether `pubchem_id` was even filled from `data` in
-  ## the first place -- SMILES resolution itself should not care which one
-  ## the caller nominally chose.
+  ## fetched (CID -> SMILES via PubChem). Fetchability depends only on
+  ## having a CID, not on `identifier`: a table keyed by SMILES that also
+  ## carries CIDs for some rows (e.g. from a CAS -> CID lookup) still gets
+  ## its missing SMILES fetched instead of dropping those rows.
   missing_smiles <- is.na(smiles) | !nzchar(smiles)
   has_pubchem_id <- !is.na(pubchem_id) & nzchar(pubchem_id)
   fetchable <- missing_smiles & has_pubchem_id

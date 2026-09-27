@@ -34,14 +34,12 @@ NULL
 #'     logP <= 5.88, TPSA <= 131.6.
 #'   \item **Oprea property ranges** (`oprea_pass`) -- Oprea (2000), *J.
 #'     Comput. Aided Mol. Des.* 14, 251-264: 0 <= HBD <= 2, 2 <= HBA <= 9
-#'     (`hbd_lipinski`/`hba_lipinski`, as for Ro5 above -- Oprea's own HBA
-#'     range is exactly where CDK's undercount used to flip real compounds,
-#'     e.g. ether/furan-rich lignans reading HBA=2 under CDK's rules and
-#'     6-7 by Lipinski's own N+O count), 2 <= rotatable bonds <= 8, 1 <= ring
+#'     (`hbd_lipinski`/`hba_lipinski`, as for Ro5 above -- Oprea's HBA
+#'     range is sensitive to CDK's acceptor undercount, e.g. ether/furan-rich
+#'     lignans read HBA=2 under CDK's rules and 6-7 by Lipinski's N+O count), 2 <= rotatable bonds <= 8, 1 <= ring
 #'     count <= 4 (inclusive ranges; the paper reports them as the ranges
 #'     holding ~70% of the *drug-like* compounds it surveyed, not as a
-#'     stricter lead-likeness rule -- an earlier version used narrower,
-#'     exclusive limits). See `adme_filter(rules = "oprea")`.
+#'     stricter lead-likeness rule). See `adme_filter(rules = "oprea")`.
 #' }
 #' **Descriptor conventions.** `mw` is the average molecular weight (natural
 #' isotopic abundance, `rcdk::get.natural.mass()`), not the monoisotopic mass.
@@ -141,10 +139,7 @@ NULL
 #' `fraction_csp3_approx` is CDK's `FractionalCSP3Descriptor` (sp3 carbons /
 #' all carbons, from perceived hybridization) and `aromatic_proportion_approx`
 #' is CDK's aromatic-atom count (after aromaticity perception) divided by the
-#' heavy-atom count, so neither depends on how the SMILES was written (the
-#' `_approx` suffix is kept for column-name stability; an earlier version
-#' used a SMILES-string regex heuristic that mistook C=C and C=O carbons for
-#' sp3). `logs_esol` is
+#' heavy-atom count, so neither depends on how the SMILES was written. `logs_esol` is
 #' the published Delaney (2004) ESOL equation applied to `logp` (CDK XLogP,
 #' not the predictor the original coefficients were fitted with), `mw`,
 #' `rotatable_bonds`, and `aromatic_proportion_approx`. `n_rings_approx`
@@ -245,9 +240,7 @@ adme_local <- function(proj, compound_ids = NULL,
   out$ro5_violations <- with(out, (mw > 500) + (logp > 5) + (hbd_lipinski > 5) + (hba_lipinski > 10))
   out$ro5_pass   <- out$ro5_violations <= 0
   out$veber_pass <- with(out, tpsa <= 140 & rotatable_bonds <= 10)
-  ## Ghose et al. 1999 -- now all four criteria, including molar
-  ## refractivity (AMR); an earlier version of this function omitted AMR
-  ## because it was not yet being computed.
+  ## Ghose et al. 1999 -- all four criteria, including molar refractivity (AMR).
   out$ghose_pass <- with(out, mw >= 160 & mw <= 480 & logp >= -0.4 & logp <= 5.6 &
     n_atoms >= 20 & n_atoms <= 70 & amr >= 40 & amr <= 130)
   ## Egan et al. 2000 ("egg" model).

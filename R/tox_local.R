@@ -32,10 +32,7 @@ NULL
 #' Baell, J.B. & Holloway, G.A. (2010), "New Substructure Filters for
 #' Removal of Pan Assay Interference Compounds (PAINS) from Screening
 #' Libraries...", *J. Med. Chem.* 53(7), 2719-2740,
-#' \doi{10.1021/jm901137j}). An earlier version of this file only bundled a
-#' 121-filter subset (frequency >= 3) because the automated fetch used to
-#' source it kept truncating near the end of the file; the full set was
-#' downloaded directly (no truncation) and confirmed complete.
+#' \doi{10.1021/jm901137j}).
 #'
 #' `alert_sets = "brenk"` uses `inst/extdata/brenk_smarts.csv` -- the
 #' **complete 105-alert set** from Brenk, R. et al. (2008), "Lessons

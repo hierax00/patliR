@@ -15,7 +15,7 @@
 )
 }
 \arguments{
-\item{colour_by}{\code{"layer"} (default, historical behaviour), \code{"module"},
+\item{colour_by}{\code{"layer"} (default), \code{"module"},
 or \code{"node_type"} -- see \code{\link[=plot_network_layers]{plot_network_layers()}}'s own \code{colour_by} docs.}
 }
 \value{

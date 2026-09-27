@@ -26,13 +26,7 @@ test_that("tox_local() re-running on a subset of compounds does not wipe out the
   expect_equal(length(unique(result$compound_id)), n_compounds_before)
 })
 
-test_that("tox_local() flags Brenk alerts now that the full 105-alert set is bundled", {
-  ## Was: "tox_local() errors clearly on 'brenk' since it is not bundled
-  ## yet" -- stale since 2026-08-11, when the complete
-  ## Brenk set (inst/extdata/brenk_smarts.csv, 105 alerts, cross-validated
-  ## against RDKit's own compiled FilterCatalogs.BRENK) got bundled and
-  ## `alert_sets = c("pains", "brenk")` became the default. Rewritten to
-  ## assert the new, real behaviour instead of the old placeholder error.
+test_that("tox_local() flags Brenk alerts from the bundled 105-alert set", {
   proj <- .test_project()
   proj <- prep_compounds(proj, .test_compound_list(), identifier = "pubchem")
   proj <- tox_local(proj, alert_sets = "brenk")
